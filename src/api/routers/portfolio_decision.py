@@ -20,6 +20,31 @@ _CACHE_TS = 0.0
 _TTL = 60
 
 
+@router.get("/portfolio")
+async def portfolio_ssot(request: Request):
+    """Server-side portfolio SSOT — holdings from persisted store, not browser localStorage."""
+    from src.api.routers import portfolio as portfolio_router
+
+    book = portfolio_router._user_portfolio
+    if not isinstance(book, dict) or book.get("holdings") is None:
+        book = portfolio_router._load_portfolio_from_disk()
+    holdings = book.get("holdings") or []
+    ibkr_status = getattr(request.app.state, "ibkr_status", None) or {}
+    ibkr_connected = bool(ibkr_status.get("connected"))
+    return sanitize_for_json(
+        {
+            "holdings": holdings,
+            "source": book.get("source") or "server",
+            "updated_at": book.get("updated_at") or "",
+            "position_count": len(holdings),
+            "ssot": "server",
+            "authority": "monitor_only",
+            "broker_sync": "ok" if ibkr_connected else "unavailable",
+            "local_storage_is_fallback_only": True,
+        }
+    )
+
+
 @router.get("/portfolio-decision")
 async def portfolio_decision(request: Request):
     """Portfolio decision summary + attribution + monitor + sleeves."""

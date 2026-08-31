@@ -84,7 +84,24 @@ jobs:
             tests/test_provenance_contract.py \
             tests/test_investment_object_factory.py \
             tests/test_cc_x_sprint_modules.py \
+            tests/test_opportunity_pipeline.py \
+            tests/test_score_families.py \
+            tests/test_workflow_loops.py \
+            tests/test_decision_journal.py \
+            tests/test_roadmap_p0.py \
+            tests/test_operator_mode_ux.py \
             -q --tb=short
+        env:
+          TRADING_ENV: paper
+
+      - name: CC X authority regression gate (verify_10_10 unit slice)
+        run: |
+          PYTHONPATH=. python -m pytest \
+            tests/test_decision_board_authority_cache.py \
+            tests/test_operator_state_contract.py \
+            tests/test_provenance_contract.py \
+            tests/test_opportunity_pipeline.py \
+            -q --tb=line
         env:
           TRADING_ENV: paper
 

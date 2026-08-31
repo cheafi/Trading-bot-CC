@@ -146,6 +146,15 @@ class TradingScheduler:
             replace_existing=True,
         )
 
+        # 4:45 PM - Forward outcome marks (T+1/T+5/T+20 calibration)
+        self.scheduler.add_job(
+            self._job_forward_outcomes,
+            CronTrigger(hour=16, minute=45, day_of_week="mon-fri"),
+            id="forward_outcomes",
+            name="Forward Outcome Marks",
+            replace_existing=True,
+        )
+
         # 8:00 PM - Historical data backfill
         self.scheduler.add_job(
             self._job_historical_backfill,
@@ -395,6 +404,21 @@ class TradingScheduler:
 
         except Exception as e:
             logger.error("Signal refresh job failed: %s", e)
+
+    async def _job_forward_outcomes(self):
+        """Mark due T+1/T+5/T+20 forward outcomes for calibration."""
+        logger.info("Starting forward outcome marks")
+        try:
+            from src.services.forward_outcomes import run_forward_outcome_marks  # noqa: PLC0415
+
+            result = await asyncio.to_thread(run_forward_outcome_marks)
+            logger.info(
+                "Forward outcomes: recorded=%s skipped=%s",
+                result.get("recorded"),
+                result.get("skipped"),
+            )
+        except Exception as exc:
+            logger.warning("Forward outcome marks failed (non-fatal): %s", exc)
 
     async def _job_eod_processing(self):
         """End of day processing: build brief, review portfolio, send Discord summary."""

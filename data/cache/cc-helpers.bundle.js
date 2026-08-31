@@ -1853,6 +1853,49 @@
 		return "pw"
 	}
 
+	function scoreFamiliesDisagree(row) {
+		if (!row) return false
+		if (row.score_families && row.score_families.disagree) return true
+		var eq = row.evidence_quality || {}
+		var council = Number(row.score || eq.validated_score || 0)
+		var scanner = eq.raw_score
+		if (scanner == null && row.score_card && row.score_card.families && row.score_card.families.board_investability)
+			scanner = row.score_card.families.board_investability.raw_scanner
+		if (scanner == null || !council) return false
+		var sc = Number(scanner)
+		if (sc > 20) sc = sc / 10
+		return Math.abs(council - sc) >= 1.5 || String(row.conflict_level || "").toUpperCase() === "HIGH"
+	}
+
+	function scoreFamiliesDisagreeReasons(row) {
+		if (!row || !row.score_families) return []
+		return row.score_families.reasons || []
+	}
+
+	function scoreReconciliationDetail(sr, rows) {
+		if (!sr) return ""
+		var bits = []
+		if ((sr.disagree_reasons || []).length) bits.push((sr.disagree_reasons || []).slice(0, 3).join(" · "))
+		if ((sr.divergent_tickers || []).length) bits.push("Tickers: " + (sr.divergent_tickers || []).join(", "))
+		if ((sr.contradictions || []).length) bits.push((sr.contradictions || []).slice(0, 2).join(" · "))
+		if (!bits.length && rows && rows.length) {
+			var flagged = rows.filter(function (r) {
+				return scoreFamiliesDisagree(r)
+			})
+			if (flagged.length)
+				bits.push(
+					flagged
+						.map(function (r) {
+							var rs = scoreFamiliesDisagreeReasons(r)
+							return (r.ticker || "?") + (rs.length ? " · " + rs[0] : "")
+						})
+						.slice(0, 3)
+						.join(" | ")
+				)
+		}
+		return bits.join(" — ") || "Council fit vs scanner rank disagree on top names."
+	}
+
 	function cardRankQualityAuthorityLine(opp, idx, total) {
 		if (!opp) return ""
 		var rank = opp.rank_label || "#" + (opp.rank || (idx != null ? idx + 1 : 1)) + " / " + (total || "—")
@@ -1866,11 +1909,479 @@
 		return !!(o.briefStale || o.briefFallback || o.researchContextOnly)
 	}
 
+	function tradeabilityBadgeClass(tradeability) {
+		var t = String(tradeability || "WAIT").toUpperCase()
+		if (t === "TRADE" || t === "STRONG_TRADE") return "status-trade"
+		if (t === "SELECTIVE") return "status-selective"
+		if (t === "WAIT") return "status-wait"
+		if (t === "NO_TRADE") return "status-notrade"
+		return "pw"
+	}
+
+	function buildFourQuestionsBlock(opts) {
+		var o = opts || {}
+		var v = o.verdict || {}
+		var ss = o.systemState || {}
+		var ba = o.bestAction || {}
+		var mc = o.missionCard || {}
+		var knowParts = []
+		if (o.market) knowParts.push(String(o.market))
+		if (ss.data_freshness && ss.data_freshness !== "FRESH") knowParts.push("Data " + ss.data_freshness)
+		if (o.engine) knowParts.push("Engine " + o.engine)
+		if (o.broker) knowParts.push("IBKR " + o.broker)
+		var know = knowParts.filter(Boolean).join(" · ") || mc.market_state || mc.market || "—"
+		if (know === "—" && ss.tradeability) {
+			know = "Regime " + String(ss.tradeability).toUpperCase()
+		}
+		var believe = v.headline_bilingual || v.headline || mc.quality_headline || "—"
+		if ((believe === "—" || !String(believe).trim()) && !o.deployOpen) {
+			believe = _opsBilingual(
+				"今日無 deploy-qualified setup · 持現金有效",
+				"No deploy-qualified setup today; cash is a valid outcome",
+			)
+		}
+		if (mc.good_opportunity && mc.good_opportunity !== "—") {
+			believe = mc.good_opportunity + " · " + believe
+		}
+		believe = String(believe).slice(0, 140)
+		var doubtParts = (mc.why_not_deploy || []).slice(0, 2)
+		if (!doubtParts.length) {
+			var blocker = v.main_blocker_bilingual || v.main_blocker || mc.why || ""
+			if (blocker && blocker !== "—") doubtParts.push(String(blocker))
+		}
+		if (!doubtParts.length) {
+			doubtParts.push(_opsBilingual("執行路徑未驗證", "Execution path not verified"))
+		}
+		var sr = o.scoreReconciliation || {}
+		if (sr.active) {
+			doubtParts.unshift(sr.message || "Score families disagree — do not size on rank alone")
+			if ((sr.disagree_reasons || []).length) {
+				doubtParts.push((sr.disagree_reasons || []).slice(0, 2).join(" · "))
+			}
+		}
+		var doubt = doubtParts.join(" · ").slice(0, 160)
+		var therefore =
+			(ba && ba.stance_one_liner) ||
+			mc.what_to_do ||
+			((mc.next_actions || [])[0] || "") ||
+			"—"
+		if (o.deployOpen === false && /deploy/i.test(String(therefore))) {
+			therefore =
+				mc.what_to_do ||
+				_opsBilingual("等待 — 監控最佳候選", "Wait — monitor top candidate")
+		}
+		if (sr.active && o.deployOpen !== true) {
+			therefore = _opsBilingual(
+				"勿以排名定倉 — 先核 quality · EV · gate",
+				"Do not size on rank alone — verify quality, EV, and gate first"
+			)
+		}
+		therefore = String(therefore).slice(0, 140)
+		return {
+			know: know,
+			believe: believe,
+			doubt: doubt,
+			therefore: therefore,
+			labels: {
+				know: "WE KNOW · 我們知道",
+				believe: "WE BELIEVE · 我們相信",
+				doubt: "WE DON'T KNOW · 我們不確定",
+				therefore: "THEREFORE · 因此",
+			},
+		}
+	}
+
+	var REVIEW_PACK_SECRET_KEYS =
+		/^(api[_-]?key|x[_-]?api[_-]?key|token|secret|password|authorization|auth|credential|private[_-]?key)$/i
+
+	var REVIEW_PACK_IDOS_EXCERPT =
+		"Four Questions (IDOS) · 四問框架\n" +
+		"1. What do we know better? · 我們更清楚知道什麼？\n" +
+		"2. What uncertainty does it reduce? · 減少了什麼不確定性？\n" +
+		"3. How does it improve future capital allocation? · 如何改善未來資本配置？\n" +
+		"4. What complexity can be removed? · 可以移除什麼複雜度？\n\n" +
+		"Authority: Page Gate > Card Rank · 頁面閘門優先於卡片排名\n" +
+		"RESEARCH ONLY — cannot authorize deployment · 研究層 — 不可授權部署"
+
+	function escapeReviewPackHtml(value) {
+		return String(value == null ? "" : value)
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;")
+			.replace(/'/g, "&#39;")
+	}
+
+	function stripReviewPackSecrets(value, depth) {
+		var d = depth || 0
+		if (d > 12) return "[truncated]"
+		if (value == null || typeof value !== "object") {
+			if (typeof value === "string" && REVIEW_PACK_SECRET_KEYS.test(value.trim())) return "[redacted]"
+			return value
+		}
+		if (Array.isArray(value)) return value.map(function (item) {
+			return stripReviewPackSecrets(item, d + 1)
+		})
+		var out = {}
+		Object.keys(value).forEach(function (key) {
+			if (REVIEW_PACK_SECRET_KEYS.test(String(key).replace(/[-]/g, "_"))) {
+				out[key] = "[redacted]"
+				return
+			}
+			out[key] = stripReviewPackSecrets(value[key], d + 1)
+		})
+		return out
+	}
+
+	function reviewPackJsonBlock(value) {
+		var clean = stripReviewPackSecrets(value)
+		try {
+			return escapeReviewPackHtml(JSON.stringify(clean, null, 2))
+		} catch (_e) {
+			return escapeReviewPackHtml(String(clean))
+		}
+	}
+
+	function reviewPackPlaybookRows(playbookPayload) {
+		if (!playbookPayload || typeof playbookPayload !== "object") return []
+		if (Array.isArray(playbookPayload.opportunities)) return playbookPayload.opportunities.slice(0, 15)
+		if (Array.isArray(playbookPayload.rows)) return playbookPayload.rows.slice(0, 15)
+		if (playbookPayload.data && Array.isArray(playbookPayload.data.opportunities))
+			return playbookPayload.data.opportunities.slice(0, 15)
+		return []
+	}
+
+	function reviewPackPlaybookSummaryHtml(playbookPayload) {
+		var rows = reviewPackPlaybookRows(playbookPayload)
+		if (!rows.length) return "<p class=\"rp-muted\">No ranked opportunities returned.</p>"
+		var lines = rows.map(function (row, idx) {
+			var ticker = escapeReviewPackHtml(row.ticker || row.symbol || "—")
+			var tier = escapeReviewPackHtml((row.quality && row.quality.tier) || row.quality_tier || "—")
+			var score =
+				row.composite_score != null
+					? row.composite_score
+					: row.score != null
+						? row.score
+						: "—"
+			var auth = escapeReviewPackHtml(row.authority_label || row.tradeability || "MONITOR ONLY")
+			return (
+				"<tr><td>" +
+				(idx + 1) +
+				"</td><td><strong>" +
+				ticker +
+				"</strong></td><td>" +
+				tier +
+				"</td><td>" +
+				escapeReviewPackHtml(score) +
+				"</td><td>" +
+				auth +
+				"</td></tr>"
+			)
+		})
+		return (
+			'<table class="rp-table"><thead><tr><th>#</th><th>Ticker</th><th>Quality</th><th>Score</th><th>Authority</th></tr></thead><tbody>' +
+			lines.join("") +
+			"</tbody></table>"
+		)
+	}
+
+	function reviewPackFourQuestionsHtml(fourQuestions) {
+		var fq = fourQuestions || {}
+		var labels = fq.labels || {}
+		var cells = [
+			{ key: "know", label: labels.know || "WE KNOW · 我們知道", cls: "" },
+			{ key: "believe", label: labels.believe || "WE BELIEVE · 我們相信", cls: "" },
+			{ key: "doubt", label: labels.doubt || "WE DON'T KNOW · 我們不確定", cls: "rp-doubt" },
+			{ key: "therefore", label: labels.therefore || "THEREFORE · 因此", cls: "rp-therefore" },
+		]
+		return (
+			'<div class="rp-idos">' +
+			cells
+				.map(function (cell) {
+					return (
+						'<div class="rp-idos-cell ' +
+						cell.cls +
+						'"><div class="rp-idos-label">' +
+						escapeReviewPackHtml(cell.label) +
+						"</div><div>" +
+						escapeReviewPackHtml(fq[cell.key] || "—") +
+						"</div></div>"
+					)
+				})
+				.join("") +
+			"</div>"
+		)
+	}
+
+	function buildReviewPackDocument(opts) {
+		var o = opts || {}
+		var meta = o.meta || {}
+		var fourQuestions = o.fourQuestions || {}
+		var sections = o.sections || []
+		var generatedAt = escapeReviewPackHtml(meta.generated_at || new Date().toISOString())
+		var workflow = escapeReviewPackHtml((meta.workflow_stage && meta.workflow_stage.label) || "—")
+		var uiMode = escapeReviewPackHtml(meta.ui_mode || "operator")
+		var sectionHtml = sections
+			.map(function (section) {
+				var page = escapeReviewPackHtml(section.page || "SECTION")
+				var title = escapeReviewPackHtml(section.title || page)
+				var summary = section.summaryHtml || ""
+				var body =
+					section.kind === "playbook"
+						? reviewPackPlaybookSummaryHtml(section.data)
+						: '<pre class="rp-pre">' + reviewPackJsonBlock(section.data) + "</pre>"
+				return (
+					'<section class="rp-page"><div class="rp-page-tag">Page: ' +
+					page +
+					"</div><h2>" +
+					title +
+					"</h2>" +
+					(summary ? '<div class="rp-summary">' + summary + "</div>" : "") +
+					body +
+					"</section>"
+				)
+			})
+			.join("")
+		return (
+			"<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\" /><title>CC X Review Pack</title>" +
+			"<style>" +
+			"@page{margin:18mm 14mm;}*{box-sizing:border-box;}" +
+			"body{font-family:Inter,system-ui,sans-serif;color:#111;line-height:1.45;margin:0;padding:24px;font-size:11px;}" +
+			"h1{font-size:22px;margin:0 0 6px;}h2{font-size:14px;margin:0 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px;}" +
+			".rp-cover{padding:24px 0 32px;border-bottom:2px solid #111;margin-bottom:24px;page-break-after:always;}" +
+			".rp-meta{color:#444;font-size:10px;margin:4px 0;}.rp-badge{display:inline-block;padding:2px 8px;border:1px solid #999;border-radius:4px;font-size:9px;font-weight:700;margin-right:6px;}" +
+			".rp-page{page-break-before:always;padding-top:8px;margin-bottom:24px;}.rp-page:first-of-type{page-break-before:auto;}" +
+			".rp-page-tag{font-family:monospace;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#666;margin-bottom:6px;}" +
+			".rp-pre{background:#f6f8fa;border:1px solid #ddd;border-radius:6px;padding:10px;font-family:ui-monospace,Menlo,monospace;font-size:9px;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;}" +
+			".rp-table{width:100%;border-collapse:collapse;font-size:10px;margin:8px 0;}.rp-table th,.rp-table td{border:1px solid #ddd;padding:5px 6px;text-align:left;}.rp-table th{background:#f0f0f0;}" +
+			".rp-idos{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0 16px;}.rp-idos-cell{border:1px solid #ddd;border-radius:6px;padding:8px;min-height:56px;}.rp-idos-label{font-size:8px;font-weight:700;text-transform:uppercase;color:#666;margin-bottom:4px;}.rp-therefore{border-color:#0a7;font-weight:700;}.rp-doubt{color:#444;}" +
+			".rp-philosophy{background:#fafafa;border-left:3px solid #333;padding:10px 12px;font-size:10px;white-space:pre-wrap;margin:12px 0 20px;}" +
+			".rp-muted{color:#666;font-style:italic;}.rp-summary{margin-bottom:8px;font-size:10px;color:#333;}" +
+			"@media print{body{padding:0;} .rp-page{page-break-before:always;} .rp-pre{break-inside:avoid;}}" +
+			"</style></head><body>" +
+			'<header class="rp-cover"><div class="rp-badge">RESEARCH ONLY</div><div class="rp-badge">CC X Review Pack</div>' +
+			"<h1>CC X Review Pack · 審查包</h1>" +
+			'<p class="rp-meta">Generated · 產生時間: ' +
+			generatedAt +
+			"</p>" +
+			'<p class="rp-meta">UI mode: ' +
+			uiMode +
+			" · Workflow: " +
+			workflow +
+			"</p>" +
+			'<p class="rp-meta">Upload this PDF to ChatGPT and ask for improvement advice on CC X surfaces.</p>' +
+			"<h2>Page: TODAY · Mission Control — Four Questions</h2>" +
+			reviewPackFourQuestionsHtml(fourQuestions) +
+			'<div class="rp-philosophy">' +
+			escapeReviewPackHtml(REVIEW_PACK_IDOS_EXCERPT) +
+			"</div></header>" +
+			sectionHtml +
+			"</body></html>"
+		)
+	}
+
+	function resolveWorkflowStage(opts) {
+		var o = opts || {}
+		var tab = String(o.tab || "today")
+		var deployOpen = !!o.deployOpen
+		var tradeability = String(o.tradeability || "WAIT").toUpperCase()
+		if (tab === "guide" || tab === "settings") return { id: "reference", label: "Reference · 參考" }
+		if (tab === "ibkr") return { id: "execution", label: "Execution · 執行" }
+		if (tab === "portfolio" || tab === "funds") return { id: "capital", label: "Capital · 資本" }
+		if (tab === "ops") return { id: "stewardship", label: "Stewardship · 管治" }
+		if (tab === "signals" || tab === "playbook") {
+			return deployOpen
+				? { id: "authority", label: "Authority · 權限" }
+				: { id: "quality", label: "Quality · 質素" }
+		}
+		if (
+			[
+				"scanners",
+				"flow",
+				"rs",
+				"dossier",
+				"agent",
+				"reports",
+				"btlab",
+				"shadow",
+				"strategy-lab",
+				"command",
+			].indexOf(tab) >= 0
+		) {
+			return { id: "research", label: "Research · 研究" }
+		}
+		if (tab === "today" && deployOpen && tradeability !== "WAIT" && tradeability !== "NO_TRADE") {
+			return { id: "decision", label: "Decision · 決策" }
+		}
+		if ((o.near_miss || []).length && !deployOpen) {
+			return { id: "attention", label: "Attention · 關注" }
+		}
+		return { id: "mission", label: "Mission · 任務" }
+	}
+
+	function workflowStageHint(stage, opts) {
+		var s = stage || {}
+		var o = opts || {}
+		var tab = String(o.tab || "today").toLowerCase()
+		var label = s.label || "Mission · 任務"
+		var hints = {
+			quality: "Rank review only — page gate beats card rank.",
+			authority: "Deploy-qualified setups — journal + readiness before handoff.",
+			capital: "Broker truth first — marginal ROC vs cash hurdle.",
+			mission: "Patience active — monitor near-miss upgrade triggers.",
+			attention: "Near-miss queue — closest upgrades, not deploy permission.",
+			decision: "Deploy window — human confirm still required.",
+			research: "Research layer — cannot authorize deployment.",
+			execution: "Handoff surface — page gates still apply.",
+			stewardship: "Ops stewardship — governance rituals only.",
+		}
+		var id = s.id || "mission"
+		if (tab === "signals" || tab === "playbook") {
+			id = o.deployOpen ? "authority" : "quality"
+		} else if (tab === "portfolio" || tab === "funds") {
+			id = "capital"
+		}
+		var hint = hints[id] || ""
+		return "You are in: " + label + (hint ? " · " + hint : "")
+	}
+
+	function attentionBudgetCategoryForTab(tab) {
+		var t = String(tab || "today").toLowerCase()
+		if (
+			[
+				"scanners",
+				"dossier",
+				"flow",
+				"rs",
+				"agent",
+				"reports",
+				"btlab",
+				"shadow",
+				"strategy-lab",
+				"command",
+				"leaders",
+				"notrade",
+			].indexOf(t) >= 0
+		)
+			return "research"
+		if (t === "portfolio" || t === "funds") return "portfolio"
+		return "market"
+	}
+
+	var ATTENTION_BUDGET_STORAGE_KEY = "cc_attention_budget_v1"
+
+	function loadAttentionBudgetUsage() {
+		try {
+			var raw = localStorage.getItem(ATTENTION_BUDGET_STORAGE_KEY)
+			var today = new Date().toISOString().slice(0, 10)
+			if (!raw) return { date: today, categories: { research: 0, portfolio: 0, market: 0 } }
+			var parsed = JSON.parse(raw)
+			if (!parsed || parsed.date !== today) {
+				return { date: today, categories: { research: 0, portfolio: 0, market: 0 } }
+			}
+			parsed.categories = parsed.categories || { research: 0, portfolio: 0, market: 0 }
+			return parsed
+		} catch (_e) {
+			return {
+				date: new Date().toISOString().slice(0, 10),
+				categories: { research: 0, portfolio: 0, market: 0 },
+			}
+		}
+	}
+
+	function saveAttentionBudgetUsage(usage) {
+		try {
+			localStorage.setItem(ATTENTION_BUDGET_STORAGE_KEY, JSON.stringify(usage))
+		} catch (_e) {}
+	}
+
+	function preDecisionAckStorageKey(ticker) {
+		var sym = String(ticker || "").toUpperCase()
+		var day = new Date().toISOString().slice(0, 10)
+		return "cc_predecision_ack_" + sym + "_" + day
+	}
+
+	function loadPreDecisionAck(ticker) {
+		try {
+			return localStorage.getItem(preDecisionAckStorageKey(ticker)) === "1"
+		} catch (_e) {
+			return false
+		}
+	}
+
+	function savePreDecisionAck(ticker, val) {
+		try {
+			localStorage.setItem(preDecisionAckStorageKey(ticker), val ? "1" : "0")
+		} catch (_e) {}
+	}
+
+	function buildDailyIcOnePagerLines(data) {
+		var d = data || {}
+		var m = d.mission || {}
+		var mk = d.market || {}
+		var p = d.portfolio || {}
+		var c = d.capital || {}
+		var b = d.one_belief || {}
+		return [
+			{
+				key: "mission",
+				label: "Mission",
+				line:
+					(m.deploy_label || "—") +
+					" · " +
+					(m.tradeability || "—") +
+					(m.stance_one_liner ? " · " + String(m.stance_one_liner).slice(0, 100) : ""),
+			},
+			{
+				key: "market",
+				label: "Market",
+				line:
+					(mk.regime || "—") +
+					" · " +
+					(mk.trend || "—") +
+					" · " +
+					(mk.tradeability || "—") +
+					(mk.headline ? " · " + String(mk.headline).slice(0, 80) : ""),
+			},
+			{
+				key: "portfolio",
+				label: "Portfolio",
+				line:
+					"Deploy " +
+					(p.best_trade || "—") +
+					" · Watch " +
+					(p.best_watch || "—") +
+					" · Near-miss " +
+					(p.near_miss_count != null ? p.near_miss_count : "—") +
+					" · Sleeve " +
+					(p.sleeve_gate_status || "—"),
+			},
+			{
+				key: "capital",
+				label: "Capital",
+				line: (c.headline || "—") + (c.cash_hurdle_bps != null ? " · cash hurdle " + c.cash_hurdle_bps + "bps" : ""),
+			},
+			{
+				key: "one_belief",
+				label: "One belief",
+				line: b.headline || b.ticker || "No belief due",
+			},
+		]
+	}
+
 	function buildMissionBriefCard(opts) {
 		var o = opts || {}
 		var v = o.verdict || {}
+		var ba = o.best_action || {}
+		var td = o.todays_decision || {}
+		var sleeve = o.sleeve_summary || {}
+		var nearMiss = o.near_miss || []
 		var whyNot = []
 		var best = v.best_monitor || {}
+		var baTrade = (ba.best_trade_now || td.best_trade || {}).ticker
+		var baWatch = (ba.best_watch_upgrade || td.best_watch || nearMiss[0] || {}).ticker
+		if (baTrade && !best.ticker) best = { ticker: baTrade }
+		if (!baWatch && nearMiss[0] && nearMiss[0].ticker) baWatch = nearMiss[0].ticker
 		if (best.why_weak) whyNot.push(String(best.why_weak))
 		;(o.systemBlockers || []).slice(0, 2).forEach(function (b) {
 			if (b && whyNot.indexOf(b) < 0) whyNot.push(String(b))
@@ -1908,10 +2419,12 @@
 			nextActions[0] ||
 			"" ||
 			(deployOpen
-				? _opsBilingual("部署", "Deploy") + " " + (best.ticker || "—")
-				: _opsBilingual("監控", "Monitor") + " " + (best.ticker || "—"))
+				? _opsBilingual("部署", "Deploy") + " " + (baTrade || best.ticker || "—")
+				: _opsBilingual("監控", "Monitor") + " " + (baWatch || best.ticker || "—"))
 		var whyLine = whyNot[0] || v.main_blocker_bilingual || v.main_blocker || "—"
 		var reviewMin = o.reviewMinutes != null ? o.reviewMinutes : 20
+		var activeSleeve = sleeve.active_today || sleeve.fund_manager || {}
+		var sleeveGate = activeSleeve.gate_status || "—"
 		return {
 			title: "Mission Control · 任務控制",
 			mission_label: missionLabel,
@@ -1928,11 +2441,36 @@
 			engine: o.engine || "—",
 			deploy_label: deployOpen ? "OPEN · 可部署" : "BLOCKED · 封鎖",
 			deploy_open: deployOpen,
-			best_monitor: best.ticker || "—",
+			best_monitor: baWatch || best.ticker || "—",
+			best_trade: baTrade || td.best_trade?.ticker || "None",
+			near_miss_top: baWatch || (nearMiss[0] && nearMiss[0].ticker) || "—",
+			sleeve_gate_status: sleeveGate,
+			stance_one_liner: ba.stance_one_liner || td.stance_one_liner || "",
 			why_not_deploy: whyNot.filter(Boolean).slice(0, 4),
 			next_actions: nextActions.filter(Boolean).slice(0, 4),
 			review_in_minutes: reviewMin,
 		}
+	}
+
+	/** PM strip SSOT line — best_action, near-miss, sleeve gate from decision board payload. */
+	function buildPmStripBoardLine(opts) {
+		var o = opts || {}
+		var ba = o.best_action || {}
+		var td = o.todays_decision || {}
+		var sleeve = o.sleeve_summary || {}
+		var nearMiss = o.near_miss || []
+		var deployOpen = !!o.deployOpen
+		var trade = (ba.best_trade_now || td.best_trade || {}).ticker || "None"
+		var watch =
+			(ba.best_watch_upgrade || td.best_watch || nearMiss[0] || {}).ticker || "—"
+		var active = sleeve.active_today || sleeve.fund_manager || {}
+		var gate = active.gate_status || "—"
+		var stance = ba.stance_one_liner || td.stance_one_liner || ""
+		var lead = deployOpen ? "Deploy" : "Top"
+		var trail = deployOpen ? "Watch" : "Near-miss"
+		var line = lead + " " + trade + " · " + trail + " " + watch + " · Sleeve " + gate
+		if (stance) line += " · " + String(stance).slice(0, 72)
+		return line
 	}
 
 	/** PM strip / trust strip chip tiers — primary authority first, context second. */
@@ -2099,6 +2637,22 @@
 	function dossierPriceDisplay(data) {
 		if (!dossierQuoteAvailable(data)) return "Quote unavailable"
 		return "$" + Number(data.price).toFixed(2)
+	}
+
+	function buildPriceProvenanceLine(row) {
+		var r = row || {}
+		var p = r.provenance && typeof r.provenance === "object" ? r.provenance : {}
+		var src = p.source || r.source || r.quote_source || "unknown"
+		var asOf = p.as_of || r.as_of || r.quote_as_of || "—"
+		var mode = p.mode || r.mode || r.data_mode || r.quote_mode || "—"
+		var stale = !!(r.data_stale || r.stale || r.quote_stale || p.stale || (Number(p.lag_days) > 1))
+		return {
+			src: src,
+			asOf: asOf,
+			mode: mode,
+			stale: stale,
+			label: src + " · " + asOf + " · " + mode + (stale ? " · STALE" : ""),
+		}
 	}
 
 	function dossierChangePctDisplay(data) {
@@ -2335,6 +2889,11 @@
 		return ""
 	}
 
+	/** Deploy authority SSOT — decision_board.system_state.deploy_open only. */
+	function deployOpenFromSystemState(ss) {
+		return !!(ss && ss.deploy_open)
+	}
+
 	global.CCHelpers = {
 		severityBadgeClass: severityBadgeClass,
 		surfaceWarmupLoadingLine: surfaceWarmupLoadingLine,
@@ -2421,6 +2980,7 @@
 		localizeOpsWhyNoSignalsGate: localizeOpsWhyNoSignalsGate,
 		pageOperatorSentence: pageOperatorSentence,
 		buildClientSystemState: buildClientSystemState,
+		deployOpenFromSystemState: deployOpenFromSystemState,
 		playbookWhatToMonitorLine: playbookWhatToMonitorLine,
 		partitionHeaderChips: partitionHeaderChips,
 		operatorLoadingSafeLine: operatorLoadingSafeLine,
@@ -2464,8 +3024,28 @@
 		pageGatePhilosophyLine: pageGatePhilosophyLine,
 		qualityTierClass: qualityTierClass,
 		cardRankQualityAuthorityLine: cardRankQualityAuthorityLine,
+		scoreFamiliesDisagree: scoreFamiliesDisagree,
+		scoreFamiliesDisagreeReasons: scoreFamiliesDisagreeReasons,
+		scoreReconciliationDetail: scoreReconciliationDetail,
 		opportunityVerdictMuted: opportunityVerdictMuted,
 		buildMissionBriefCard: buildMissionBriefCard,
+		tradeabilityBadgeClass: tradeabilityBadgeClass,
+		buildFourQuestionsBlock: buildFourQuestionsBlock,
+		buildPriceProvenanceLine: buildPriceProvenanceLine,
+		resolveWorkflowStage: resolveWorkflowStage,
+		workflowStageHint: workflowStageHint,
+		attentionBudgetCategoryForTab: attentionBudgetCategoryForTab,
+		loadAttentionBudgetUsage: loadAttentionBudgetUsage,
+		saveAttentionBudgetUsage: saveAttentionBudgetUsage,
+		loadPreDecisionAck: loadPreDecisionAck,
+		savePreDecisionAck: savePreDecisionAck,
+		preDecisionAckStorageKey: preDecisionAckStorageKey,
+		ATTENTION_BUDGET_STORAGE_KEY: ATTENTION_BUDGET_STORAGE_KEY,
+		buildDailyIcOnePagerLines: buildDailyIcOnePagerLines,
+		buildPmStripBoardLine: buildPmStripBoardLine,
+		escapeReviewPackHtml: escapeReviewPackHtml,
+		stripReviewPackSecrets: stripReviewPackSecrets,
+		buildReviewPackDocument: buildReviewPackDocument,
 	}
 })(typeof window !== "undefined" ? window : globalThis)
 
@@ -2525,11 +3105,10 @@ function cc() {
 			"today",
 		),
 		tabs: [
-			{ id: "today", icon: "☀", label: "TODAY 今日" },
-			{ id: "signals", icon: "📋", label: "Playbook 策略簿" },
-			{ id: "portfolio", icon: "💼", label: "Portfolio 持倉" },
-			{ id: "dossier", icon: "🗂", label: "Workspace 工作區" },
-			{ id: "scanners", icon: "🔬", label: "Discovery 探索" },
+			{ id: "today", icon: "☀", label: "TODAY · 今日" },
+			{ id: "signals", icon: "📋", label: "PLAYBOOK · 策略簿" },
+			{ id: "portfolio", icon: "💼", label: "PORTFOLIO · 持倉" },
+			{ id: "dossier", icon: "🗂", label: "WORKSPACE · 工作區" },
 			{ id: "ibkr", icon: "⚡", label: "IBKR 券商" },
 			{ id: "ops", icon: "⚙️", label: "Ops 運維" },
 		],
@@ -2542,6 +3121,7 @@ function cc() {
 			{ id: "reference", label: "Reference 參考" },
 		],
 		moreTabs: [
+			{ id: "scanners", icon: "🔬", label: "Discovery 探索 · research", mode: "Research-only", desc: "Route via Mission Control — not equal to deploy path" },
 			{ id: "agent", icon: "🤖", label: "Agent 盯盤 · monitor" },
 			{ id: "strategy-lab", icon: "🧪", label: "Strategy Lab 策略實驗室" },
 			{ id: "shadow", icon: "🧾", label: "Shadow 影子帳戶" },
@@ -2557,6 +3137,7 @@ function cc() {
 
 		showMore: false,
 		uiMode: "operator",
+		todayContextExpanded: false,
 		dataContractDismissed: false,
 		pmStripChipMenuOpen: false,
 		cc_status: {
@@ -2578,6 +3159,14 @@ function cc() {
 			page_authority_mode: "diagnostic",
 			portfolio_context: null,
 			header_summary: null,
+		},
+		replay: {
+			active: false,
+			as_of: "",
+			session_id: "",
+			loading: false,
+			error: "",
+			banner: "",
 		},
 		surfaceFetchHints: {},
 		live: false,
@@ -2645,6 +3234,8 @@ function cc() {
 		pf: {
 			loading: false,
 			source: "manual",
+			ssot: "server",
+			ssotFallback: false,
 			positions: [],
 			alerts: [],
 			summary: null,
@@ -2827,6 +3418,7 @@ function cc() {
 			entries: [],
 		},
 		errorLog: { loading: false, error: "", entries: [], total: 0, filter: "all" },
+		identifiedErrorsPanel: { loading: false, error: "", items: [], lastRefresh: null },
 		providers: {
 			yfinance: false,
 			regime_router: false,
@@ -2920,6 +3512,26 @@ function cc() {
 			lastAutoSchedule: null,
 			feedback: null,
 		},
+		beliefReview: { loading: false, data: null, err: "", saving: false },
+		marginalRoc: { loading: false, data: null, err: "" },
+		firmCadence: { loading: false, data: null, err: "" },
+		dailyIc: { loading: false, data: null, err: "", expanded: false },
+		deployIntentJournal: { loading: false, data: null, err: "" },
+		decisionJournal: { loading: false, data: null, err: "" },
+		overrideJournal: { loading: false, data: null, err: "" },
+		calibrationReport: { loading: false, data: null, err: "" },
+		weeklyIcDigest: { loading: false, data: null, err: "" },
+		usageLogSummary: { loading: false, data: null, err: "" },
+		decisionReadiness: { loading: false, data: null, err: "" },
+		researchQueue: { loading: false, data: null, err: "" },
+		attentionBudget: { loading: false, data: null, err: "", usage: { research: 0, portfolio: 0, market: 0 } },
+		preDecisionGate: { loading: false, data: null, err: "", acknowledged: false },
+		priorLessons: { loading: false, data: null, err: "", ticker: "" },
+		beliefDeployFlags: { loading: false, data: null, err: "" },
+		_attentionBudgetLastTick: 0,
+		_attentionBudgetTab: "today",
+		_attentionBudgetSec: 0,
+		reviewPackLoading: false,
 		stratHealth: { loading: false, data: null, window: 30, err: "" },
 		histVar: { loading: false, data: null, err: "", last_run: 0 },
 		freshness: null,
@@ -3020,6 +3632,9 @@ function cc() {
 		_failCount: 0,
 		_retryTimer: null,
 		_fundRetryTimer: null,
+		_ccInflight: {},
+		_pageVisible: true,
+		_hiddenPollSkip: 0,
 		apiError: "",
 		healthData: null,
 		healthMode: "loading",
@@ -3036,27 +3651,58 @@ function cc() {
 				if (mode === "guide" || mode === "operator") this.uiMode = mode
 			} catch (e) {}
 			this.dataContractDismissed = localStorage.getItem("cc_data_contract_dismissed") === "1"
+			this.initReplayFromStorage()
 			if (typeof window !== "undefined") {
 				window.addEventListener("resize", () => {
 					this.pmStripChipMenuOpen = false
 				})
+				this._pageVisible = typeof document === "undefined" || !document.hidden
+				if (typeof document !== "undefined") {
+					document.addEventListener("visibilitychange", () => {
+						this._pageVisible = !document.hidden
+						this._hiddenPollSkip = 0
+						if (this._pageVisible) {
+							this.fetchDecisionBoardLight()
+							if (this.tab === "today") this.fetchToday7()
+						}
+					})
+				}
 			}
 			this.tick()
 			setInterval(() => this.tick(), 1000)
 			this.fetchHealth()
-			setInterval(() => this.fetchHealth(), 30000)
+			setInterval(() => {
+				if (this._ccPollSkip(false)) return
+				this.fetchHealth()
+			}, 30000)
 			// Phase 1 — critical path (hydrate local cache first, then network)
 			this.hydrateRankedFromCache()
 			this.hydrateToday7FromCache()
 			this.hydrateScannersFromCache()
 			this.fetchDecisionBoardLight()
-			setInterval(() => this.fetchDecisionBoardLight(), 30000)
-			this.fetchCcStatus({ full: true })
-			setInterval(() => this.fetchCcStatus({ light: true }), 120000)
+			setInterval(() => {
+				if (this._ccPollSkip(false)) return
+				this.fetchDecisionBoardLight()
+			}, 30000)
+			this.fetchCcStatus({ light: true })
+			setTimeout(() => this.fetchCcStatus({ full: true }), 5000)
+			setInterval(() => {
+				if (this._ccPollSkip(false)) return
+				this.fetchCcStatus({ light: true })
+			}, 120000)
+			this._syncAttentionBudgetUsageFromStorage()
+			this._attentionBudgetLastTick = Date.now()
+			this._attentionBudgetTab = this.tab
 			this.fetchToday7()
-			setInterval(() => this.fetchToday7(), 180000)
+			setInterval(() => {
+				if (this._ccPollSkip(false) || this.replay.active) return
+				this.fetchToday7()
+			}, 180000)
 			setTimeout(() => this.fetchMarketStrip(), 800)
-			setInterval(() => this.fetchMarketStrip(), 300000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchMarketStrip()
+			}, 300000)
 			// Signals feed loads on tab switch only (avoids duplicate /api/recommendations traffic)
 			// Phase 2 — secondary panels (staggered)
 			setTimeout(() => {
@@ -3076,22 +3722,46 @@ function cc() {
 				this.fetchDesk()
 				this.fetchLeadersDashboard()
 			}, 5000)
-			setInterval(() => this.fetchDesk(), 180000)
-			setInterval(() => this.fetchLeadersDashboard(), 300000)
-			setInterval(() => this.fetchDecisionHub(), 180000)
-			setInterval(() => this.fetchPortfolio(), 300000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchDesk()
+			}, 180000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchLeadersDashboard()
+			}, 300000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchDecisionHub()
+			}, 180000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchPortfolio()
+			}, 300000)
 			// Per-strategy realized analytics (cheap; refresh every 10min)
 			this.fetchStrategyHealth()
-			setInterval(() => this.fetchStrategyHealth(), 600000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchStrategyHealth()
+			}, 600000)
 			// Data freshness watchdog (every 2 min; cheap — already-cached histories)
 			setTimeout(() => this.fetchFreshness(), 1500)
-			setInterval(() => this.fetchFreshness(), 120000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchFreshness()
+			}, 120000)
 			// Position-level risk alerts (every 2 min)
 			setTimeout(() => this.fetchRiskAlerts(), 2000)
-			setInterval(() => this.fetchRiskAlerts(), 120000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchRiskAlerts()
+			}, 120000)
 			// Morning brief freshness check (every 5 min — cheap, just stats a file)
 			this.fetchBriefStatus()
-			setInterval(() => this.fetchBriefStatus(), 300000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchBriefStatus()
+			}, 300000)
 			this.fetchWarmupBriefBoard()
 			setTimeout(() => {
 				if (!this.playbookBoardHasContent()) this.fetchWarmupBriefBoard()
@@ -3131,6 +3801,7 @@ function cc() {
 				const r = await fetch("/api/data/freshness")
 				if (!r.ok) return
 				this.freshness = await r.json()
+				this.rebuildIdentifiedErrors()
 			} catch (e) {
 				/* silent — pill simply won't show */
 			}
@@ -3143,6 +3814,7 @@ function cc() {
 				})
 				if (!r.ok) return
 				this.risk_alerts = await r.json()
+				this.rebuildIdentifiedErrors()
 			} catch (e) {
 				/* silent — pill simply won't show */
 			}
@@ -3285,8 +3957,33 @@ function cc() {
 				alert("Rotate error: " + e.message)
 			}
 		},
+		_ccPollSkip(secondaryOnly) {
+			if (this._pageVisible) {
+				this._hiddenPollSkip = 0
+				return false
+			}
+			if (!secondaryOnly) {
+				this._hiddenPollSkip += 1
+				return this._hiddenPollSkip % 2 !== 0
+			}
+			return true
+		},
 		async ccFetch(url, opts = {}) {
 			if (opts.json || opts.normalize) return this.ccFetchJson(url, opts)
+			const dedupe = opts.dedupe !== false
+			const method = (opts.init && opts.init.method) || opts.method || "GET"
+			const key = dedupe ? method + " " + url : null
+			if (key && this._ccInflight[key]) return this._ccInflight[key]
+			const promise = this._ccFetchRaw(url, opts)
+			if (key) {
+				this._ccInflight[key] = promise
+				promise.finally(() => {
+					delete this._ccInflight[key]
+				})
+			}
+			return promise
+		},
+		async _ccFetchRaw(url, opts = {}) {
 			const tries = opts.retries ?? 3
 			const backoff = opts.backoff ?? 700
 			const timeoutMs = opts.timeoutMs ?? 0
@@ -4031,6 +4728,53 @@ function cc() {
 			if (this.ccHeader?.system_state) return this.ccHeader.system_state
 			return this._clientSystemState()
 		},
+		deployOpen() {
+			const ss = this.systemState()
+			if (typeof CCHelpers !== "undefined" && CCHelpers.deployOpenFromSystemState)
+				return CCHelpers.deployOpenFromSystemState(ss)
+			return !!(ss && ss.deploy_open)
+		},
+		hideMockSurfacesOnDeploy() {
+			return this.deployOpen() && !this.pageAuthorityIsDegraded()
+		},
+		priceProvenanceLine(row) {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildPriceProvenanceLine)
+				return CCHelpers.buildPriceProvenanceLine(row)
+			const p = row?.provenance || row || {}
+			const src = p.source || row?.source || "unknown"
+			const asOf = p.as_of || row?.as_of || "—"
+			const mode = p.mode || row?.mode || row?.data_mode || "—"
+			const stale = !!(row?.data_stale || row?.stale || p.lag_days > 1)
+			return { src, asOf, mode, stale, label: `${src} · ${asOf} · ${mode}${stale ? " · STALE" : ""}` }
+		},
+		async logSurfaceUsage(surface, event) {
+			try {
+				await this.ccFetch("/api/v7/usage-log/event", {
+					method: "POST",
+					body: JSON.stringify({ surface, event, tab: this.tab }),
+				})
+			} catch (e) {}
+		},
+		async recordOverrideQuick(reason, adviceClass) {
+			try {
+				await this.ccFetch("/api/v7/override-journal/entry", {
+					method: "POST",
+					body: JSON.stringify({
+						advice_class: adviceClass || "cc_recommendation",
+						action: "override",
+						reason: reason || "",
+						tab: this.tab,
+					}),
+				})
+			} catch (e) {}
+		},
+		todaySecondaryContextVisible() {
+			if (this.deployOpen() || !this.isWaitDay()) return true
+			return !!this.todayContextExpanded
+		},
+		toggleTodayContextExpanded() {
+			this.todayContextExpanded = !this.todayContextExpanded
+		},
 		_clientSystemState() {
 			const board =
 				this.ccHeader?.decision_board || this.today7?.decision_board || this.rankedOpps?.decision_board || null
@@ -4329,7 +5073,7 @@ function cc() {
 				}
 			}
 			if (mode === "dashboard_core" || mode === "playbook_core") {
-				const canDeploy = !!this.today7.todays_decision?.can_deploy_today && !degraded && !hardBlocked
+				const canDeploy = this.deployOpen() && !degraded && !hardBlocked
 				if (canDeploy) {
 					return {
 						...entry,
@@ -4617,6 +5361,259 @@ function cc() {
 		},
 		opsErrorLogUnavailableDetail() {
 			return this._uiText("Unable to confirm whether errors were logged this session.")
+		},
+		identifiedErrorsTitle() {
+			return "已識別錯誤 · Identified Errors"
+		},
+		identifiedErrorsIntro() {
+			return this._uiText(
+				"Aggregates session error log, system blockers, broker/sync failures, and data freshness in one place — informs only, never grants deploy.",
+			)
+		},
+		identifiedErrorsResearchOnlyLabel() {
+			return "只供參考 · Research only"
+		},
+		identifiedErrorsSourceLabel(source) {
+			const map = {
+				error_log: "錯誤日誌 · Error log",
+				blocker: "系統阻擋 · System blocker",
+				ops: "運維控制台 · Ops console",
+				ibkr: "IBKR / 同步 · IBKR / sync",
+				freshness: "資料新鮮度 · Data freshness",
+				portfolio: "持倉 / 風險 · Portfolio / risk",
+			}
+			return map[source] || String(source || "—")
+		},
+		identifiedErrorsSeverityRank(sev) {
+			const s = String(sev || "info").toLowerCase()
+			if (s === "critical") return 0
+			if (s === "warning") return 1
+			return 2
+		},
+		identifiedErrorsDedupKey(item) {
+			return (
+				String(item.source || "") +
+				"|" +
+				String(item.message || "")
+					.toLowerCase()
+					.replace(/\s+/g, " ")
+					.trim()
+					.slice(0, 120)
+			)
+		},
+		identifiedErrorsBlockerSeverity(text) {
+			const upper = String(text || "").toUpperCase()
+			if (
+				upper.includes("CRITICAL") ||
+				upper.includes("BLOCKED") ||
+				upper.includes("BREAKER") ||
+				upper.includes("CRASH")
+			)
+				return "critical"
+			return "warning"
+		},
+		mergeIdentifiedErrors() {
+			const items = []
+			const seen = new Set()
+			const push = (item) => {
+				if (!item || !item.message) return
+				const key = this.identifiedErrorsDedupKey(item)
+				if (seen.has(key)) return
+				seen.add(key)
+				items.push(item)
+			}
+			;(this.errorLog.entries || []).slice(0, 20).forEach((row, i) => {
+				push({
+					id: row.id || "elog-" + i,
+					severity: row.severity || "info",
+					source: "error_log",
+					message: String(row.message || ""),
+					detail: String(row.detail || row.suggested_action || ""),
+					timestamp: row.timestamp || null,
+					research_only: false,
+				})
+			})
+			if (this.errorLog.error) {
+				push({
+					id: "elog-fetch",
+					severity: "warning",
+					source: "error_log",
+					message: "Error log unavailable: " + this.errorLog.error,
+					detail: "",
+					timestamp: null,
+					research_only: true,
+				})
+			}
+			;(this.opsConsole.data?.blockers || []).forEach((b, i) => {
+				const msg = typeof b === "string" ? b : String(b.message || b.label || "")
+				push({
+					id: "ops-blocker-" + i,
+					severity: this.identifiedErrorsBlockerSeverity(msg),
+					source: "blocker",
+					message: msg,
+					detail: typeof b === "object" ? String(b.detail || "") : "",
+					timestamp: null,
+					research_only: false,
+				})
+			})
+			if (this.opsConsole.error) {
+				push({
+					id: "ops-console-fetch",
+					severity: "critical",
+					source: "ops",
+					message: String(this.opsConsole.error),
+					detail: "",
+					timestamp: null,
+					research_only: true,
+				})
+			}
+			const mission = this.todayMissionPanel()
+			;[...(mission.system_blockers || []), ...(mission.card_gates || [])].forEach((b, i) => {
+				const msg = String(b || "").trim()
+				if (!msg) return
+				push({
+					id: "mission-blocker-" + i,
+					severity: this.identifiedErrorsBlockerSeverity(msg),
+					source: "blocker",
+					message: msg,
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			})
+			if (this.ibkr.statusFetchError) {
+				push({
+					id: "ibkr-status-fetch",
+					severity: "warning",
+					source: "ibkr",
+					message: String(this.ibkr.statusFetchError),
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			if (this.ibkrBookMismatch()) {
+				push({
+					id: "ibkr-book-mismatch",
+					severity: "critical",
+					source: "ibkr",
+					message: "Portfolio book mismatch — confirm bracket and portfolio sync before handoff",
+					detail: String(this.ibkr.portfolioCompare?.note || ""),
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			const syncStatus = String(this.ibkr.readiness?.portfolio_sync_status || "").toLowerCase()
+			if (syncStatus && !["ready", "ok", "synced"].includes(syncStatus)) {
+				push({
+					id: "ibkr-portfolio-sync",
+					severity: syncStatus === "mismatch" ? "critical" : "warning",
+					source: "ibkr",
+					message: "Portfolio sync: " + syncStatus,
+					detail: String(this.ibkr.readiness?.portfolio_sync_reason || this.ibkr.portfolioCompare?.note || ""),
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			if (this.opsConsole.data?.ibkr && !this.opsConsole.data.ibkr.connected) {
+				push({
+					id: "ibkr-session-inactive",
+					severity: "warning",
+					source: "ibkr",
+					message: "IBKR session inactive",
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			if (this.portfolioHeaderBrokerSyncUnavailable()) {
+				push({
+					id: "portfolio-broker-sync",
+					severity: "warning",
+					source: "portfolio",
+					message: "Broker sync unavailable",
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			const tier = String(this.freshness?.worst_tier || this.ccFreshnessState().worst_tier || "").toUpperCase()
+			if (tier === "CRITICAL" || tier === "STALE") {
+				push({
+					id: "data-freshness-" + tier,
+					severity: tier === "CRITICAL" ? "critical" : "warning",
+					source: "freshness",
+					message: "DATA " + tier,
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			const alerts = this.risk_alerts?.alerts || this.risk_alerts?.items || []
+			if (Array.isArray(alerts) && alerts.length) {
+				alerts.forEach((a, i) => {
+					const sev = String(a.severity || a.level || "warning").toLowerCase()
+					if (sev === "info") return
+					push({
+						id: "risk-alert-" + i,
+						severity: sev === "critical" ? "critical" : "warning",
+						source: "portfolio",
+						message: String(a.message || a.label || a.type || "Risk alert"),
+						detail: String(a.detail || ""),
+						timestamp: a.timestamp || null,
+						research_only: false,
+					})
+				})
+			} else if (this.riskAlertsStripVisible()) {
+				push({
+					id: "risk-alert-count",
+					severity: "warning",
+					source: "portfolio",
+					message: this.riskAlertsStripLine(),
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			this.opsCriticalFlags().forEach((f, i) => {
+				push({
+					id: "ops-critical-" + i,
+					severity: "critical",
+					source: "ops",
+					message: String(f),
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			})
+			items.sort(
+				(a, b) => this.identifiedErrorsSeverityRank(a.severity) - this.identifiedErrorsSeverityRank(b.severity),
+			)
+			return items.slice(0, 40)
+		},
+		rebuildIdentifiedErrors() {
+			this.identifiedErrorsPanel.items = this.mergeIdentifiedErrors()
+		},
+		async refreshIdentifiedErrors() {
+			this.identifiedErrorsPanel.loading = true
+			this.identifiedErrorsPanel.error = ""
+			try {
+				if (!this.errorLog.loading) await this.fetchErrorLog()
+				this.rebuildIdentifiedErrors()
+				this.identifiedErrorsPanel.lastRefresh = new Date().toISOString()
+			} catch (e) {
+				this.identifiedErrorsPanel.error = e.message || "refresh failed"
+				this.rebuildIdentifiedErrors()
+			} finally {
+				this.identifiedErrorsPanel.loading = false
+			}
+		},
+		identifiedErrorsCountLabel() {
+			const n = (this.identifiedErrorsPanel.items || []).length
+			return n ? n + " 項 · " + n + " item(s)" : ""
+		},
+		identifiedErrorsEmptyCopy() {
+			return this._uiText("No identified errors this session — system healthy or still warming.")
 		},
 		opsChangelogEntryTitle(entry) {
 			return this._uiText((entry && entry.title) || "")
@@ -5179,17 +6176,9 @@ function cc() {
 			}
 		},
 		mergeLocalPortfolioHoldings(holdings) {
-			const local = this.hydratePortfolioFromLocal()
-			if (!local || !local.holdings || !local.holdings.length) return holdings || []
-			const merged = [...(holdings || [])]
-			const seen = new Set(merged.map((p) => (p.ticker || p.symbol || "").toUpperCase()))
-			local.holdings.forEach((h) => {
-				const t = (h.ticker || "").toUpperCase()
-				if (!t || seen.has(t)) return
-				merged.push(h)
-				seen.add(t)
-			})
-			return merged
+			// Portfolio SSOT: server `data/portfolio_local_holdings.json` via /api/portfolio/monitor.
+			// Do not merge browser localStorage into read paths — offline cache is write-only fallback.
+			return holdings || []
 		},
 		buildLocalPosition(body) {
 			const entry = Number(body.entry_price)
@@ -5292,19 +6281,22 @@ function cc() {
 			if (waitOk) {
 				return {
 					kind: "WAIT_DAY_OK",
-					headline: "Empty board — often correct on WAIT",
-					detail: tab === "scanners" ? this.discoveryWaitEmptyLine() : this.playbookEmptyComment(),
+					headline: "No deploy-qualified opportunities",
+					detail:
+						tab === "scanners"
+							? this.discoveryWaitEmptyLine()
+							: "Cash is a valid position. Review monitor funnel before forcing action.",
 					badge: "WAIT DAY OK",
 					cta: "Review monitor funnel",
 				}
 			}
 			return {
 				kind: "NO_DATA",
-				headline: "No rows in this batch",
+				headline: "No deploy-qualified opportunities",
 				detail:
 					c.detail ||
 					(tab === "signals"
-						? this.playbookEmptyComment()
+						? "No deploy-qualified opportunities in this batch. Cash is a valid position."
 						: tab === "notrade"
 							? "No blocked signals in current pipeline batch."
 							: "Nothing to show yet."),
@@ -6067,21 +7059,29 @@ function cc() {
 			return this.degradedPmMonitorLine()
 		},
 		pmDecisionTickerLine() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildPmStripBoardLine) {
+				return CCHelpers.buildPmStripBoardLine({
+					best_action: this.today7.best_action,
+					todays_decision: this.today7.todays_decision,
+					near_miss: this.today7.near_miss,
+					sleeve_summary: this.today7.sleeve_summary,
+					deployOpen: this.deployOpen(),
+				})
+			}
 			const td = this.today7.todays_decision
 			if (!td) return ""
-			const deploy = !!td.can_deploy_today
+			const deploy = this.deployOpen()
 			const lead = deploy ? "Deploy" : "Top"
 			const trail = deploy ? "Watch" : "Monitor"
 			return lead + " " + (td.best_trade?.ticker || "None") + " · " + trail + " " + (td.best_watch?.ticker || "—")
 		},
 		dashboardBestTradeLabel() {
 			const td = this.today7.todays_decision
-			if (!td || !td.can_deploy_today || this.isWaitDay())
-				return td?.best_trade?.ticker ? "Top watch" : "Best monitor"
+			if (!this.deployOpen() || this.isWaitDay()) return td?.best_trade?.ticker ? "Top watch" : "Best monitor"
 			return "Best TRADE"
 		},
 		dashboardActionablePicks() {
-			if (this.pageAuthorityIsDegraded() || !this.today7.todays_decision?.can_deploy_today) return []
+			if (this.pageAuthorityIsDegraded() || !this.deployOpen()) return []
 			return (this.today7.top_ranked || []).filter((o) => {
 				const act = String(this.effectiveCardAction(o) || "").toUpperCase()
 				return o.execution_ready && ["TRADE", "BUY", "BUY_ON_DIP", "STRONG_TRADE"].includes(act)
@@ -6376,6 +7376,664 @@ function cc() {
 				console.warn("fetchSelfLearnStatus", e)
 			}
 		},
+		async fetchBeliefReview() {
+			if (this.tab !== "ops") return
+			this.beliefReview.loading = true
+			this.beliefReview.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/belief-review/summary")
+				if (!r || !r.ok) {
+					this.beliefReview.err = "Belief review unavailable"
+					return
+				}
+				this.beliefReview.data = await r.json()
+			} catch (e) {
+				this.beliefReview.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.beliefReview.loading = false
+			}
+		},
+		async saveBeliefItem(item) {
+			if (!item || !item.id) return
+			this.beliefReview.saving = true
+			this.beliefReview.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/belief-review/items/" + encodeURIComponent(item.id), {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						thesis: item.thesis || "",
+						kill_condition: item.kill_condition || "",
+						conviction: item.conviction,
+						status: item.status || "reviewed",
+					}),
+				})
+				if (!r || !r.ok) {
+					this.beliefReview.err = "Belief save failed"
+					return
+				}
+				await this.fetchBeliefReview()
+			} catch (e) {
+				this.beliefReview.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.beliefReview.saving = false
+			}
+		},
+		async fetchMarginalRoc() {
+			if (this.tab !== "ops" && this.tab !== "today" && this.tab !== "portfolio") return
+			this.marginalRoc.loading = true
+			this.marginalRoc.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/capital/marginal-roc")
+				if (!r || !r.ok) {
+					this.marginalRoc.err = "Marginal ROC unavailable"
+					return
+				}
+				this.marginalRoc.data = await r.json()
+			} catch (e) {
+				this.marginalRoc.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.marginalRoc.loading = false
+			}
+		},
+		marginalRocHeadline() {
+			const d = this.marginalRoc.data
+			if (!d) return "Marginal ROC · loading…"
+			return d.cash_headline || d.headline || "Marginal ROC"
+		},
+		marginalRocLadderLine() {
+			const d = this.marginalRoc.data
+			if (!d || !(d.ladder || []).length) return "No ladder data · stub"
+			const top = d.ladder[0]
+			if (d.cash_winning) return `Cash hurdle ${d.cash_hurdle_bps}bps · hold cash`
+			return `Next $10K hint: ${d.next_10k_hint || top.ticker} · ${top.marginal_return_on_capital_bps}bps vs cash`
+		},
+		async fetchFirmCadence() {
+			if (this.tab !== "ops" && this.tab !== "today") return
+			this.firmCadence.loading = true
+			this.firmCadence.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/firm-cadence/summary")
+				if (!r || !r.ok) {
+					this.firmCadence.err = "Firm cadence unavailable"
+					return
+				}
+				this.firmCadence.data = await r.json()
+			} catch (e) {
+				this.firmCadence.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.firmCadence.loading = false
+			}
+		},
+		firmCadenceNextLine() {
+			const d = this.firmCadence.data
+			if (!d || !d.next_ritual) return "Firm cadence · loading…"
+			const nr = d.next_ritual
+			return `Next: ${nr.label || nr.id} · ${nr.due || "—"}`
+		},
+		async fetchDailyIc() {
+			if (!["today", "ops", "signals", "portfolio"].includes(this.tab)) return
+			this.dailyIc.loading = true
+			this.dailyIc.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/daily-ic/summary")
+				if (!r || !r.ok) {
+					this.dailyIc.err = "Daily IC unavailable"
+					return
+				}
+				this.dailyIc.data = await r.json()
+			} catch (e) {
+				this.dailyIc.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.dailyIc.loading = false
+			}
+		},
+		dailyIcLine() {
+			const d = this.dailyIc.data
+			if (!d) return "Daily IC · loading…"
+			const m = d.mission || {}
+			const mk = d.market || {}
+			const p = d.portfolio || {}
+			return `IC · ${m.deploy_label || "—"} · ${mk.tradeability || "—"} · ${p.best_watch || p.best_trade || "—"} · belief ${(d.one_belief && d.one_belief.ticker) || "—"}`
+		},
+		dailyIcOnePagerLines() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildDailyIcOnePagerLines) {
+				return CCHelpers.buildDailyIcOnePagerLines(this.dailyIc.data)
+			}
+			return []
+		},
+		toggleDailyIcExpanded() {
+			this.dailyIc.expanded = !this.dailyIc.expanded
+		},
+		workflowStageLine() {
+			const stage = this.workflowStage()
+			return (stage && stage.label) || "Mission · 任務"
+		},
+		workflowStage() {
+			const opts = {
+				tab: this.tab,
+				deployOpen: this.deployOpen(),
+				tradeability: this.canonicalTradeability(),
+				near_miss: this.today7.near_miss || [],
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.resolveWorkflowStage) {
+				return CCHelpers.resolveWorkflowStage(opts)
+			}
+			return { id: "mission", label: "Mission · 任務" }
+		},
+		workflowStageHint() {
+			const stage = this.workflowStage()
+			const opts = { tab: this.tab, deployOpen: this.deployOpen() }
+			if (typeof CCHelpers !== "undefined" && CCHelpers.workflowStageHint) {
+				return CCHelpers.workflowStageHint(stage, opts)
+			}
+			return "You are in: " + ((stage && stage.label) || "Mission · 任務")
+		},
+		deployIntentJournalVisible() {
+			return this.deployOpen()
+		},
+		async fetchDeployIntentJournal(ticker, decisionId) {
+			if (!this.deployOpen()) {
+				this.deployIntentJournal.data = null
+				this.deployIntentJournal.err = ""
+				return
+			}
+			const mc = this.missionControl()
+			const sym = String(
+				ticker ||
+					(this.deployOpen() ? mc.best_trade || mc.best_monitor : mc.best_monitor) ||
+					""
+			)
+				.trim()
+				.toUpperCase()
+			const did = String(decisionId || "").trim()
+			this.deployIntentJournal.loading = true
+			this.deployIntentJournal.err = ""
+			try {
+				let u = "/api/v7/decision-journal/deploy-intent-checklist?"
+				if (sym) u += "ticker=" + encodeURIComponent(sym) + "&"
+				if (did) u += "decision_id=" + encodeURIComponent(did)
+				const r = await this.ccFetch(u)
+				if (!r || !r.ok) {
+					this.deployIntentJournal.err = "Deploy-intent journal checklist unavailable"
+					return
+				}
+				this.deployIntentJournal.data = await r.json()
+			} catch (e) {
+				this.deployIntentJournal.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.deployIntentJournal.loading = false
+			}
+		},
+		deployIntentJournalLine() {
+			if (!this.deployOpen()) return ""
+			const d = this.deployIntentJournal.data
+			if (this.deployIntentJournal.loading) return "Journal checklist · loading…"
+			if (this.deployIntentJournal.err) return this.deployIntentJournal.err
+			if (!d) return "Journal checklist · link readiness + POST stub"
+			if (d.complete) return `${d.ticker || "—"} · journal complete · human deploy still required`
+			const missing = (d.missing_fields || []).length
+			return `${d.ticker || "—"} · journal ${d.status} · ${missing} fields · link readiness + POST stub`
+		},
+		async fetchDecisionJournal() {
+			if (this.tab !== "ops") return
+			this.decisionJournal.loading = true
+			this.decisionJournal.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/decision-journal/recent?limit=10")
+				if (!r || !r.ok) {
+					this.decisionJournal.err = "Decision journal unavailable"
+					return
+				}
+				this.decisionJournal.data = await r.json()
+			} catch (e) {
+				this.decisionJournal.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.decisionJournal.loading = false
+			}
+		},
+		async fetchOverrideJournal() {
+			if (this.tab !== "ops") return
+			this.overrideJournal.loading = true
+			this.overrideJournal.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/override-journal/summary")
+				if (!r || !r.ok) {
+					this.overrideJournal.err = "Override journal unavailable"
+					return
+				}
+				this.overrideJournal.data = await r.json()
+			} catch (e) {
+				this.overrideJournal.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.overrideJournal.loading = false
+			}
+		},
+		async fetchCalibrationReport() {
+			if (this.tab !== "ops") return
+			this.calibrationReport.loading = true
+			this.calibrationReport.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/calibration/report")
+				if (!r || !r.ok) {
+					this.calibrationReport.err = "Calibration report unavailable"
+					return
+				}
+				this.calibrationReport.data = await r.json()
+			} catch (e) {
+				this.calibrationReport.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.calibrationReport.loading = false
+			}
+		},
+		async fetchWeeklyIcDigest() {
+			if (this.tab !== "ops") return
+			this.weeklyIcDigest.loading = true
+			this.weeklyIcDigest.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/weekly-ic/digest")
+				if (!r || !r.ok) {
+					this.weeklyIcDigest.err = "Weekly IC digest unavailable"
+					return
+				}
+				this.weeklyIcDigest.data = await r.json()
+			} catch (e) {
+				this.weeklyIcDigest.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.weeklyIcDigest.loading = false
+			}
+		},
+		async fetchUsageLogSummary() {
+			if (this.tab !== "ops") return
+			this.usageLogSummary.loading = true
+			this.usageLogSummary.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/usage-log/summary")
+				if (!r || !r.ok) {
+					this.usageLogSummary.err = "Usage log unavailable"
+					return
+				}
+				this.usageLogSummary.data = await r.json()
+			} catch (e) {
+				this.usageLogSummary.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.usageLogSummary.loading = false
+			}
+		},
+		async _fetchReviewPackEndpoint(url) {
+			try {
+				const r = await this.ccFetch(url, { retries: 1, backoff: 300, timeoutMs: 15000 })
+				if (!r || !r.ok) {
+					return { ok: false, status: r ? r.status : 0, error: "HTTP " + (r ? r.status : 0) }
+				}
+				return { ok: true, data: await r.json() }
+			} catch (e) {
+				return { ok: false, error: e && e.message ? e.message : String(e) }
+			}
+		},
+		async exportReviewPack() {
+			if (this.reviewPackLoading) return
+			this.reviewPackLoading = true
+			try {
+				const endpoints = [
+					{ page: "TODAY", title: "TODAY · Mission Control payload", url: "/api/v7/today" },
+					{ page: "TODAY", title: "Decision board · 決策板", url: "/api/v7/decision/board" },
+					{
+						page: "PLAYBOOK",
+						title: "PLAYBOOK · Top opportunities",
+						url: "/api/v7/playbook/ranked/snapshot?limit=30",
+						kind: "playbook",
+					},
+					{ page: "PORTFOLIO", title: "PORTFOLIO · Decision summary", url: "/api/v7/portfolio-decision" },
+					{ page: "OPS", title: "Belief review · 信念審查", url: "/api/v7/belief-review/summary" },
+					{ page: "OPS", title: "Firm cadence · 公司節奏", url: "/api/v7/firm-cadence/summary" },
+					{ page: "OPS", title: "Marginal ROC · 邊際回報", url: "/api/v7/capital/marginal-roc" },
+					{
+						page: "OPS",
+						title: "Decision journal · 決策日誌",
+						url: "/api/v7/decision-journal/recent?limit=10",
+					},
+					{ page: "OPS", title: "Override journal · 覆寫日誌", url: "/api/v7/override-journal/summary" },
+					{ page: "OPS", title: "Calibration report · 校準", url: "/api/v7/calibration/report" },
+					{ page: "OPS", title: "Weekly IC digest · 週IC", url: "/api/v7/weekly-ic/digest" },
+					{ page: "OPS", title: "Surface usage log · 使用紀錄", url: "/api/v7/usage-log/summary" },
+					{ page: "OPS", title: "Ops console · 運維總覽", url: "/api/v7/ops-console" },
+					{ page: "SYSTEM", title: "CC header · 系統標頭", url: "/api/ops/cc-header" },
+				]
+				const fetched = await Promise.all(
+					endpoints.map(async (ep) => {
+						const result = await this._fetchReviewPackEndpoint(ep.url)
+						return { ...ep, data: result.ok ? result.data : { fetch_error: result.error, status: result.status } }
+					}),
+				)
+				const meta = {
+					generated_at: new Date().toISOString(),
+					ui_mode: this.uiMode,
+					workflow_stage: this.workflowStage(),
+					research_only: true,
+					authority: "research_only",
+				}
+				const fourQuestions = this.fourQuestionsBlock()
+				const buildDoc =
+					typeof CCHelpers !== "undefined" && CCHelpers.buildReviewPackDocument
+						? CCHelpers.buildReviewPackDocument.bind(CCHelpers)
+						: null
+				if (!buildDoc) {
+					alert("Review pack builder unavailable — reload CC X and retry.")
+					return
+				}
+				const html = buildDoc({
+					meta,
+					fourQuestions,
+					sections: fetched.map((row) => ({
+						page: row.page,
+						title: row.title,
+						kind: row.kind || "json",
+						data: row.data,
+					})),
+				})
+				const popup = window.open("", "_blank", "noopener,noreferrer")
+				if (!popup) {
+					alert("Pop-up blocked — allow pop-ups for CC X, then click Export again.")
+					return
+				}
+				popup.document.open()
+				popup.document.write(html)
+				popup.document.close()
+				popup.focus()
+				setTimeout(() => {
+					try {
+						popup.print()
+					} catch (_e) {}
+				}, 400)
+			} catch (e) {
+				console.warn("exportReviewPack failed", e)
+				alert("Review pack export failed: " + (e && e.message ? e.message : String(e)))
+			} finally {
+				this.reviewPackLoading = false
+			}
+		},
+		async fetchDecisionReadiness(ticker) {
+			const sym = String(
+				ticker ||
+					(this.deployOpen() ? this.topDeployCandidate() : this.missionControl().best_monitor) ||
+					"",
+			)
+				.trim()
+				.toUpperCase()
+			if (!sym) return
+			this.decisionReadiness.loading = true
+			this.decisionReadiness.err = ""
+			try {
+				const r = await this.ccFetch(
+					"/api/v7/decision-readiness/checklist?ticker=" + encodeURIComponent(sym),
+				)
+				if (!r || !r.ok) {
+					this.decisionReadiness.err = "Decision readiness unavailable"
+					return
+				}
+				this.decisionReadiness.data = await r.json()
+			} catch (e) {
+				this.decisionReadiness.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.decisionReadiness.loading = false
+			}
+		},
+		decisionReadinessLine() {
+			const d = this.decisionReadiness.data
+			if (!d) return ""
+			if (d.complete) return `${d.ticker} · checklist complete · display only (no auto-deploy)`
+			const filled = d.filled_count != null ? d.filled_count : 0
+			const req = d.required_count != null ? d.required_count : 7
+			return `${d.ticker || "—"} · ${filled}/${req} fields · complete before deploy intent`
+		},
+		async fetchResearchQueue() {
+			this.researchQueue.loading = true
+			this.researchQueue.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/research-queue")
+				if (!r || !r.ok) {
+					this.researchQueue.err = "Research queue unavailable"
+					return
+				}
+				this.researchQueue.data = await r.json()
+			} catch (e) {
+				this.researchQueue.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.researchQueue.loading = false
+			}
+		},
+		researchQueueLine() {
+			const d = this.researchQueue.data
+			if (!d) return "Research queue · loading…"
+			const n = (d.items || []).length
+			const mins = d.total_budget_minutes != null ? d.total_budget_minutes : 0
+			return `${n} slot(s) · ${mins}m allocated · CIIO says Enough when expired`
+		},
+		topDeployCandidate() {
+			const mc = this.missionControl()
+			const top = (this.today7.top_ranked || [])[0]
+			const sym =
+				(this.deployOpen() ? mc.best_trade : mc.best_monitor) ||
+				(top && top.ticker) ||
+				""
+			return String(sym || "")
+				.trim()
+				.toUpperCase()
+		},
+		preDecisionGateVisible() {
+			if (!this.deployOpen()) return false
+			return !!this.topDeployCandidate()
+		},
+		async fetchPreDecisionGate() {
+			if (!this.preDecisionGateVisible()) {
+				this.preDecisionGate.data = null
+				return
+			}
+			const sym = this.topDeployCandidate()
+			this.preDecisionGate.loading = true
+			this.preDecisionGate.err = ""
+			try {
+				const r = await this.ccFetch(
+					"/api/v7/pre-decision/gate?ticker=" + encodeURIComponent(sym),
+				)
+				if (!r || !r.ok) {
+					this.preDecisionGate.err = "Pre-decision gate unavailable"
+					return
+				}
+				this.preDecisionGate.data = await r.json()
+				if (typeof CCHelpers !== "undefined" && CCHelpers.loadPreDecisionAck) {
+					this.preDecisionGate.acknowledged = CCHelpers.loadPreDecisionAck(sym)
+				}
+			} catch (e) {
+				this.preDecisionGate.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.preDecisionGate.loading = false
+			}
+		},
+		togglePreDecisionAck() {
+			const sym = this.topDeployCandidate()
+			if (!sym) return
+			this.preDecisionGate.acknowledged = !this.preDecisionGate.acknowledged
+			if (typeof CCHelpers !== "undefined" && CCHelpers.savePreDecisionAck) {
+				CCHelpers.savePreDecisionAck(sym, this.preDecisionGate.acknowledged)
+			}
+		},
+		async postJournalStubIfNeeded() {
+			const g = this.preDecisionGate.data
+			const j = g && g.journal
+			if (!j || j.complete) return
+			const sym = this.topDeployCandidate()
+			const body = {
+				ticker: sym,
+				decision: "DEPLOY_INTENT",
+				decision_id: (g && g.decision_id) || j.decision_id || undefined,
+				thesis: "Stub — record thesis before deploy.",
+				alternatives_considered: ["cash", "monitor_only"],
+				rejected_alternative: "Incomplete — auto-stub from pre-decision gate.",
+				expected_downside: "TBD",
+				expected_upside: "TBD",
+				why_now: "Pre-decision gate stub POST.",
+				what_changes_mind: "Complete Decision Journal entry.",
+				source: "pre_decision_gate",
+			}
+			try {
+				await this.ccFetch("/api/v7/decision-journal/entry", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(body),
+				})
+				await this.fetchDeployIntentJournal(sym, body.decision_id)
+				await this.fetchPreDecisionGate()
+			} catch (e) {
+				console.warn("postJournalStubIfNeeded", e)
+			}
+		},
+		preDecisionRedTeamLines() {
+			const ch = (this.preDecisionGate.data && this.preDecisionGate.data.red_team) || {}
+			const c = ch.challenges || {}
+			return [
+				{ key: "why_fails", label: "Why fails", value: c.why_this_fails },
+				{ key: "invalidate", label: "Would invalidate", value: c.would_invalidate },
+				{ key: "change_mind", label: "Change mind", value: c.would_change_mind },
+			].filter((x) => x.value)
+		},
+		preDecisionOutsideViewLine() {
+			const ov = (this.preDecisionGate.data && this.preDecisionGate.data.outside_view) || {}
+			const br = ov.base_rate || {}
+			return `${br.class || ov.setup_type || "setup"} · sample n=${br.sample_n != null ? br.sample_n : 0} · ${br.note || "stub base rate"}`
+		},
+		_syncAttentionBudgetUsageFromStorage() {
+			if (typeof CCHelpers === "undefined" || !CCHelpers.loadAttentionBudgetUsage) return
+			const u = CCHelpers.loadAttentionBudgetUsage()
+			this.attentionBudget.usage = u.categories || { research: 0, portfolio: 0, market: 0 }
+		},
+		tickAttentionBudget() {
+			if (typeof CCHelpers === "undefined") return
+			const now = Date.now()
+			if (!this._attentionBudgetLastTick) {
+				this._attentionBudgetLastTick = now
+				this._attentionBudgetTab = this.tab
+				this._syncAttentionBudgetUsageFromStorage()
+				return
+			}
+			const elapsedMin = Math.floor((now - this._attentionBudgetLastTick) / 60000)
+			if (elapsedMin < 1) return
+			const catFn = CCHelpers.attentionBudgetCategoryForTab
+			const cat = catFn ? catFn(this._attentionBudgetTab || this.tab) : "market"
+			const usage = CCHelpers.loadAttentionBudgetUsage
+				? CCHelpers.loadAttentionBudgetUsage()
+				: { date: new Date().toISOString().slice(0, 10), categories: { research: 0, portfolio: 0, market: 0 } }
+			usage.categories = usage.categories || { research: 0, portfolio: 0, market: 0 }
+			usage.categories[cat] = (usage.categories[cat] || 0) + elapsedMin
+			if (CCHelpers.saveAttentionBudgetUsage) CCHelpers.saveAttentionBudgetUsage(usage)
+			this.attentionBudget.usage = { ...usage.categories }
+			this._attentionBudgetLastTick = now
+			this._attentionBudgetTab = this.tab
+			this.fetchAttentionBudget()
+		},
+		onAttentionBudgetTabChange() {
+			this.tickAttentionBudget()
+			this._attentionBudgetLastTick = Date.now()
+			this._attentionBudgetTab = this.tab
+		},
+		async fetchAttentionBudget() {
+			this._syncAttentionBudgetUsageFromStorage()
+			const u = this.attentionBudget.usage || {}
+			this.attentionBudget.loading = true
+			this.attentionBudget.err = ""
+			try {
+				const q =
+					"?research=" +
+					encodeURIComponent(u.research || 0) +
+					"&portfolio=" +
+					encodeURIComponent(u.portfolio || 0) +
+					"&market=" +
+					encodeURIComponent(u.market || 0)
+				const r = await this.ccFetch("/api/v7/attention-budget/summary" + q)
+				if (!r || !r.ok) {
+					this.attentionBudget.err = "Attention budget unavailable"
+					return
+				}
+				this.attentionBudget.data = await r.json()
+			} catch (e) {
+				this.attentionBudget.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.attentionBudget.loading = false
+			}
+		},
+		attentionBudgetLine() {
+			const d = this.attentionBudget.data
+			if (!d) return "Attention · loading…"
+			if (d.any_exceeded && d.ciio_message) return d.ciio_message
+			const rem = d.total_remaining_minutes != null ? d.total_remaining_minutes : "—"
+			return `Attention ${d.total_used_minutes || 0}/${d.total_budget_minutes || 105}m · ${rem}m left`
+		},
+		attentionBudgetExceeded() {
+			const d = this.attentionBudget.data
+			return !!(d && d.any_exceeded)
+		},
+		async fetchPriorLessons(ticker) {
+			const sym = String(ticker || this.topDeployCandidate() || this.dos.ticker || "")
+				.trim()
+				.toUpperCase()
+			if (!sym) return
+			if (this.priorLessons.ticker === sym && this.priorLessons.data) return
+			this.priorLessons.loading = true
+			this.priorLessons.err = ""
+			this.priorLessons.ticker = sym
+			try {
+				const r = await this.ccFetch(
+					"/api/v7/knowledge/lessons?ticker=" + encodeURIComponent(sym),
+				)
+				if (!r || !r.ok) {
+					this.priorLessons.err = "Prior lessons unavailable"
+					return
+				}
+				this.priorLessons.data = await r.json()
+			} catch (e) {
+				this.priorLessons.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.priorLessons.loading = false
+			}
+		},
+		priorLessonsLine() {
+			const d = this.priorLessons.data
+			if (!d) return ""
+			if (!(d.lessons || []).length) return `${d.ticker || "—"} · no prior lessons`
+			const first = d.lessons[0]
+			return `${d.ticker} · ${d.lesson_count} lesson(s) · ${String(first.lesson || "").slice(0, 72)}`
+		},
+		async fetchBeliefDeployFlags() {
+			if (!this.deployOpen()) {
+				this.beliefDeployFlags.data = null
+				return
+			}
+			this.beliefDeployFlags.loading = true
+			this.beliefDeployFlags.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/belief-review/summary")
+				if (!r || !r.ok) {
+					this.beliefDeployFlags.err = "Belief deploy flags unavailable"
+					return
+				}
+				const d = await r.json()
+				this.beliefDeployFlags.data = d.deploy_flags || null
+			} catch (e) {
+				this.beliefDeployFlags.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.beliefDeployFlags.loading = false
+			}
+		},
+		beliefDeployStripVisible() {
+			return this.deployOpen() && !!(this.beliefDeployFlags.data && this.beliefDeployFlags.data.active)
+		},
+		beliefDeployStripLine() {
+			const d = this.beliefDeployFlags.data
+			if (!d || !d.active) return ""
+			const tickers = (d.incomplete_tickers || []).slice(0, 4).join(", ")
+			return (d.headline || "Belief incomplete") + (tickers ? " · " + tickers : "")
+		},
 		degradedDecisionAuthorityLine() {
 			const dc = this.decisionAuthority().degraded_copy || {}
 			return dc.decision_authority_line || "Decision authority degraded"
@@ -6491,7 +8149,7 @@ function cc() {
 		},
 		dashboardBestActionLabel(kind) {
 			const deploy =
-				!!this.today7?.todays_decision?.can_deploy_today &&
+				this.deployOpen() &&
 				!this.isWaitDay() &&
 				!this.todayDeployAuthoritySuspended() &&
 				!this.pageAuthorityIsDegraded()
@@ -6502,11 +8160,7 @@ function cc() {
 			return deploy ? "TRADE" : this._uiText("Monitor")
 		},
 		dashboardPlaybookCtaLabel() {
-			if (
-				this.isWaitDay() ||
-				!this.today7?.todays_decision?.can_deploy_today ||
-				this.todayDeployAuthoritySuspended()
-			) {
+			if (this.isWaitDay() || !this.deployOpen() || this.todayDeployAuthoritySuspended()) {
 				return "去 Playbook 複核 monitor ranking"
 			}
 			return "去 Playbook 打開 deploy-qualified board"
@@ -6684,6 +8338,7 @@ function cc() {
 		},
 		cardShowsDeployLevels(opp) {
 			if (this.cardIsFallbackRow(opp) || this.pageAuthorityIsDegraded() || this.playbookBoardWait()) return false
+			if (this.priceProvenanceLine(opp).stale) return false
 			const g = String(this.cardExecutionGrade(opp) || "").toUpperCase()
 			return ["TRADE", "BUY", "BUY_ON_DIP", "STRONG_TRADE"].includes(g)
 		},
@@ -6691,6 +8346,7 @@ function cc() {
 			if (!opp || !opp.entry_price || !opp.stop_price || opp.entry_price <= opp.stop_price) return false
 			if (this.pageAuthorityIsDegraded() || this.todayUsesBriefFallback() || this.cardIsFallbackRow(opp))
 				return false
+			if (this.priceProvenanceLine(opp).stale) return false
 			const g = String(this.cardExecutionGrade(opp) || "").toUpperCase()
 			return ["TRADE", "BUY", "BUY_ON_DIP", "STRONG_TRADE"].includes(g)
 		},
@@ -6722,7 +8378,7 @@ function cc() {
 				this.isWaitDay() ||
 				this.playbookBoardWait() ||
 				this.cardIsFallbackRow(opp) ||
-				!this.today7.todays_decision?.can_deploy_today
+				!this.deployOpen()
 			)
 				return "只可監察 · monitor only — 未開 deploy authority"
 			return ""
@@ -6892,6 +8548,12 @@ function cc() {
 			const act = String(this.effectiveCardAction(r) || "").toUpperCase()
 			return !!(r.execution_ready && ["TRADE", "BUY", "BUY_ON_DIP"].includes(act))
 		},
+		topRankedHeroVisible() {
+			if (this.isWaitDay() || this.playbookBoardWait()) return false
+			const r = (this.today7.top_ranked || [])[0]
+			if (!r) return false
+			return !!this.topRankedHeroLabel()
+		},
 		topRankedHeroLabel() {
 			const td = this.today7.todays_decision
 			if (
@@ -6915,8 +8577,7 @@ function cc() {
 			return "#1 監察候選 · monitor candidate"
 		},
 		topRankedSectionTitle() {
-			const ss = this.systemState()
-			const deployOpen = !!(ss && ss.deploy_open) || !!this.today7.todays_decision?.can_deploy_today
+			const deployOpen = this.deployOpen()
 			if (deployOpen && !this.isWaitDay() && !this.pageAuthorityIsDegraded())
 				return this._uiText("🏆 Deploy Opportunities · 可部署機會")
 			return this._uiText("🔎 今日最佳監察候選 · Best Monitor Candidates")
@@ -6966,7 +8627,7 @@ function cc() {
 		cardAuthorityLabel(opp) {
 			if (!opp) return "—"
 			const ps = String(opp.pilot_state || "").toUpperCase()
-			if (opp.execution_ready && !this.isWaitDay() && this.today7.todays_decision?.can_deploy_today)
+			if (opp.execution_ready && !this.isWaitDay() && this.deployOpen())
 				return this._uiText("DEPLOY · Decision Engine")
 			if (ps === "BLOCKED") return this._uiText("BLOCKED · 封鎖")
 			return this._uiText("MONITOR ONLY · 只可監察")
@@ -7030,10 +8691,14 @@ function cc() {
 			const opts = {
 				tradeability: this.canonicalTradeability() || ss.tradeability || "WAIT",
 				verdict: v,
+				best_action: this.today7.best_action,
+				todays_decision: td,
+				near_miss: this.today7.near_miss || [],
+				sleeve_summary: this.today7.sleeve_summary,
 				market: this.canonicalRegimeLine() || this.today7.regime?.regime || "—",
 				broker: ibkr || "OFFLINE",
 				engine: this.cc_status.breaker ? "BLOCKED" : this.ops.running ? "ON" : "OFF",
-				deployOpen: !!(ss.deploy_open || td.can_deploy_today),
+				deployOpen: this.deployOpen(),
 				systemBlockers: this.todayMissionSystemBlockersList(),
 				repair: ss.repair_priority || this.globalSystemRepairLine() || "",
 				reviewMinutes: 20,
@@ -7057,6 +8722,20 @@ function cc() {
 				deploy_label: opts.deployOpen ? "OPEN" : "BLOCKED",
 				deploy_open: opts.deployOpen,
 				best_monitor: v.best_monitor?.ticker || "—",
+				best_trade:
+					opts.best_action?.best_trade_now?.ticker ||
+					td.best_trade?.ticker ||
+					v.best_monitor?.ticker ||
+					"None",
+				near_miss_top:
+					opts.best_action?.best_watch_upgrade?.ticker ||
+					td.best_watch?.ticker ||
+					(opts.near_miss || [])[0]?.ticker ||
+					"—",
+				sleeve_gate_status:
+					opts.sleeve_summary?.active_today?.gate_status ||
+					opts.sleeve_summary?.fund_manager?.gate_status ||
+					"—",
 				why_not_deploy: [],
 				next_actions: [],
 				review_in_minutes: 20,
@@ -7064,6 +8743,58 @@ function cc() {
 		},
 		missionControl() {
 			return this.missionBriefCard()
+		},
+		missionControlLoading() {
+			if (this.tab !== "today") return false
+			if (this.today7.opportunity_verdict || this.today7.regime) return false
+			return this.healthMode === "loading" || !this.live
+		},
+		tradeabilityBadgeClass(tradeability) {
+			const t = tradeability != null ? tradeability : this.canonicalTradeability()
+			if (typeof CCHelpers !== "undefined" && CCHelpers.tradeabilityBadgeClass)
+				return CCHelpers.tradeabilityBadgeClass(t)
+			return "pw"
+		},
+		fourQuestionsBlock() {
+			const mc = this.missionBriefCard()
+			const opts = {
+				verdict: this.today7.opportunity_verdict || {},
+				systemState: this.systemState() || {},
+				bestAction: this.today7.best_action || {},
+				missionCard: mc,
+				market: mc.market,
+				broker: mc.broker,
+				engine: mc.engine,
+				deployOpen: this.deployOpen(),
+				scoreReconciliation: this.dashboardScoreReconciliation(),
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildFourQuestionsBlock)
+				return CCHelpers.buildFourQuestionsBlock(opts)
+			return {
+				know: "—",
+				believe: "—",
+				doubt: "—",
+				therefore: "—",
+				labels: {},
+			}
+		},
+		workflowStage() {
+			const opts = {
+				tab: this.tab,
+				deployOpen: this.deployOpen(),
+				tradeability: this.canonicalTradeability(),
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.resolveWorkflowStage)
+				return CCHelpers.resolveWorkflowStage(opts)
+			return { id: "mission", label: "Mission · 任務" }
+		},
+		workflowStageHint() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.workflowStageHint)
+				return CCHelpers.workflowStageHint(this.workflowStage(), {
+					tab: this.tab,
+					deployOpen: this.deployOpen(),
+				})
+			return "You are in: Mission · 任務"
 		},
 		isResearchSurfaceTab(tab) {
 			const t = tab != null ? tab : this.tab
@@ -7082,6 +8813,7 @@ function cc() {
 			return "Page Gate > Card Rank"
 		},
 		pageOperatorCompactVisible() {
+			if (this.tab === "today" && this.isWaitDay() && !this.deployOpen()) return false
 			return this.tab !== "guide" && this.tab !== "settings" && !this.globalSystemStripVisible()
 		},
 		guideSectionLabel(id) {
@@ -7106,7 +8838,7 @@ function cc() {
 			const td = this.today7.todays_decision
 			if (this.pageAuthorityIsDegraded())
 				return "Now · " + (this.canonicalTradeability() || "WAIT") + " · 只可 Monitor"
-			if (td?.can_deploy_today) return "Now · " + (this.canonicalTradeability() || "—") + " · 可部署"
+			if (this.deployOpen()) return "Now · " + (this.canonicalTradeability() || "—") + " · 可部署"
 			return "Now · " + (this.canonicalTradeability() || "WAIT") + " · 只作排序複核"
 		},
 		dashboardOperatorBlockerLine() {
@@ -7116,7 +8848,7 @@ function cc() {
 			if (this.pageAuthorityIsDegraded())
 				return "下一步 · 先修 broker / runtime / board blocker，再回 Dashboard / Playbook 複核。"
 			const td = this.today7.todays_decision
-			if (td?.can_deploy_today) return "下一步 · 只檢查 deploy-qualified setup，唔好讓 card rank 越過 page gate。"
+			if (this.deployOpen()) return "下一步 · 只檢查 deploy-qualified setup，唔好讓 card rank 越過 page gate。"
 			return "下一步 · 先睇 top monitor candidates，再去 Playbook 做 ranking review。"
 		},
 		playbookOperatorNowLine() {
@@ -8192,7 +9924,7 @@ function cc() {
 			const tb = String(this.canonicalTradeability() || td?.regime?.tradeability || "").toUpperCase()
 			if (tb === "NO_TRADE" || td?.day_state === "NO_TRADE_DAY") return true
 			if (td?.deploy_posture === "WAIT" || tb === "WAIT") return true
-			return (td?.execution_ready_count || 0) < 1 && !td?.can_deploy_today
+			return (td?.execution_ready_count || 0) < 1 && !this.deployOpen()
 		},
 		waitDayHasActionables() {
 			const td = this.today7.todays_decision
@@ -8458,8 +10190,11 @@ function cc() {
 		},
 		dashboardScoreReconciliationDetail() {
 			const sr = this.dashboardScoreReconciliation()
+			if (typeof CCHelpers !== "undefined" && CCHelpers.scoreReconciliationDetail)
+				return CCHelpers.scoreReconciliationDetail(sr, (this.today7.top_ranked || []).slice(0, 8))
 			if (!sr) return this.playbookScoreReconciliationDetail()
 			const bits = []
+			if ((sr.disagree_reasons || []).length) bits.push((sr.disagree_reasons || []).slice(0, 3).join(" · "))
 			if ((sr.divergent_tickers || []).length) bits.push("Divergent: " + (sr.divergent_tickers || []).join(", "))
 			if ((sr.contradictions || []).length) bits.push((sr.contradictions || []).slice(0, 2).join(" · "))
 			return bits.join(" — ") || "Council fit vs scanner rank disagree on top names."
@@ -8471,14 +10206,18 @@ function cc() {
 		playbookScoreReconciliationDetail() {
 			const rows = (this.rankedOpps.rows || []).slice(0, 12).filter((r) => this.rowScoreFamiliesDiverge(r))
 			return rows.length
-				? "Divergent: " +
-						rows
-							.map((r) => r.ticker)
-							.filter(Boolean)
-							.join(", ")
+				? rows
+						.map((r) => {
+							const rs = (r.score_families && r.score_families.reasons) || []
+							return (r.ticker || "?") + (rs[0] ? " · " + rs[0] : "")
+						})
+						.filter(Boolean)
+						.join(" | ")
 				: ""
 		},
 		rowScoreFamiliesDiverge(r) {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.scoreFamiliesDisagree)
+				return CCHelpers.scoreFamiliesDisagree(r)
 			if (!r) return false
 			const eq = r.evidence_quality || {}
 			const council = Number(r.score || eq.validated_score || 0)
@@ -8702,8 +10441,9 @@ function cc() {
 			const should_trade = regime.should_trade !== false
 			let deploy = "WAIT"
 			const td = d.todays_decision
+			const deployOpen = !!(d.decision_board?.deploy_open ?? d.system_state?.deploy_open ?? false)
 			if (tradeability === "NO_TRADE" || td?.day_state === "NO_TRADE_DAY") deploy = "REDUCE"
-			else if (td?.can_deploy_today) deploy = "DEPLOY"
+			else if (deployOpen) deploy = "DEPLOY"
 			else if (td?.day_state === "PILOT_WATCH_DAY") deploy = "WATCH"
 			else if (!should_trade) deploy = "REDUCE"
 			const best_idea = top5[0]
@@ -8808,11 +10548,11 @@ function cc() {
 		},
 		async fetchDecisionBoardLight() {
 			try {
-				const r = await fetch("/api/v7/decision/board", {
-					headers: { "X-API-Key": window._apiKey || "dev-secret-local" },
-					signal: AbortSignal.timeout(8000),
+				const r = await this.ccFetch("/api/v7/decision/board", {
+					timeoutMs: 8000,
+					init: { signal: AbortSignal.timeout(8000) },
 				})
-				if (!r.ok) return
+				if (!r || !r.ok) return
 				const board = await r.json()
 				const prevHash = this.ccHeader?.decision_board_hash || this.today7?.decision_board_hash
 				if (prevHash && board.decision_board_hash === prevHash) return
@@ -8828,11 +10568,11 @@ function cc() {
 				if (this.tab) parts.push("tab=" + encodeURIComponent(this.tab))
 				if (light) parts.push("light=1")
 				const tabQ = parts.length ? "?" + parts.join("&") : ""
-				const r = await fetch("/api/ops/cc-header" + tabQ, {
-					headers: { "X-API-Key": window._apiKey || "dev-secret-local" },
-					signal: AbortSignal.timeout(light ? 8000 : 20000),
+				const r = await this.ccFetch("/api/ops/cc-header" + tabQ, {
+					timeoutMs: light ? 8000 : 20000,
+					init: { signal: AbortSignal.timeout(light ? 8000 : 20000) },
 				})
-				if (r.ok) {
+				if (r && r.ok) {
 					const h = await r.json()
 					const eng = h.engine || {}
 					this.ccHeader = {
@@ -8928,6 +10668,11 @@ function cc() {
 				minute: "2-digit",
 				second: "2-digit",
 			})
+			this._attentionBudgetSec = (this._attentionBudgetSec || 0) + 1
+			if (this._attentionBudgetSec >= 60) {
+				this._attentionBudgetSec = 0
+				this.tickAttentionBudget()
+			}
 		},
 		toggleStar(ticker) {
 			this.ccStarred[ticker] = !this.ccStarred[ticker]
@@ -9322,7 +11067,9 @@ function cc() {
 			}
 		},
 		switchTab(t) {
+			this.onAttentionBudgetTabChange()
 			this.tab = ccNormalizeTab(t, "today")
+			this.logSurfaceUsage("tab_" + this.tab, "open")
 			this.ccHeader.header_summary = null
 			this.fetchCcStatus()
 			const tSafe = this.tab
@@ -9352,6 +11099,7 @@ function cc() {
 			if (tSafe === "dossier") {
 				if (this.dos.ticker) {
 					this.fetchDossier()
+					this.fetchPriorLessons(this.dos.ticker)
 				} else {
 					this.dos.status = "idle_no_query"
 					this.dos.error = ""
@@ -9392,13 +11140,40 @@ function cc() {
 			if (tSafe === "command") {
 				this.fetchCommandBoard()
 			}
+			if (tSafe === "today") {
+				this.fetchFirmCadence()
+				this.fetchMarginalRoc()
+				this.fetchDailyIc()
+				this.fetchDecisionReadiness()
+				this.fetchDeployIntentJournal()
+				this.fetchPreDecisionGate()
+				this.fetchAttentionBudget()
+				this.fetchBeliefDeployFlags()
+				if (this.topDeployCandidate()) this.fetchPriorLessons(this.topDeployCandidate())
+			}
+			if (tSafe === "signals") {
+				this.fetchDailyIc()
+			}
+			if (tSafe === "portfolio") {
+				this.fetchMarginalRoc()
+				this.fetchDailyIc()
+			}
 			if (tSafe === "ops") {
 				this.fetchCcStatus()
 				this.fetchOpsRuntime()
 				this.fetchOpsConsole()
 				this.fetchChangelog()
-				this.fetchErrorLog()
+				this.refreshIdentifiedErrors()
 				this.fetchNotifyLog()
+				this.fetchBeliefReview()
+				this.fetchFirmCadence()
+				this.fetchDecisionJournal()
+				this.fetchOverrideJournal()
+				this.fetchCalibrationReport()
+				this.fetchWeeklyIcDigest()
+				this.fetchUsageLogSummary()
+				this.fetchResearchQueue()
+				this.fetchAttentionBudget()
 			}
 			if (tSafe === "ibkr") {
 				this.ibkrRefreshAll()
@@ -9741,7 +11516,8 @@ function cc() {
 		},
 		pfDemoteResearch() {
 			const cre = this.pfDecision && this.pfDecision.critical_risk_event
-			return !!(cre && cre.active)
+			if (cre && cre.active) return true
+			return this.hideMockSurfacesOnDeploy()
 		},
 		pfPosRisk(pos) {
 			const px = pos.current_price || pos.entry_price || pos.avg_cost || 0
@@ -10660,6 +12436,7 @@ function cc() {
 				}
 			} finally {
 				this.errorLog.loading = false
+				this.rebuildIdentifiedErrors()
 			}
 		},
 
@@ -10900,16 +12677,33 @@ function cc() {
 				this.sig.no_trade_reason = "⚠ Failed to connect to the scanner. Check if the server is running."
 			}
 		},
+		portfolioSsotFallbackActive() {
+			return !!(this.pf && this.pf.ssotFallback)
+		},
+		portfolioSsotBannerLine() {
+			return "Browser cache only — not synced to server · 僅本機快取，未同步伺服器"
+		},
 		async fetchPortfolio() {
 			this.pf.loading = true
+			this.pf.ssotFallback = false
 			try {
+				try {
+					const ssotR = await this.ccFetch("/api/v7/portfolio", { retries: 2, backoff: 300 })
+					if (ssotR && ssotR.ok) {
+						const ssot = await ssotR.json()
+						this.pf.ssot = ssot.ssot || "server"
+						this.pf.source = ssot.source || "server"
+					}
+				} catch (e) {
+					console.warn("portfolio SSOT skipped:", e)
+				}
 				const r = await fetch("/api/portfolio/monitor")
 				if (!r.ok) throw 0
 				const d = await r.json()
-				this.pf.positions = this.mergeLocalPortfolioHoldings(d.positions || [])
+				this.pf.positions = d.positions || []
 				this.pf.alerts = d.alerts || []
 				this.pf.summary = d.summary || null
-				this.pf.source = "manual"
+				if (this.pf.source !== "ibkr") this.pf.source = d.summary?.source || this.pf.source || "server"
 				// ── IBKR auto-sync: when broker is connected, broker positions become canonical ──
 				// Manual entries are kept as overlay (e.g. for stop/target metadata) but counts/equity reflect IBKR
 				try {
@@ -10996,7 +12790,9 @@ function cc() {
 				const local = this.hydratePortfolioFromLocal()
 				if (local && local.holdings && local.holdings.length) {
 					this.pf.positions = local.holdings
-					this.pf.source = "manual"
+					this.pf.source = "local_cache"
+					this.pf.ssot = "local_cache"
+					this.pf.ssotFallback = true
 					const totalVal = local.holdings.reduce(
 						(s, p) => s + (p.market_value || p.entry_price * p.shares || 0),
 						0,
@@ -11011,7 +12807,12 @@ function cc() {
 						total_cost: Math.round(totalCost * 100) / 100,
 						total_pnl: Math.round((totalVal - totalCost) * 100) / 100,
 						total_pnl_pct: totalCost ? Math.round((totalVal / totalCost - 1) * 10000) / 100 : 0,
+						source: "local_cache",
 					}
+				} else {
+					this.pf.positions = []
+					this.pf.source = "unavailable"
+					this.pf.summary = this.pf.summary || null
 				}
 			} finally {
 				this.pf.loading = false
@@ -13337,7 +15138,109 @@ function cc() {
 				this.marketStrip.loading = false
 			}
 		},
+		initReplayFromStorage() {
+			try {
+				const stored = localStorage.getItem("cc_replay_as_of")
+				if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) {
+					this.replay.as_of = stored
+					this.replay.active = true
+					this.replay.banner =
+						"Historical replay as of " + stored + " — LIVE AUTHORITY: NONE"
+				}
+			} catch (e) {}
+		},
+		replayDashboardUrl(refresh) {
+			let u = "/api/v7/replay/dashboard?as_of=" + encodeURIComponent(this.replay.as_of || "")
+			if (this.replay.session_id) u += "&session=" + encodeURIComponent(this.replay.session_id)
+			if (refresh) u += "&refresh=true"
+			return u
+		},
+		async enterReplayMode(asOf) {
+			const d = String(asOf || "").trim().slice(0, 10)
+			if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+				this.replay.error = "Invalid replay date — use YYYY-MM-DD"
+				return
+			}
+			this.replay.error = ""
+			this.replay.as_of = d
+			this.replay.active = true
+			this.replay.loading = true
+			try {
+				localStorage.setItem("cc_replay_as_of", d)
+			} catch (e) {}
+			await this.refreshReplaySurfaces()
+		},
+		exitReplayMode() {
+			this.replay.active = false
+			this.replay.as_of = ""
+			this.replay.session_id = ""
+			this.replay.error = ""
+			this.replay.banner = ""
+			this.replay.loading = false
+			try {
+				localStorage.removeItem("cc_replay_as_of")
+			} catch (e) {}
+			this.trust = { mode: "LIVE", source: "cc-header" }
+			this.fetchToday7()
+			this.fetchRanked({ refresh: true })
+			this.fetchDecisionBoardLight()
+		},
+		async refreshReplaySurfaces(refresh) {
+			if (!this.replay.active || !this.replay.as_of) return
+			this.replay.loading = true
+			this.replay.error = ""
+			try {
+				const r = await this.ccFetch(this.replayDashboardUrl(refresh), {
+					retries: 1,
+					backoff: 400,
+					timeoutMs: 45000,
+				})
+				if (!r || !r.ok) throw new Error("HTTP " + (r ? r.status : "fail"))
+				const d = await r.json()
+				this.replay.session_id = d.session_id || this.replay.session_id
+				this.replay.banner =
+					d.banner ||
+					"Historical replay as of " + d.as_of + " — LIVE AUTHORITY: NONE"
+				this.applyReplayDashboard(d)
+			} catch (e) {
+				console.warn("refreshReplaySurfaces failed", e)
+				this.replay.error = "Replay fetch failed — " + String(e.message || e)
+			} finally {
+				this.replay.loading = false
+			}
+		},
+		applyReplayDashboard(d) {
+			if (!d || typeof d !== "object") return
+			this.trust = d.trust || { mode: "REPLAY", source: "historical_decision_replay", as_of: d.as_of }
+			this.today7.regime = d.market_regime || null
+			this.today7.decision_authority = d.decision_authority || null
+			this.today7.top_ranked = d.top_5 || []
+			this.today7.todays_decision = d.todays_decision || null
+			this.today7.filter_funnel = d.filter_funnel || null
+			this.today7.surface_authority = d.surface_authority || null
+			this.today7.historical_opportunities = d.historical_opportunities || null
+			this.today7.date = d.date || d.as_of
+			this.today7.replay_mode = true
+			this.ccHeader.page_authority_mode = "replay"
+			this.ccHeader.decision_authority = d.decision_authority || null
+			if (d.opportunities && d.opportunities.length) {
+				this.applyRankedPayload(
+					{
+						opportunities: d.opportunities,
+						near_miss: [],
+						decision_authority: d.decision_authority,
+						surface_authority: d.surface_authority,
+						replay_mode: true,
+						as_of: d.as_of,
+					},
+					{ fromReplay: true },
+				)
+			}
+		},
 		async fetchToday7() {
+			if (this.replay.active && this.replay.as_of) {
+				return this.refreshReplaySurfaces()
+			}
 			try {
 				const prevHash = this.today7?.decision_board_hash || ""
 				const r = await this.ccFetch("/api/v7/today", { retries: 1, backoff: 400, timeoutMs: 12000 })
@@ -13498,6 +15401,7 @@ function cc() {
 				}
 				if (!this.playbookBoardHasContent()) this.fetchWarmupBriefBoard()
 			}
+			this.rebuildIdentifiedErrors()
 		},
 		hydrateToday7FromCache() {
 			try {
@@ -13626,6 +15530,10 @@ function cc() {
 			}
 		},
 		async fetchRanked(opts = {}) {
+			if (this.replay.active && this.replay.as_of) {
+				if (!(this.rankedOpps.rows || []).length) await this.refreshReplaySurfaces()
+				return
+			}
 			const hadRows = (this.rankedOpps.rows || []).length > 0
 			if (!hadRows) this.hydrateRankedFromCache()
 			const needsBoard = !(this.rankedOpps.rows || []).length
@@ -14981,6 +16889,7 @@ function cc() {
 				this.opsConsole.error = this.surfaceFetchErrorLine(e.message || "ops console failed", "ops")
 			} finally {
 				this.opsConsole.loading = false
+				this.rebuildIdentifiedErrors()
 			}
 		},
 

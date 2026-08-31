@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from src.services.cc_state import attach_system_state
 from src.services.decision_board_service import build_decision_board
@@ -39,8 +38,7 @@ def _mock_request() -> MagicMock:
     return req
 
 
-@pytest.mark.anyio
-async def test_refresh_today_authority_closes_deploy_on_breaker():
+def test_refresh_today_authority_closes_deploy_on_breaker():
     from src.api.routers import decision as decision_router
 
     payload = _deploy_open_payload()
@@ -64,8 +62,8 @@ async def test_refresh_today_authority_closes_deploy_on_breaker():
             return_value=ibkr,
         ),
     ):
-        refreshed = await decision_router._refresh_today_authority(
-            _mock_request(), payload
+        refreshed = asyncio.run(
+            decision_router._refresh_today_authority(_mock_request(), payload)
         )
 
     assert refreshed["decision_board"]["deploy_open"] is False
@@ -73,8 +71,7 @@ async def test_refresh_today_authority_closes_deploy_on_breaker():
     assert refreshed["decision_authority"]["gates"]["exec_blocked"] is True
 
 
-@pytest.mark.anyio
-async def test_refresh_today_authority_closes_deploy_on_regime_wait():
+def test_refresh_today_authority_closes_deploy_on_regime_wait():
     from src.api.routers import decision as decision_router
 
     payload = _deploy_open_payload()
@@ -98,8 +95,8 @@ async def test_refresh_today_authority_closes_deploy_on_regime_wait():
             return_value=ibkr,
         ),
     ):
-        refreshed = await decision_router._refresh_today_authority(
-            _mock_request(), payload
+        refreshed = asyncio.run(
+            decision_router._refresh_today_authority(_mock_request(), payload)
         )
 
     assert refreshed["market_regime"]["tradeability"] == "WAIT"
@@ -109,8 +106,7 @@ async def test_refresh_today_authority_closes_deploy_on_regime_wait():
     assert refreshed["decision_authority"]["gates"]["regime_wait"] is True
 
 
-@pytest.mark.anyio
-async def test_board_endpoint_recomputes_not_cached():
+def test_board_endpoint_recomputes_not_cached():
     from src.api.routers import decision as decision_router
 
     payload = _deploy_open_payload()
@@ -146,8 +142,8 @@ async def test_board_endpoint_recomputes_not_cached():
         ),
     ):
         req = _mock_request()
-        first = await decision_router.decision_board(req)
-        second = await decision_router.decision_board(req)
+        first = asyncio.run(decision_router.decision_board(req))
+        second = asyncio.run(decision_router.decision_board(req))
 
     assert first["deploy_open"] is True
     assert second["deploy_open"] is False

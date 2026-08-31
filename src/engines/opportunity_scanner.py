@@ -455,15 +455,16 @@ async def run_opportunity_scanner(
 
     import yfinance as yf
 
-    from src.core.stock_universe import OPPORTUNITY_COVERAGE_UNIVERSE
+    from src.core.stock_universe import OPPORTUNITY_COVERAGE_UNIVERSE, tiered_scan_universe
     from src.scanners.us_universe import US_UNIVERSE
 
     regime_upper = regime.upper()
     engine = "bull" if regime_upper in _BULL_REGIMES else "weak"
     generated_at = datetime.now(timezone.utc).isoformat()
 
+    # Core CC X tier first, then bulk scanner universe (chunked fetch)
     universe = list(
-        dict.fromkeys(list(OPPORTUNITY_COVERAGE_UNIVERSE) + list(US_UNIVERSE))
+        dict.fromkeys(tiered_scan_universe() + list(US_UNIVERSE))
     )
     universe_size = len(universe)
 

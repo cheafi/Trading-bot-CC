@@ -49,6 +49,23 @@ Detail the steps to test your changes. This helps reviewers verify your work.
 - [ ] **Documentation Impact**: I have considered if my changes require documentation updates (see "Documentation Updates" section below).
 - [ ] **Contribution Guidelines**: I have read and agree to the [Contributor Guidelines](/CONTRIBUTING.md).
 
+### Four Questions gate (CC X / IDOS — binding)
+
+Every feature must answer at least one. If none apply convincingly → do not merge.
+
+**Author must answer:**
+
+- [ ] **Q1 — Know:** What do we know better because of this?
+- [ ] **Q3 — Doubt:** What uncertainty does it reduce?
+- [ ] **Q4 — Act:** How does it improve future capital allocation?
+- [ ] **Complexity:** What existing complexity can be removed because of it?
+
+**Proposal review (reject if none):**
+
+- [ ] Reduces uncertainty? · Improves judgment? · Improves capital allocation? · Improves future learning?
+
+Governance: [`docs/CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](docs/CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md)
+
 ### Screenshots / Videos
 
 <!--

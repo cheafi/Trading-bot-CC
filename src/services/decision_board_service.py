@@ -140,26 +140,37 @@ def _build_gate_snapshot(
 
 
 def _build_board_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Attach decision_id + attribution_root_ref to top board rows."""
+    """Attach decision_id + attribution_root_ref to all board/playbook/today rows."""
     from src.services.attribution_tree import enrich_board_row_attribution
 
-    rows = list(payload.get("top_5") or payload.get("opportunities") or [])[:12]
+    seen: set[str] = set()
     out: List[Dict[str, Any]] = []
-    for row in rows:
-        if not isinstance(row, dict) or not row.get("ticker"):
+    for key in ("top_5", "top_ranked", "opportunities", "near_miss", "near_miss_rows"):
+        rows = payload.get(key) or []
+        if not isinstance(rows, list):
             continue
-        enriched = enrich_board_row_attribution(row)
-        out.append(
-            {
-                "ticker": enriched.get("ticker"),
-                "rank": enriched.get("rank"),
-                "action": enriched.get("action"),
-                "decision_id": enriched.get("decision_id"),
-                "attribution_root_ref": enriched.get("attribution_root_ref"),
-                "artifact_id": enriched.get("artifact_id"),
-                "alpha_id": enriched.get("alpha_id"),
-            }
-        )
+        for row in rows:
+            if not isinstance(row, dict) or not row.get("ticker"):
+                continue
+            ticker = str(row["ticker"]).upper()
+            if ticker in seen:
+                continue
+            seen.add(ticker)
+            enriched = enrich_board_row_attribution(row)
+            out.append(
+                {
+                    "ticker": enriched.get("ticker"),
+                    "rank": enriched.get("rank"),
+                    "action": enriched.get("action"),
+                    "decision_id": enriched.get("decision_id"),
+                    "attribution_root_ref": enriched.get("attribution_root_ref"),
+                    "artifact_id": enriched.get("artifact_id"),
+                    "alpha_id": enriched.get("alpha_id"),
+                    "row_kind": key,
+                }
+            )
+            if len(out) >= 12:
+                return out
     return out
 
 

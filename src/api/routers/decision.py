@@ -11,7 +11,7 @@ Transforms raw signals into decision-ready endpoints:
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -42,6 +42,25 @@ _today_cache_ts: float = 0.0
 _today_lock = asyncio.Lock()
 _TODAY_CACHE_TTL = 120.0
 _TODAY_SCAN_TIMEOUT = 3.0
+_RESEARCH_CACHE_TTL = 20.0
+_RESEARCH_CACHE_MAX_KEYS = 16
+_research_cache: Dict[str, Dict[str, Any]] = {}
+
+
+def _research_cache_get(key: str) -> Optional[Dict[str, Any]]:
+    entry = _research_cache.get(key)
+    if not entry:
+        return None
+    if time.time() - entry["ts"] < _RESEARCH_CACHE_TTL:
+        return entry["data"]
+    return None
+
+
+def _research_cache_set(key: str, data: Dict[str, Any]) -> None:
+    _research_cache[key] = {"data": data, "ts": time.time()}
+    if len(_research_cache) > _RESEARCH_CACHE_MAX_KEYS:
+        oldest = min(_research_cache.items(), key=lambda item: item[1]["ts"])[0]
+        _research_cache.pop(oldest, None)
 
 
 def _stale_today_payload(reason: str) -> Dict[str, Any]:
@@ -315,10 +334,19 @@ def _build_score_reconciliation_for_today(
     rows: list,
     *,
     cross_asset: Optional[Dict[str, Any]] = None,
+    deploy_open: bool = False,
+    tradeability: str = "WAIT",
+    brief_stale: bool = False,
 ) -> Dict[str, Any]:
     from src.services.score_families import build_score_reconciliation
 
-    return build_score_reconciliation(rows, cross_asset=cross_asset)
+    return build_score_reconciliation(
+        rows,
+        cross_asset=cross_asset,
+        deploy_open=deploy_open,
+        tradeability=tradeability,
+        brief_stale=brief_stale,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1501,10 +1529,17 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
         "allocator_stance": allocator_stance,
         "ai_reason_codes": ai_reason_codes,
         "ai_intelligence": ai_intel,
-        "score_reconciliation": _build_score_reconciliation_for_today(
+        "score_reconciliation": _pipe.get("score_reconciliation")
+        or _build_score_reconciliation_for_today(
             top5,
             cross_asset=cross_asset_confirmation,
+            deploy_open=bool((decision_authority or {}).get("deploy_open")),
+            tradeability=str(
+                decision_model.get("honest_tradeability") or tradeability
+            ).upper(),
+            brief_stale=_brief_stale,
         ),
+        "score_families_summary": _pipe.get("score_families_summary"),
         "decision_authority": decision_authority,
         "trust": trust,
         "generated_at": now.isoformat() + "Z",
@@ -1779,12 +1814,18 @@ def _build_board_payload(
 @router.get("/api/v7/decision/board")
 async def decision_board(request: Request, _: bool = Depends(verify_api_key)):
     """Lightweight canonical decision board for header / cross-surface polling."""
+    t0 = time.perf_counter()
     ops = _board_ops_snapshot(request)
     today = _today_payload_for_board(request)
     if today:
         try:
             refreshed = await _refresh_today_authority(request, today)
             board = _build_board_payload(refreshed, ops=ops, source="board")
+            logger.debug(
+                "decision_board %.0fms deploy_open=%s (cached today)",
+                (time.perf_counter() - t0) * 1000,
+                board.get("deploy_open"),
+            )
             return sanitize_for_json(board)
         except Exception as exc:
             logger.debug("decision board from cache failed: %s", exc)
@@ -1795,11 +1836,21 @@ async def decision_board(request: Request, _: bool = Depends(verify_api_key)):
             try:
                 refreshed = await _refresh_today_authority(request, stale)
                 board = _build_board_payload(refreshed, ops=ops, source="board")
+                logger.debug(
+                    "decision_board %.0fms deploy_open=%s (stale today)",
+                    (time.perf_counter() - t0) * 1000,
+                    board.get("deploy_open"),
+                )
                 return sanitize_for_json(board)
             except Exception as exc:
                 logger.debug("decision board from stale today failed: %s", exc)
         warmed = _stale_today_payload("today scan in progress")
         board = _build_board_payload(warmed, ops=ops, source="board")
+        logger.debug(
+            "decision_board %.0fms deploy_open=%s (warming)",
+            (time.perf_counter() - t0) * 1000,
+            board.get("deploy_open"),
+        )
         return sanitize_for_json(board)
 
     today = await today_summary(request)
@@ -1807,6 +1858,11 @@ async def decision_board(request: Request, _: bool = Depends(verify_api_key)):
         raise HTTPException(503, today.get("error") or "today payload unavailable")
     try:
         board = _build_board_payload(today, ops=ops, source="board")
+        logger.debug(
+            "decision_board %.0fms deploy_open=%s (live today)",
+            (time.perf_counter() - t0) * 1000,
+            board.get("deploy_open"),
+        )
         return sanitize_for_json(board)
     except Exception as exc:
         logger.warning("decision board failed: %s", exc)
@@ -2406,6 +2462,649 @@ async def learning_summary():
     }
 
 
+@router.get("/api/v7/belief-review/summary")
+async def belief_review_summary():
+    """Belief Review — v14 compounding loop (research_only, no deploy authority)."""
+    cache_key = "belief_review"
+    if cached := _research_cache_get(cache_key):
+        return cached
+
+    from src.services.belief_review import build_belief_items, build_deploy_belief_flags
+    from src.services.decision_journal import maybe_stub_from_decision_id
+    from src.services.forward_outcomes import load_forward_outcomes
+
+    t0 = time.perf_counter()
+    outcomes = await asyncio.to_thread(load_forward_outcomes, limit=50)
+    items = build_belief_items(outcomes)
+    for it in items:
+        did = str(it.get("decision_id") or "").strip()
+        if did:
+            await asyncio.to_thread(
+                maybe_stub_from_decision_id,
+                decision_id=did,
+                ticker=str(it.get("ticker") or ""),
+                source="belief_review_hook",
+            )
+    due = sum(1 for it in items if str(it.get("status") or "") == "due_review")
+    reviewed = sum(1 for it in items if str(it.get("status") or "") == "reviewed")
+
+    deploy_open = False
+    holdings: list = []
+    try:
+        from src.api.routers import portfolio as portfolio_router
+        from src.services.decision_board_service import build_decision_board
+
+        board = build_decision_board()
+        deploy_open = bool((board.get("system_state") or {}).get("deploy_open"))
+        book = portfolio_router._user_portfolio
+        if not isinstance(book, dict):
+            book = portfolio_router._load_portfolio_from_disk()
+        holdings = book.get("holdings") or []
+    except Exception:
+        pass
+    deploy_flags = build_deploy_belief_flags(holdings, deploy_open=deploy_open)
+
+    payload = sanitize_for_json(
+        {
+            "status": "phase2" if items else "stub",
+            "authority": "research_only",
+            "beliefs_due": due,
+            "beliefs_reviewed_mtd": reviewed,
+            "forward_outcome_marks": len(outcomes),
+            "headline": "Belief Review · 信念複核 — thesis + kill conditions (research only)",
+            "next_review": "Monthly · first business day",
+            "items": items,
+            "editable_fields": ["thesis", "kill_condition", "conviction", "status"],
+            "deploy_flags": deploy_flags,
+            "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+        }
+    )
+    _research_cache_set(cache_key, payload)
+    logger.debug("belief_review_summary %.0fms", (time.perf_counter() - t0) * 1000)
+    return payload
+
+
+@router.patch("/api/v7/belief-review/items/{item_id}")
+async def belief_review_update_item(item_id: str, body: Dict[str, Any]):
+    """Persist belief thesis/kill edits — research_only; never grants deploy."""
+    from src.services.belief_review import update_belief_item
+
+    try:
+        item = update_belief_item(item_id, body or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return sanitize_for_json(
+        {
+            "ok": True,
+            "authority": "research_only",
+            "item": item,
+            "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+        }
+    )
+
+
+@router.get("/api/v7/capital/marginal-roc")
+async def marginal_roc_summary():
+    """Marginal ROC stub — capital ladder hint (research_only, no deploy authority)."""
+    from src.services.marginal_roc import build_marginal_roc_ladder
+
+    deploy_open = False
+    try:
+        from src.services.decision_board_service import build_decision_board
+
+        board = build_decision_board()
+        deploy_open = bool((board.get("system_state") or {}).get("deploy_open"))
+    except Exception:
+        deploy_open = False
+    payload = build_marginal_roc_ladder(deploy_open=deploy_open)
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
+def _next_weekday(from_day: date, weekday: int) -> date:
+    """Next calendar date on weekday (0=Mon … 6=Sun)."""
+    delta = (weekday - from_day.weekday()) % 7
+    if delta == 0:
+        delta = 7
+    return from_day + timedelta(days=delta)
+
+
+def _first_business_day(year: int, month: int) -> date:
+    """First Mon–Fri of month."""
+    day = date(year, month, 1)
+    while day.weekday() >= 5:
+        day += timedelta(days=1)
+    return day
+
+
+def _next_first_business_day(from_day: date) -> date:
+    if from_day.month == 12:
+        target = _first_business_day(from_day.year + 1, 1)
+    else:
+        target = _first_business_day(from_day.year, from_day.month + 1)
+    if from_day <= target:
+        return target
+    if target.month == 12:
+        return _first_business_day(target.year + 1, 1)
+    return _first_business_day(target.year, target.month + 1)
+
+
+def _next_quarterly_belief_review(from_day: date) -> date:
+    """Week after quarter-end (first weekday after Q close + 7d)."""
+    quarter_ends = (
+        date(from_day.year, 3, 31),
+        date(from_day.year, 6, 30),
+        date(from_day.year, 9, 30),
+        date(from_day.year, 12, 31),
+    )
+    for q_end in quarter_ends:
+        if q_end >= from_day:
+            candidate = q_end + timedelta(days=7)
+            while candidate.weekday() >= 5:
+                candidate += timedelta(days=1)
+            return candidate
+    candidate = date(from_day.year + 1, 3, 31) + timedelta(days=7)
+    while candidate.weekday() >= 5:
+        candidate += timedelta(days=1)
+    return candidate
+
+
+def _firm_cadence_rituals(from_day: date, *, forward_marks: int) -> list[dict[str, Any]]:
+    daily_done = forward_marks >= 0  # gate check surfaced elsewhere; stub checklist
+    rituals = [
+        {
+            "id": "daily_ciio",
+            "label": "Daily CIIO routine",
+            "label_bilingual": "Daily CIIO · 每日情報官",
+            "cadence": "daily",
+            "committee": "CIIO",
+            "next_due": from_day.isoformat(),
+            "status": "due_today" if not daily_done else "on_track",
+            "checklist": [
+                {"item": "Gate check", "done": True},
+                {"item": "Attention queue", "done": False},
+                {"item": "One-line journal", "done": False},
+            ],
+        },
+        {
+            "id": "weekly_ic",
+            "label": "Weekly Investment Committee",
+            "label_bilingual": "Weekly IC · 週投資委員會",
+            "cadence": "weekly",
+            "committee": "Investment Committee",
+            "next_due": _next_weekday(from_day, 0).isoformat(),
+            "status": "scheduled",
+            "checklist": [
+                {"item": "Regime review", "done": False},
+                {"item": "Portfolio health", "done": False},
+                {"item": "Mistake of the week", "done": False},
+            ],
+        },
+        {
+            "id": "monthly_capital",
+            "label": "Monthly Capital Review",
+            "label_bilingual": "Monthly Capital · 月度資本複核",
+            "cadence": "monthly",
+            "committee": "Capital Committee",
+            "next_due": _next_first_business_day(from_day).isoformat(),
+            "status": "scheduled",
+            "checklist": [
+                {"item": "Marginal ROC ladder", "done": False},
+                {"item": "Cash vs deploy audit", "done": False},
+                {"item": "System Evolution Review", "done": False},
+            ],
+        },
+        {
+            "id": "quarterly_belief",
+            "label": "Quarterly Belief Review",
+            "label_bilingual": "Quarterly Belief · 季度信念複核",
+            "cadence": "quarterly",
+            "committee": "Belief Committee",
+            "next_due": _next_quarterly_belief_review(from_day).isoformat(),
+            "status": "scheduled",
+            "checklist": [
+                {"item": "Calibration report", "done": forward_marks > 0},
+                {"item": "Belief death certificates", "done": False},
+                {"item": "Kill condition refresh", "done": False},
+            ],
+        },
+        {
+            "id": "annual_learning",
+            "label": "Annual Learning Summit",
+            "label_bilingual": "Annual Learning · 年度學習峰會",
+            "cadence": "annual",
+            "committee": "Learning Committee",
+            "next_due": date(
+                from_day.year if from_day.month < 12 else from_day.year + 1, 12, 15
+            ).isoformat(),
+            "status": "scheduled",
+            "checklist": [
+                {"item": "Attribution tree", "done": False},
+                {"item": "Letter to future self", "done": False},
+                {"item": "Investment policy refresh", "done": False},
+            ],
+        },
+    ]
+    return rituals
+
+
+@router.get("/api/v7/daily-ic/summary")
+async def daily_ic_summary():
+    """Daily IC 5-min one-pager — Mission/Market/Portfolio/Capital/One Belief (research_only)."""
+    from src.services.daily_ic_summary import build_daily_ic_summary
+
+    board: Dict[str, Any] = {}
+    belief_item: Optional[Dict[str, Any]] = None
+    try:
+        from src.services.decision_board_service import attach_decision_board
+
+        source = dict(_today_cache or {})
+        if source:
+            attach_decision_board(source, source="today")
+            board = source
+    except Exception:
+        board = {}
+    try:
+        from src.services.belief_review import build_belief_items
+        from src.services.forward_outcomes import load_forward_outcomes
+
+        outcomes = load_forward_outcomes(limit=50)
+        items = build_belief_items(outcomes)
+        belief_item = items[0] if items else None
+    except Exception:
+        belief_item = None
+    payload = build_daily_ic_summary(board=board, belief_item=belief_item)
+    return sanitize_for_json(payload)
+
+
+@router.get("/api/v7/firm-cadence/summary")
+async def firm_cadence_summary():
+    """Firm cadence checklist — v16 governance (research_only, no deploy authority)."""
+    cache_key = "firm_cadence"
+    if cached := _research_cache_get(cache_key):
+        return cached
+
+    from src.services.forward_outcomes import load_forward_outcomes
+
+    t0 = time.perf_counter()
+    today = datetime.now(timezone.utc).date()
+    outcomes = await asyncio.to_thread(load_forward_outcomes, limit=50)
+    rituals = _firm_cadence_rituals(today, forward_marks=len(outcomes))
+    next_ritual = min(rituals, key=lambda r: r["next_due"])
+    payload = sanitize_for_json(
+        {
+            "status": "stub",
+            "authority": "research_only",
+            "headline": "Firm cadence · 機構節奏 — governance rituals (display only)",
+            "next_ritual": {
+                "id": next_ritual["id"],
+                "label": next_ritual["label_bilingual"],
+                "due": next_ritual["next_due"],
+            },
+            "rituals": rituals,
+            "forward_outcome_marks": len(outcomes),
+            "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+        }
+    )
+    _research_cache_set(cache_key, payload)
+    logger.debug("firm_cadence_summary %.0fms", (time.perf_counter() - t0) * 1000)
+    return payload
+
+
+# ══════════════════════════════════════════════════════════════════════
+# IDOS Decision Journal + challenge engines (research_only)
+# ══════════════════════════════════════════════════════════════════════
+
+
+@router.post("/api/v7/decision-journal/entry")
+async def decision_journal_create_entry(body: Dict[str, Any]):
+    """Persist pre-outcome decision journal entry — research_only; never grants deploy."""
+    from src.services.decision_journal import append_entry, record_deploy_intent_stub
+
+    payload = body or {}
+    try:
+        entry = append_entry(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    decision_id = str(payload.get("decision_id") or entry.get("decision_id") or "").strip()
+    ticker = str(payload.get("ticker") or entry.get("ticker") or "").upper()
+    decision = str(entry.get("decision") or "").upper()
+    if decision_id and decision in {"DEPLOY", "DEPLOY_INTENT", "TRADE", "BUY"}:
+        record_deploy_intent_stub(
+            ticker=ticker,
+            decision_id=decision_id,
+            thesis=str(entry.get("thesis") or ""),
+        )
+    return sanitize_for_json(
+        {
+            "ok": True,
+            "authority": "research_only",
+            "entry": entry,
+            "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+        }
+    )
+
+
+@router.get("/api/v7/decision-journal/recent")
+async def decision_journal_recent(limit: int = Query(20, ge=1, le=100)):
+    """Recent IDOS decision journal entries — research_only."""
+    cache_key = f"journal_recent:{limit}"
+    if cached := _research_cache_get(cache_key):
+        return cached
+
+    from src.services.decision_journal import summary
+
+    t0 = time.perf_counter()
+    payload = sanitize_for_json(await asyncio.to_thread(summary, limit=limit))
+    _research_cache_set(cache_key, payload)
+    logger.debug("decision_journal_recent %.0fms", (time.perf_counter() - t0) * 1000)
+    return payload
+
+
+@router.get("/api/v7/decision-journal/deploy-intent-checklist")
+async def decision_journal_deploy_intent_checklist(
+    ticker: str = Query("", max_length=16),
+    decision_id: str = Query("", max_length=64),
+):
+    """Deploy-intent journal checklist — display only when deploy_open (research_only)."""
+    from src.services.decision_journal import deploy_intent_journal_status
+
+    sym = str(ticker or "").strip().upper()
+    did = str(decision_id or "").strip()
+    if not sym and not did and _today_cache:
+        ba = _today_cache.get("best_action") or {}
+        td = _today_cache.get("todays_decision") or {}
+        ss = _today_cache.get("system_state") or {}
+        if ss.get("deploy_open"):
+            sym = str(
+                (ba.get("best_trade_now") or td.get("best_trade") or {}).get("ticker") or ""
+            ).upper()
+        else:
+            sym = str(
+                (ba.get("best_watch_upgrade") or td.get("best_watch") or {}).get("ticker") or ""
+            ).upper()
+        for key in ("top_5", "top_ranked", "opportunities", "near_miss"):
+            for row in _today_cache.get(key) or []:
+                if isinstance(row, dict) and row.get("decision_id"):
+                    did = str(row["decision_id"])
+                    break
+            if did:
+                break
+
+    payload = sanitize_for_json(
+        await asyncio.to_thread(
+            deploy_intent_journal_status,
+            decision_id=did,
+            ticker=sym,
+        )
+    )
+    return payload
+
+
+@router.get("/api/v7/red-team/challenge")
+async def red_team_challenge(ticker: str = Query("", max_length=16)):
+    """Red Team structured challenge stub — research_only."""
+    from src.services.red_team import build_red_team_challenge
+
+    return sanitize_for_json(build_red_team_challenge(ticker=ticker))
+
+
+@router.get("/api/v7/outside-view/base-rate")
+async def outside_view_base_rate(setup_type: str = Query("generic_breakout", max_length=64)):
+    """Outside View base-rate stub — research_only."""
+    from src.services.outside_view import build_outside_view_base_rate
+
+    return sanitize_for_json(build_outside_view_base_rate(setup_type=setup_type))
+
+
+@router.get("/api/v7/decision-committee/review")
+async def decision_committee_review(ticker: str = Query("", max_length=16)):
+    """Decision Committee virtual debate stub — research_only."""
+    from src.services.decision_committee import build_committee_review
+
+    return sanitize_for_json(build_committee_review(ticker=ticker))
+
+
+@router.get("/api/v7/decision-health/summary")
+async def decision_health_summary():
+    """Decision Health calibration inputs stub — research_only, non-blocking."""
+    from src.services.decision_health import build_decision_health_summary
+
+    return sanitize_for_json(build_decision_health_summary())
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Workflow loops — Pre-Decision · Research Queue · Decision Cooling
+# ══════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/v7/decision-readiness/checklist")
+async def decision_readiness_get(
+    ticker: str = Query(..., min_length=1, max_length=10),
+):
+    """Pre-decision checklist — display only; never grants deploy authority."""
+    from src.api.deps import validate_ticker
+    from src.services.decision_readiness import checklist_schema, load_checklist
+
+    sym = validate_ticker(ticker)
+    payload = load_checklist(sym)
+    payload.update(checklist_schema())
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
+@router.post("/api/v7/decision-readiness/checklist")
+async def decision_readiness_save(body: Dict[str, Any]):
+    """Persist pre-decision checklist answers — research_only."""
+    from src.api.deps import validate_ticker
+    from src.services.decision_readiness import checklist_schema, save_checklist
+
+    ticker_raw = str((body or {}).get("ticker") or "")
+    sym = validate_ticker(ticker_raw)
+    answers = (body or {}).get("answers") or body or {}
+    try:
+        payload = save_checklist(sym, answers)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    payload.update(checklist_schema())
+    payload["ok"] = True
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
+@router.get("/api/v7/research-queue")
+async def research_queue_list():
+    """CIIO research time queue — not watchlist/scanner."""
+    from src.services.research_queue import list_queue
+
+    payload = list_queue()
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
+@router.post("/api/v7/research-queue/add")
+async def research_queue_add(body: Dict[str, Any]):
+    """Add validated ticker to research queue with time budget."""
+    from src.api.deps import validate_ticker
+    from src.services.research_queue import add_item
+
+    sym = validate_ticker(str((body or {}).get("ticker") or ""))
+    try:
+        payload = add_item(
+            sym,
+            budget_minutes=(body or {}).get("budget_minutes", 30),
+            category=str((body or {}).get("category") or "Research"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    payload["ok"] = True
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
+@router.post("/api/v7/research-queue/remove")
+async def research_queue_remove(body: Dict[str, Any]):
+    """Remove ticker from research queue."""
+    from src.api.deps import validate_ticker
+    from src.services.research_queue import remove_item
+
+    sym = validate_ticker(str((body or {}).get("ticker") or ""))
+    try:
+        payload = remove_item(sym)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    payload["ok"] = True
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
+@router.get("/api/v7/attention-budget/summary")
+async def attention_budget_summary(
+    research: int = Query(0, ge=0, le=600),
+    portfolio: int = Query(0, ge=0, le=600),
+    market: int = Query(0, ge=0, le=600),
+):
+    """Attention budget defaults + optional client-reported session usage."""
+    from src.services.attention_budget import build_attention_budget_summary
+
+    usage = {"research": research, "portfolio": portfolio, "market": market}
+    return sanitize_for_json(build_attention_budget_summary(usage=usage))
+
+
+@router.get("/api/v7/knowledge/lessons")
+async def knowledge_lessons(ticker: str = Query(..., min_length=1, max_length=10)):
+    """Prior lessons from decision journal + belief review for ticker."""
+    from src.api.deps import validate_ticker
+    from src.services.knowledge_retrieval import build_ticker_lessons
+
+    sym = validate_ticker(ticker)
+    try:
+        payload = await asyncio.to_thread(build_ticker_lessons, sym)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
+@router.get("/api/v7/pre-decision/gate")
+async def pre_decision_gate(ticker: str = Query("", max_length=10)):
+    """
+    Pre-decision gate bundle — readiness, red team, outside view, journal status.
+
+    Display only when deploy_open; never grants deploy authority.
+    """
+    from src.api.deps import validate_ticker
+    from src.services.decision_journal import deploy_intent_journal_status
+    from src.services.decision_readiness import load_checklist
+    from src.services.outside_view import build_outside_view_base_rate
+    from src.services.red_team import build_red_team_challenge
+
+    sym = str(ticker or "").strip().upper()
+    deploy_open = False
+    setup_type = "generic_breakout"
+    decision_id = ""
+    if not sym and _today_cache:
+        ba = _today_cache.get("best_action") or {}
+        td = _today_cache.get("todays_decision") or {}
+        ss = _today_cache.get("system_state") or {}
+        deploy_open = bool(ss.get("deploy_open"))
+        if deploy_open:
+            sym = str(
+                (ba.get("best_trade_now") or td.get("best_trade") or {}).get("ticker") or ""
+            ).upper()
+        top = (_today_cache.get("top_ranked") or [None])[0]
+        if isinstance(top, dict):
+            if not sym:
+                sym = str(top.get("ticker") or "").upper()
+            setup_type = str(top.get("setup_type") or top.get("pattern") or setup_type)
+            decision_id = str(top.get("decision_id") or "")
+    else:
+        try:
+            from src.services.decision_board_service import build_decision_board
+
+            board = build_decision_board()
+            deploy_open = bool((board.get("system_state") or {}).get("deploy_open"))
+        except Exception:
+            pass
+
+    if sym:
+        try:
+            sym = validate_ticker(sym)
+        except HTTPException:
+            sym = sym[:10]
+
+    checklist = load_checklist(sym) if sym else {"complete": False, "ticker": sym}
+    red_team = build_red_team_challenge(ticker=sym or "GENERIC")
+    outside_view = build_outside_view_base_rate(setup_type=setup_type)
+    journal = deploy_intent_journal_status(decision_id=decision_id, ticker=sym)
+
+    return sanitize_for_json(
+        {
+            "authority": "research_only",
+            "may_authorize_deploy": False,
+            "deploy_open": deploy_open,
+            "visible": bool(deploy_open and sym),
+            "ticker": sym or None,
+            "setup_type": setup_type,
+            "decision_id": decision_id or None,
+            "checklist": checklist,
+            "red_team": red_team,
+            "outside_view": outside_view,
+            "journal": journal,
+            "headline": "Pre-Decision Gate · 部署前閘 — acknowledge checklist (display only)",
+            "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
+        }
+    )
+
+
+@router.post("/api/v7/decision-cooling/start")
+async def decision_cooling_start(body: Dict[str, Any]):
+    """Start 10-minute cooling window — research_only; no deploy authority."""
+    from src.api.deps import validate_ticker
+    from src.services.decision_cooling import start_cooling
+
+    sym = validate_ticker(str((body or {}).get("ticker") or ""))
+    counterargument = str((body or {}).get("counterargument") or "")
+    try:
+        payload = start_cooling(sym, counterargument=counterargument)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    payload["ok"] = True
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
+@router.get("/api/v7/decision-cooling/status")
+async def decision_cooling_status(
+    session_id: str = Query(..., min_length=4, max_length=64),
+):
+    """Poll cooling session — READY_TO_CONFIRM when window elapses."""
+    from src.services.decision_cooling import get_status
+
+    try:
+        payload = get_status(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
+@router.post("/api/v7/decision-cooling/cancel")
+async def decision_cooling_cancel(body: Dict[str, Any]):
+    """Cancel cooling — WAIT / quality drop / portfolio change / new evidence."""
+    from src.services.decision_cooling import cancel_cooling
+
+    session_id = str((body or {}).get("session_id") or "")
+    reason = str((body or {}).get("reason") or "operator_cancel")
+    try:
+        payload = cancel_cooling(session_id, reason=reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    payload["ok"] = True
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
 # ══════════════════════════════════════════════════════════════════════
 # /api/v8/portfolios — 3 Model Portfolios vs SPY
 # ══════════════════════════════════════════════════════════════════════
@@ -2661,6 +3360,13 @@ async def generate_today_ai_narrative(payload: dict):
             logger.debug("Local LLM probe skipped or timed out for ai-narrative")
 
         if not ai.is_configured:
+            from src.services.usage_log import record_surface_event
+
+            record_surface_event(
+                surface="ai_narrative",
+                event="stub",
+                meta={"reason": "unconfigured", "authority": "research_only"},
+            )
             return {
                 "ai_narrative": build_stub_narrative(
                     regime_ctx, top5, market_pulse, funnel, board_narrative
@@ -2668,17 +3374,39 @@ async def generate_today_ai_narrative(payload: dict):
                 "provider": "stub",
                 "model": "deterministic",
                 "configured": False,
+                "research_only": True,
+                "authority": "research_only",
                 "message": "LLM not configured — showing rule-based narrative.",
                 "setup_hint": AI_SETUP_HINT,
             }
 
         narrative = await ai.generate_narrative(regime_ctx, top5, market_pulse, funnel)
         if narrative:
+            from src.services.usage_log import record_ai_call, record_surface_event
+
+            record_surface_event(
+                surface="ai_narrative",
+                event="generate",
+                meta={
+                    "provider": getattr(ai, "_provider_used", "unknown"),
+                    "model": getattr(ai, "_last_model", ""),
+                    "authority": "research_only",
+                },
+            )
+            record_ai_call(
+                task="today_narrative",
+                provider=getattr(ai, "_provider_used", "unknown"),
+                model=getattr(ai, "_last_model", ""),
+                success=True,
+                chars=len(narrative),
+            )
             return {
                 "ai_narrative": narrative,
                 "provider": getattr(ai, "_provider_used", "unknown"),
                 "model": getattr(ai, "_last_model", ""),
                 "configured": True,
+                "research_only": True,
+                "authority": "research_only",
             }
 
         stub = build_stub_narrative(
@@ -2690,6 +3418,8 @@ async def generate_today_ai_narrative(payload: dict):
             "provider": "stub",
             "model": "deterministic",
             "configured": True,
+            "research_only": True,
+            "authority": "research_only",
             "message": "LLM call failed — showing rule-based fallback.",
             "setup_hint": "",
         }
@@ -2708,6 +3438,73 @@ async def generate_today_ai_narrative(payload: dict):
             "provider": "error",
             "model": "",
             "configured": False,
+            "research_only": True,
+            "authority": "research_only",
             "message": f"Error: {exc}",
             "setup_hint": AI_SETUP_HINT,
         }
+
+
+@router.post("/api/v7/override-journal/entry")
+async def override_journal_entry(body: Dict[str, Any]):
+    """Log operator override — research_only audit trail."""
+    from src.services.override_journal import record_override
+
+    payload = record_override(
+        advice_class=str((body or {}).get("advice_class") or "cc_recommendation"),
+        action=str((body or {}).get("action") or "ignored"),
+        reason=str((body or {}).get("reason") or ""),
+        ticker=str((body or {}).get("ticker") or ""),
+        decision_id=str((body or {}).get("decision_id") or ""),
+    )
+    payload["ok"] = True
+    return sanitize_for_json(payload)
+
+
+@router.get("/api/v7/override-journal/summary")
+async def override_journal_summary():
+    """Override journal + cooldown status."""
+    from src.services.override_journal import build_override_summary
+
+    return sanitize_for_json(build_override_summary())
+
+
+@router.get("/api/v7/calibration/report")
+async def calibration_report():
+    """Quarterly-style calibration — research_only."""
+    from src.services.calibration_report import build_calibration_report
+
+    return sanitize_for_json(build_calibration_report())
+
+
+@router.get("/api/v7/weekly-ic/digest")
+async def weekly_ic_digest(request: Request):
+    """Weekly Investment Committee one-pager."""
+    from src.services.weekly_ic_digest import build_weekly_ic_digest
+
+    board = _today_payload_for_board(request) or {}
+    return sanitize_for_json(build_weekly_ic_digest(board=board))
+
+
+@router.post("/api/v7/usage-log/event")
+async def usage_log_event(body: Dict[str, Any]):
+    """MIE surface usage event — open/dismiss/ignore."""
+    from src.services.usage_log import record_surface_event
+
+    payload = record_surface_event(
+        surface=str((body or {}).get("surface") or "unknown"),
+        event=str((body or {}).get("event") or "open"),
+        tab=str((body or {}).get("tab") or ""),
+        meta=(body or {}).get("meta") if isinstance((body or {}).get("meta"), dict) else {},
+    )
+    payload["ok"] = True
+    return sanitize_for_json(payload)
+
+
+@router.get("/api/v7/usage-log/summary")
+async def usage_log_summary():
+    """MIE usage summary + deletion candidates."""
+    from src.services.usage_log import build_usage_summary
+
+    return sanitize_for_json(build_usage_summary())
+

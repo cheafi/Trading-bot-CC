@@ -6,7 +6,10 @@ May downgrade ranking order; never overrides WAIT or grants deploy authority.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from src.services.cost_adjusted_edge import compute_net_edge, infer_burdens_from_row
 from src.services.signal_provenance import (
@@ -179,10 +182,7 @@ def enrich_opportunity_rows(
     """Rank + index intel + EV + IO/AlphaObject birth for playbook rows."""
     from datetime import datetime, timezone
 
-    from src.services.alpha_factory import attach_alpha_objects
     from src.services.ev_ranking import enrich_rows_with_ev
-    from src.services.investment_object_factory import attach_investment_objects
-    from src.services.knowledge_graph import register_tickers, theme_cluster_id_for
     from src.services.provenance_contract import enrich_row_provenance
 
     as_of = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -199,16 +199,24 @@ def enrich_opportunity_rows(
         for r in ranked
     ]
     with_ev = enrich_rows_with_ev(with_prov, tradeability=tradeability)
-    regime_label = str((index_regime or {}).get("label") or "")
-    with_io = attach_investment_objects(
-        with_ev, tradeability=tradeability, regime_label=regime_label
-    )
-    for r in with_io:
-        sym = str(r.get("ticker") or "").upper()
-        if sym:
-            r["theme_cluster_id"] = theme_cluster_id_for(sym)
-    register_tickers([str(r.get("ticker") or "") for r in with_io if r.get("ticker")])
-    return attach_alpha_objects(with_io, run_id=run_id, top_n=12)
+    try:
+        from src.services.alpha_factory import attach_alpha_objects
+        from src.services.investment_object_factory import attach_investment_objects
+        from src.services.knowledge_graph import register_tickers, theme_cluster_id_for
+
+        regime_label = str((index_regime or {}).get("label") or "")
+        with_io = attach_investment_objects(
+            with_ev, tradeability=tradeability, regime_label=regime_label
+        )
+        for r in with_io:
+            sym = str(r.get("ticker") or "").upper()
+            if sym:
+                r["theme_cluster_id"] = theme_cluster_id_for(sym)
+        register_tickers([str(r.get("ticker") or "") for r in with_io if r.get("ticker")])
+        return attach_alpha_objects(with_io, run_id=run_id, top_n=12)
+    except Exception:
+        logger.debug("enrich_opportunity_rows IO/Alpha skipped", exc_info=True)
+        return with_ev
 
 
 def rank_opportunity_rows(

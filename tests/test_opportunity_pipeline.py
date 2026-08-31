@@ -6,6 +6,8 @@ from pathlib import Path
 
 from src.services.opportunity_pipeline import finalize_opportunity_pipeline
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def _sample_row(ticker: str = "AAPL") -> dict:
     return {
@@ -70,12 +72,23 @@ def test_today_pipeline_preserves_verdict_and_research_authority():
     )
 
 
+def test_pipeline_attaches_decision_id_on_rows():
+    payload = finalize_opportunity_pipeline(
+        {"top_5": [_sample_row("AAPL")]},
+        source="today",
+        tradeability="WAIT",
+    )
+    row = payload["top_5"][0]
+    assert row.get("decision_id")
+    assert row.get("attribution_root_ref")
+
+
 def test_cc_app_deploy_ssot_no_dual_can_deploy_sources():
-    app_js = Path("src/api/static/cc-app.js").read_text(encoding="utf-8")
+    app_js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
     assert "can_deploy_today" not in app_js
     assert "deploy_open ||" not in app_js
     assert "|| td.can_deploy" not in app_js
     assert "deployOpen()" in app_js
-    assert "deployOpenFromSystemState" in Path("src/api/static/cc-helpers.js").read_text(
-        encoding="utf-8"
-    )
+    assert "deployOpenFromSystemState" in (
+        ROOT / "src/api/static/cc-helpers.js"
+    ).read_text(encoding="utf-8")

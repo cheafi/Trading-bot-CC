@@ -1,9 +1,27 @@
 # CC X — Production Readiness & Ops
 
 **Product:** CC X · `TradingAI_Bot`  
-**Updated:** 2026-08-25
+**Updated:** 2026-08-25 (Phase A `59db29f` · Phase B stubs)
 
-> Architecture → [`CC_X_ARCHITECTURE.md`](./CC_X_ARCHITECTURE.md) · Backlog → [`CC_X_ENGINEERING_BACKLOG.md`](./CC_X_ENGINEERING_BACKLOG.md)
+> Architecture → [`CC_X_ARCHITECTURE.md`](./CC_X_ARCHITECTURE.md) · Backlog → [`CC_X_ENGINEERING_BACKLOG.md`](./CC_X_ENGINEERING_BACKLOG.md) · MIE → [`CC_X_META_INTELLIGENCE.md`](./CC_X_META_INTELLIGENCE.md)
+
+---
+
+## Readiness snapshot
+
+Qualitative assessment after Phase A + Phase B stubs (not a platform scorecard):
+
+| Area                    | Status        | Notes                                                                 |
+| ----------------------- | ------------- | --------------------------------------------------------------------- |
+| Deploy authority SSOT   | **Improved**  | `deployOpen()` only; board recompute on cache read (`8b51620`, Phase A) |
+| Operator landing UX     | **Improved**  | TODAY default; Mission Control; WAIT-day context collapse             |
+| Opportunity parity      | **Improved**  | Shared `opportunity_pipeline.py` on Today + Playbook                  |
+| Forward outcomes        | **Improved**  | T+0 on close; scheduler 4:45 PM ET weekdays (CCX-041 done)            |
+| Belief / MIE calibration| **Stub**      | `/api/v7/belief-review/summary` + Ops panel; full UI todo (CCX-131)   |
+| Firm cadence (v16)      | **Stub**      | `/api/v7/firm-cadence/summary` + Mission Control strip + Ops panel    |
+| CI / E2E gates          | **Open**      | Playwright E2E, k6 p95, `verify_10_10.sh` on every PR still todo      |
+| Provenance on prices    | **Open**      | CCX-006 / CCX-UX-06                                                   |
+| IBKR chaos / soak       | **Open**      | CCX-092; manual soak still required pre-release                       |
 
 ---
 
@@ -29,6 +47,8 @@ cp .env.example .env   # never commit .env
 ```
 
 Configuration reference: [`config/default.yaml`](../config/default.yaml), [`.env.example`](../.env.example).
+
+Docker + AI setup: [`CC_X_DOCKER_AI.md`](./CC_X_DOCKER_AI.md).
 
 ---
 
@@ -120,11 +140,13 @@ Run after stabilization passes. Copy-only recovery — no fake authority.
 
 ### WAIT day soak (30+ min)
 
-| Step             | Pass criteria                  |
-| ---------------- | ------------------------------ |
-| Dashboard        | Today focus; monitors hint     |
-| Playbook         | WATCH ONLY; near-miss ≠ deploy |
-| Periodic refresh | No new green TRADE pills       |
+| Step             | Pass criteria                                                  |
+| ---------------- | -------------------------------------------------------------- |
+| Dashboard        | Mission Control + Mission Brief visible; rank hero collapsed   |
+| Expand context   | Secondary strips behind toggle; `todayContextExpanded` works   |
+| Playbook         | WATCH ONLY; near-miss ≠ deploy                                 |
+| Periodic refresh | No new green TRADE pills; `deployOpen()` matches board         |
+| Ops Belief Review| `[data-cc="belief-review-panel"]` loads stub summary           |
 
 **Prereqs:** `node scripts/build-cc-template.mjs --check` green; Playwright `cc-e2e` green on CI.
 
@@ -162,7 +184,7 @@ Run after stabilization passes. Copy-only recovery — no fake authority.
 | Engine OFF during poll      | Stop AutoTradingEngine             | ENGINE OFF pill; mission blockers update     |
 | Data STALE during deploy    | Mark freshness CRITICAL            | Deploy CTAs hidden                           |
 
-**Verified (2026-08-25):** regime fail-closed + never-cache-deploy_open — commit `8b51620`.
+**Verified (2026-08-25):** regime fail-closed + never-cache-deploy_open — commit `8b51620`. Forward outcome marks job scheduled 4:45 PM ET weekdays — Phase B (`scheduler/main.py`).
 
 ---
 

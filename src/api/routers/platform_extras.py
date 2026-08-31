@@ -25,15 +25,23 @@ async def stock_universe():
         CORE_WATCHLIST,
         POPULAR_TICKERS,
         RS_UNIVERSE,
+        asset_class_for,
+        is_index_or_etf,
         universe_summary,
     )
 
+    summary = universe_summary()
     return sanitize_for_json(
         {
-            **universe_summary(),
+            **summary,
             "core_watchlist": CORE_WATCHLIST,
             "rs_universe": RS_UNIVERSE,
             "popular": POPULAR_TICKERS,
+            "asset_class_sample": {
+                t: asset_class_for(t)
+                for t in (POPULAR_TICKERS[:8] + ["SPY", "XLK", "SOXX"])
+            },
+            "index_etf_in_rs": [t for t in RS_UNIVERSE if is_index_or_etf(t)][:20],
         }
     )
 

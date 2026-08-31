@@ -53,11 +53,10 @@ function cc() {
 			"today",
 		),
 		tabs: [
-			{ id: "today", icon: "☀", label: "TODAY 今日" },
-			{ id: "signals", icon: "📋", label: "Playbook 策略簿" },
-			{ id: "portfolio", icon: "💼", label: "Portfolio 持倉" },
-			{ id: "dossier", icon: "🗂", label: "Workspace 工作區" },
-			{ id: "scanners", icon: "🔬", label: "Discovery 探索" },
+			{ id: "today", icon: "☀", label: "TODAY · 今日" },
+			{ id: "signals", icon: "📋", label: "PLAYBOOK · 策略簿" },
+			{ id: "portfolio", icon: "💼", label: "PORTFOLIO · 持倉" },
+			{ id: "dossier", icon: "🗂", label: "WORKSPACE · 工作區" },
 			{ id: "ibkr", icon: "⚡", label: "IBKR 券商" },
 			{ id: "ops", icon: "⚙️", label: "Ops 運維" },
 		],
@@ -70,6 +69,7 @@ function cc() {
 			{ id: "reference", label: "Reference 參考" },
 		],
 		moreTabs: [
+			{ id: "scanners", icon: "🔬", label: "Discovery 探索 · research", mode: "Research-only", desc: "Route via Mission Control — not equal to deploy path" },
 			{ id: "agent", icon: "🤖", label: "Agent 盯盤 · monitor" },
 			{ id: "strategy-lab", icon: "🧪", label: "Strategy Lab 策略實驗室" },
 			{ id: "shadow", icon: "🧾", label: "Shadow 影子帳戶" },
@@ -107,6 +107,14 @@ function cc() {
 			page_authority_mode: "diagnostic",
 			portfolio_context: null,
 			header_summary: null,
+		},
+		replay: {
+			active: false,
+			as_of: "",
+			session_id: "",
+			loading: false,
+			error: "",
+			banner: "",
 		},
 		surfaceFetchHints: {},
 		live: false,
@@ -174,6 +182,8 @@ function cc() {
 		pf: {
 			loading: false,
 			source: "manual",
+			ssot: "server",
+			ssotFallback: false,
 			positions: [],
 			alerts: [],
 			summary: null,
@@ -356,6 +366,7 @@ function cc() {
 			entries: [],
 		},
 		errorLog: { loading: false, error: "", entries: [], total: 0, filter: "all" },
+		identifiedErrorsPanel: { loading: false, error: "", items: [], lastRefresh: null },
 		providers: {
 			yfinance: false,
 			regime_router: false,
@@ -449,6 +460,26 @@ function cc() {
 			lastAutoSchedule: null,
 			feedback: null,
 		},
+		beliefReview: { loading: false, data: null, err: "", saving: false },
+		marginalRoc: { loading: false, data: null, err: "" },
+		firmCadence: { loading: false, data: null, err: "" },
+		dailyIc: { loading: false, data: null, err: "", expanded: false },
+		deployIntentJournal: { loading: false, data: null, err: "" },
+		decisionJournal: { loading: false, data: null, err: "" },
+		overrideJournal: { loading: false, data: null, err: "" },
+		calibrationReport: { loading: false, data: null, err: "" },
+		weeklyIcDigest: { loading: false, data: null, err: "" },
+		usageLogSummary: { loading: false, data: null, err: "" },
+		decisionReadiness: { loading: false, data: null, err: "" },
+		researchQueue: { loading: false, data: null, err: "" },
+		attentionBudget: { loading: false, data: null, err: "", usage: { research: 0, portfolio: 0, market: 0 } },
+		preDecisionGate: { loading: false, data: null, err: "", acknowledged: false },
+		priorLessons: { loading: false, data: null, err: "", ticker: "" },
+		beliefDeployFlags: { loading: false, data: null, err: "" },
+		_attentionBudgetLastTick: 0,
+		_attentionBudgetTab: "today",
+		_attentionBudgetSec: 0,
+		reviewPackLoading: false,
 		stratHealth: { loading: false, data: null, window: 30, err: "" },
 		histVar: { loading: false, data: null, err: "", last_run: 0 },
 		freshness: null,
@@ -549,6 +580,9 @@ function cc() {
 		_failCount: 0,
 		_retryTimer: null,
 		_fundRetryTimer: null,
+		_ccInflight: {},
+		_pageVisible: true,
+		_hiddenPollSkip: 0,
 		apiError: "",
 		healthData: null,
 		healthMode: "loading",
@@ -565,27 +599,58 @@ function cc() {
 				if (mode === "guide" || mode === "operator") this.uiMode = mode
 			} catch (e) {}
 			this.dataContractDismissed = localStorage.getItem("cc_data_contract_dismissed") === "1"
+			this.initReplayFromStorage()
 			if (typeof window !== "undefined") {
 				window.addEventListener("resize", () => {
 					this.pmStripChipMenuOpen = false
 				})
+				this._pageVisible = typeof document === "undefined" || !document.hidden
+				if (typeof document !== "undefined") {
+					document.addEventListener("visibilitychange", () => {
+						this._pageVisible = !document.hidden
+						this._hiddenPollSkip = 0
+						if (this._pageVisible) {
+							this.fetchDecisionBoardLight()
+							if (this.tab === "today") this.fetchToday7()
+						}
+					})
+				}
 			}
 			this.tick()
 			setInterval(() => this.tick(), 1000)
 			this.fetchHealth()
-			setInterval(() => this.fetchHealth(), 30000)
+			setInterval(() => {
+				if (this._ccPollSkip(false)) return
+				this.fetchHealth()
+			}, 30000)
 			// Phase 1 — critical path (hydrate local cache first, then network)
 			this.hydrateRankedFromCache()
 			this.hydrateToday7FromCache()
 			this.hydrateScannersFromCache()
 			this.fetchDecisionBoardLight()
-			setInterval(() => this.fetchDecisionBoardLight(), 30000)
-			this.fetchCcStatus({ full: true })
-			setInterval(() => this.fetchCcStatus({ light: true }), 120000)
+			setInterval(() => {
+				if (this._ccPollSkip(false)) return
+				this.fetchDecisionBoardLight()
+			}, 30000)
+			this.fetchCcStatus({ light: true })
+			setTimeout(() => this.fetchCcStatus({ full: true }), 5000)
+			setInterval(() => {
+				if (this._ccPollSkip(false)) return
+				this.fetchCcStatus({ light: true })
+			}, 120000)
+			this._syncAttentionBudgetUsageFromStorage()
+			this._attentionBudgetLastTick = Date.now()
+			this._attentionBudgetTab = this.tab
 			this.fetchToday7()
-			setInterval(() => this.fetchToday7(), 180000)
+			setInterval(() => {
+				if (this._ccPollSkip(false) || this.replay.active) return
+				this.fetchToday7()
+			}, 180000)
 			setTimeout(() => this.fetchMarketStrip(), 800)
-			setInterval(() => this.fetchMarketStrip(), 300000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchMarketStrip()
+			}, 300000)
 			// Signals feed loads on tab switch only (avoids duplicate /api/recommendations traffic)
 			// Phase 2 — secondary panels (staggered)
 			setTimeout(() => {
@@ -605,22 +670,46 @@ function cc() {
 				this.fetchDesk()
 				this.fetchLeadersDashboard()
 			}, 5000)
-			setInterval(() => this.fetchDesk(), 180000)
-			setInterval(() => this.fetchLeadersDashboard(), 300000)
-			setInterval(() => this.fetchDecisionHub(), 180000)
-			setInterval(() => this.fetchPortfolio(), 300000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchDesk()
+			}, 180000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchLeadersDashboard()
+			}, 300000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchDecisionHub()
+			}, 180000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchPortfolio()
+			}, 300000)
 			// Per-strategy realized analytics (cheap; refresh every 10min)
 			this.fetchStrategyHealth()
-			setInterval(() => this.fetchStrategyHealth(), 600000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchStrategyHealth()
+			}, 600000)
 			// Data freshness watchdog (every 2 min; cheap — already-cached histories)
 			setTimeout(() => this.fetchFreshness(), 1500)
-			setInterval(() => this.fetchFreshness(), 120000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchFreshness()
+			}, 120000)
 			// Position-level risk alerts (every 2 min)
 			setTimeout(() => this.fetchRiskAlerts(), 2000)
-			setInterval(() => this.fetchRiskAlerts(), 120000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchRiskAlerts()
+			}, 120000)
 			// Morning brief freshness check (every 5 min — cheap, just stats a file)
 			this.fetchBriefStatus()
-			setInterval(() => this.fetchBriefStatus(), 300000)
+			setInterval(() => {
+				if (this._ccPollSkip(true)) return
+				this.fetchBriefStatus()
+			}, 300000)
 			this.fetchWarmupBriefBoard()
 			setTimeout(() => {
 				if (!this.playbookBoardHasContent()) this.fetchWarmupBriefBoard()
@@ -660,6 +749,7 @@ function cc() {
 				const r = await fetch("/api/data/freshness")
 				if (!r.ok) return
 				this.freshness = await r.json()
+				this.rebuildIdentifiedErrors()
 			} catch (e) {
 				/* silent — pill simply won't show */
 			}
@@ -672,6 +762,7 @@ function cc() {
 				})
 				if (!r.ok) return
 				this.risk_alerts = await r.json()
+				this.rebuildIdentifiedErrors()
 			} catch (e) {
 				/* silent — pill simply won't show */
 			}
@@ -814,8 +905,33 @@ function cc() {
 				alert("Rotate error: " + e.message)
 			}
 		},
+		_ccPollSkip(secondaryOnly) {
+			if (this._pageVisible) {
+				this._hiddenPollSkip = 0
+				return false
+			}
+			if (!secondaryOnly) {
+				this._hiddenPollSkip += 1
+				return this._hiddenPollSkip % 2 !== 0
+			}
+			return true
+		},
 		async ccFetch(url, opts = {}) {
 			if (opts.json || opts.normalize) return this.ccFetchJson(url, opts)
+			const dedupe = opts.dedupe !== false
+			const method = (opts.init && opts.init.method) || opts.method || "GET"
+			const key = dedupe ? method + " " + url : null
+			if (key && this._ccInflight[key]) return this._ccInflight[key]
+			const promise = this._ccFetchRaw(url, opts)
+			if (key) {
+				this._ccInflight[key] = promise
+				promise.finally(() => {
+					delete this._ccInflight[key]
+				})
+			}
+			return promise
+		},
+		async _ccFetchRaw(url, opts = {}) {
 			const tries = opts.retries ?? 3
 			const backoff = opts.backoff ?? 700
 			const timeoutMs = opts.timeoutMs ?? 0
@@ -1566,6 +1682,40 @@ function cc() {
 				return CCHelpers.deployOpenFromSystemState(ss)
 			return !!(ss && ss.deploy_open)
 		},
+		hideMockSurfacesOnDeploy() {
+			return this.deployOpen() && !this.pageAuthorityIsDegraded()
+		},
+		priceProvenanceLine(row) {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildPriceProvenanceLine)
+				return CCHelpers.buildPriceProvenanceLine(row)
+			const p = row?.provenance || row || {}
+			const src = p.source || row?.source || "unknown"
+			const asOf = p.as_of || row?.as_of || "—"
+			const mode = p.mode || row?.mode || row?.data_mode || "—"
+			const stale = !!(row?.data_stale || row?.stale || p.lag_days > 1)
+			return { src, asOf, mode, stale, label: `${src} · ${asOf} · ${mode}${stale ? " · STALE" : ""}` }
+		},
+		async logSurfaceUsage(surface, event) {
+			try {
+				await this.ccFetch("/api/v7/usage-log/event", {
+					method: "POST",
+					body: JSON.stringify({ surface, event, tab: this.tab }),
+				})
+			} catch (e) {}
+		},
+		async recordOverrideQuick(reason, adviceClass) {
+			try {
+				await this.ccFetch("/api/v7/override-journal/entry", {
+					method: "POST",
+					body: JSON.stringify({
+						advice_class: adviceClass || "cc_recommendation",
+						action: "override",
+						reason: reason || "",
+						tab: this.tab,
+					}),
+				})
+			} catch (e) {}
+		},
 		todaySecondaryContextVisible() {
 			if (this.deployOpen() || !this.isWaitDay()) return true
 			return !!this.todayContextExpanded
@@ -2160,6 +2310,259 @@ function cc() {
 		opsErrorLogUnavailableDetail() {
 			return this._uiText("Unable to confirm whether errors were logged this session.")
 		},
+		identifiedErrorsTitle() {
+			return "已識別錯誤 · Identified Errors"
+		},
+		identifiedErrorsIntro() {
+			return this._uiText(
+				"Aggregates session error log, system blockers, broker/sync failures, and data freshness in one place — informs only, never grants deploy.",
+			)
+		},
+		identifiedErrorsResearchOnlyLabel() {
+			return "只供參考 · Research only"
+		},
+		identifiedErrorsSourceLabel(source) {
+			const map = {
+				error_log: "錯誤日誌 · Error log",
+				blocker: "系統阻擋 · System blocker",
+				ops: "運維控制台 · Ops console",
+				ibkr: "IBKR / 同步 · IBKR / sync",
+				freshness: "資料新鮮度 · Data freshness",
+				portfolio: "持倉 / 風險 · Portfolio / risk",
+			}
+			return map[source] || String(source || "—")
+		},
+		identifiedErrorsSeverityRank(sev) {
+			const s = String(sev || "info").toLowerCase()
+			if (s === "critical") return 0
+			if (s === "warning") return 1
+			return 2
+		},
+		identifiedErrorsDedupKey(item) {
+			return (
+				String(item.source || "") +
+				"|" +
+				String(item.message || "")
+					.toLowerCase()
+					.replace(/\s+/g, " ")
+					.trim()
+					.slice(0, 120)
+			)
+		},
+		identifiedErrorsBlockerSeverity(text) {
+			const upper = String(text || "").toUpperCase()
+			if (
+				upper.includes("CRITICAL") ||
+				upper.includes("BLOCKED") ||
+				upper.includes("BREAKER") ||
+				upper.includes("CRASH")
+			)
+				return "critical"
+			return "warning"
+		},
+		mergeIdentifiedErrors() {
+			const items = []
+			const seen = new Set()
+			const push = (item) => {
+				if (!item || !item.message) return
+				const key = this.identifiedErrorsDedupKey(item)
+				if (seen.has(key)) return
+				seen.add(key)
+				items.push(item)
+			}
+			;(this.errorLog.entries || []).slice(0, 20).forEach((row, i) => {
+				push({
+					id: row.id || "elog-" + i,
+					severity: row.severity || "info",
+					source: "error_log",
+					message: String(row.message || ""),
+					detail: String(row.detail || row.suggested_action || ""),
+					timestamp: row.timestamp || null,
+					research_only: false,
+				})
+			})
+			if (this.errorLog.error) {
+				push({
+					id: "elog-fetch",
+					severity: "warning",
+					source: "error_log",
+					message: "Error log unavailable: " + this.errorLog.error,
+					detail: "",
+					timestamp: null,
+					research_only: true,
+				})
+			}
+			;(this.opsConsole.data?.blockers || []).forEach((b, i) => {
+				const msg = typeof b === "string" ? b : String(b.message || b.label || "")
+				push({
+					id: "ops-blocker-" + i,
+					severity: this.identifiedErrorsBlockerSeverity(msg),
+					source: "blocker",
+					message: msg,
+					detail: typeof b === "object" ? String(b.detail || "") : "",
+					timestamp: null,
+					research_only: false,
+				})
+			})
+			if (this.opsConsole.error) {
+				push({
+					id: "ops-console-fetch",
+					severity: "critical",
+					source: "ops",
+					message: String(this.opsConsole.error),
+					detail: "",
+					timestamp: null,
+					research_only: true,
+				})
+			}
+			const mission = this.todayMissionPanel()
+			;[...(mission.system_blockers || []), ...(mission.card_gates || [])].forEach((b, i) => {
+				const msg = String(b || "").trim()
+				if (!msg) return
+				push({
+					id: "mission-blocker-" + i,
+					severity: this.identifiedErrorsBlockerSeverity(msg),
+					source: "blocker",
+					message: msg,
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			})
+			if (this.ibkr.statusFetchError) {
+				push({
+					id: "ibkr-status-fetch",
+					severity: "warning",
+					source: "ibkr",
+					message: String(this.ibkr.statusFetchError),
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			if (this.ibkrBookMismatch()) {
+				push({
+					id: "ibkr-book-mismatch",
+					severity: "critical",
+					source: "ibkr",
+					message: "Portfolio book mismatch — confirm bracket and portfolio sync before handoff",
+					detail: String(this.ibkr.portfolioCompare?.note || ""),
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			const syncStatus = String(this.ibkr.readiness?.portfolio_sync_status || "").toLowerCase()
+			if (syncStatus && !["ready", "ok", "synced"].includes(syncStatus)) {
+				push({
+					id: "ibkr-portfolio-sync",
+					severity: syncStatus === "mismatch" ? "critical" : "warning",
+					source: "ibkr",
+					message: "Portfolio sync: " + syncStatus,
+					detail: String(this.ibkr.readiness?.portfolio_sync_reason || this.ibkr.portfolioCompare?.note || ""),
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			if (this.opsConsole.data?.ibkr && !this.opsConsole.data.ibkr.connected) {
+				push({
+					id: "ibkr-session-inactive",
+					severity: "warning",
+					source: "ibkr",
+					message: "IBKR session inactive",
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			if (this.portfolioHeaderBrokerSyncUnavailable()) {
+				push({
+					id: "portfolio-broker-sync",
+					severity: "warning",
+					source: "portfolio",
+					message: "Broker sync unavailable",
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			const tier = String(this.freshness?.worst_tier || this.ccFreshnessState().worst_tier || "").toUpperCase()
+			if (tier === "CRITICAL" || tier === "STALE") {
+				push({
+					id: "data-freshness-" + tier,
+					severity: tier === "CRITICAL" ? "critical" : "warning",
+					source: "freshness",
+					message: "DATA " + tier,
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			const alerts = this.risk_alerts?.alerts || this.risk_alerts?.items || []
+			if (Array.isArray(alerts) && alerts.length) {
+				alerts.forEach((a, i) => {
+					const sev = String(a.severity || a.level || "warning").toLowerCase()
+					if (sev === "info") return
+					push({
+						id: "risk-alert-" + i,
+						severity: sev === "critical" ? "critical" : "warning",
+						source: "portfolio",
+						message: String(a.message || a.label || a.type || "Risk alert"),
+						detail: String(a.detail || ""),
+						timestamp: a.timestamp || null,
+						research_only: false,
+					})
+				})
+			} else if (this.riskAlertsStripVisible()) {
+				push({
+					id: "risk-alert-count",
+					severity: "warning",
+					source: "portfolio",
+					message: this.riskAlertsStripLine(),
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			}
+			this.opsCriticalFlags().forEach((f, i) => {
+				push({
+					id: "ops-critical-" + i,
+					severity: "critical",
+					source: "ops",
+					message: String(f),
+					detail: "",
+					timestamp: null,
+					research_only: false,
+				})
+			})
+			items.sort(
+				(a, b) => this.identifiedErrorsSeverityRank(a.severity) - this.identifiedErrorsSeverityRank(b.severity),
+			)
+			return items.slice(0, 40)
+		},
+		rebuildIdentifiedErrors() {
+			this.identifiedErrorsPanel.items = this.mergeIdentifiedErrors()
+		},
+		async refreshIdentifiedErrors() {
+			this.identifiedErrorsPanel.loading = true
+			this.identifiedErrorsPanel.error = ""
+			try {
+				if (!this.errorLog.loading) await this.fetchErrorLog()
+				this.rebuildIdentifiedErrors()
+				this.identifiedErrorsPanel.lastRefresh = new Date().toISOString()
+			} catch (e) {
+				this.identifiedErrorsPanel.error = e.message || "refresh failed"
+				this.rebuildIdentifiedErrors()
+			} finally {
+				this.identifiedErrorsPanel.loading = false
+			}
+		},
+		identifiedErrorsCountLabel() {
+			const n = (this.identifiedErrorsPanel.items || []).length
+			return n ? n + " 項 · " + n + " item(s)" : ""
+		},
+		identifiedErrorsEmptyCopy() {
+			return this._uiText("No identified errors this session — system healthy or still warming.")
+		},
 		opsChangelogEntryTitle(entry) {
 			return this._uiText((entry && entry.title) || "")
 		},
@@ -2721,17 +3124,9 @@ function cc() {
 			}
 		},
 		mergeLocalPortfolioHoldings(holdings) {
-			const local = this.hydratePortfolioFromLocal()
-			if (!local || !local.holdings || !local.holdings.length) return holdings || []
-			const merged = [...(holdings || [])]
-			const seen = new Set(merged.map((p) => (p.ticker || p.symbol || "").toUpperCase()))
-			local.holdings.forEach((h) => {
-				const t = (h.ticker || "").toUpperCase()
-				if (!t || seen.has(t)) return
-				merged.push(h)
-				seen.add(t)
-			})
-			return merged
+			// Portfolio SSOT: server `data/portfolio_local_holdings.json` via /api/portfolio/monitor.
+			// Do not merge browser localStorage into read paths — offline cache is write-only fallback.
+			return holdings || []
 		},
 		buildLocalPosition(body) {
 			const entry = Number(body.entry_price)
@@ -2834,19 +3229,22 @@ function cc() {
 			if (waitOk) {
 				return {
 					kind: "WAIT_DAY_OK",
-					headline: "Empty board — often correct on WAIT",
-					detail: tab === "scanners" ? this.discoveryWaitEmptyLine() : this.playbookEmptyComment(),
+					headline: "No deploy-qualified opportunities",
+					detail:
+						tab === "scanners"
+							? this.discoveryWaitEmptyLine()
+							: "Cash is a valid position. Review monitor funnel before forcing action.",
 					badge: "WAIT DAY OK",
 					cta: "Review monitor funnel",
 				}
 			}
 			return {
 				kind: "NO_DATA",
-				headline: "No rows in this batch",
+				headline: "No deploy-qualified opportunities",
 				detail:
 					c.detail ||
 					(tab === "signals"
-						? this.playbookEmptyComment()
+						? "No deploy-qualified opportunities in this batch. Cash is a valid position."
 						: tab === "notrade"
 							? "No blocked signals in current pipeline batch."
 							: "Nothing to show yet."),
@@ -3609,6 +4007,15 @@ function cc() {
 			return this.degradedPmMonitorLine()
 		},
 		pmDecisionTickerLine() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildPmStripBoardLine) {
+				return CCHelpers.buildPmStripBoardLine({
+					best_action: this.today7.best_action,
+					todays_decision: this.today7.todays_decision,
+					near_miss: this.today7.near_miss,
+					sleeve_summary: this.today7.sleeve_summary,
+					deployOpen: this.deployOpen(),
+				})
+			}
 			const td = this.today7.todays_decision
 			if (!td) return ""
 			const deploy = this.deployOpen()
@@ -3917,6 +4324,664 @@ function cc() {
 				console.warn("fetchSelfLearnStatus", e)
 			}
 		},
+		async fetchBeliefReview() {
+			if (this.tab !== "ops") return
+			this.beliefReview.loading = true
+			this.beliefReview.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/belief-review/summary")
+				if (!r || !r.ok) {
+					this.beliefReview.err = "Belief review unavailable"
+					return
+				}
+				this.beliefReview.data = await r.json()
+			} catch (e) {
+				this.beliefReview.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.beliefReview.loading = false
+			}
+		},
+		async saveBeliefItem(item) {
+			if (!item || !item.id) return
+			this.beliefReview.saving = true
+			this.beliefReview.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/belief-review/items/" + encodeURIComponent(item.id), {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						thesis: item.thesis || "",
+						kill_condition: item.kill_condition || "",
+						conviction: item.conviction,
+						status: item.status || "reviewed",
+					}),
+				})
+				if (!r || !r.ok) {
+					this.beliefReview.err = "Belief save failed"
+					return
+				}
+				await this.fetchBeliefReview()
+			} catch (e) {
+				this.beliefReview.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.beliefReview.saving = false
+			}
+		},
+		async fetchMarginalRoc() {
+			if (this.tab !== "ops" && this.tab !== "today" && this.tab !== "portfolio") return
+			this.marginalRoc.loading = true
+			this.marginalRoc.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/capital/marginal-roc")
+				if (!r || !r.ok) {
+					this.marginalRoc.err = "Marginal ROC unavailable"
+					return
+				}
+				this.marginalRoc.data = await r.json()
+			} catch (e) {
+				this.marginalRoc.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.marginalRoc.loading = false
+			}
+		},
+		marginalRocHeadline() {
+			const d = this.marginalRoc.data
+			if (!d) return "Marginal ROC · loading…"
+			return d.cash_headline || d.headline || "Marginal ROC"
+		},
+		marginalRocLadderLine() {
+			const d = this.marginalRoc.data
+			if (!d || !(d.ladder || []).length) return "No ladder data · stub"
+			const top = d.ladder[0]
+			if (d.cash_winning) return `Cash hurdle ${d.cash_hurdle_bps}bps · hold cash`
+			return `Next $10K hint: ${d.next_10k_hint || top.ticker} · ${top.marginal_return_on_capital_bps}bps vs cash`
+		},
+		async fetchFirmCadence() {
+			if (this.tab !== "ops" && this.tab !== "today") return
+			this.firmCadence.loading = true
+			this.firmCadence.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/firm-cadence/summary")
+				if (!r || !r.ok) {
+					this.firmCadence.err = "Firm cadence unavailable"
+					return
+				}
+				this.firmCadence.data = await r.json()
+			} catch (e) {
+				this.firmCadence.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.firmCadence.loading = false
+			}
+		},
+		firmCadenceNextLine() {
+			const d = this.firmCadence.data
+			if (!d || !d.next_ritual) return "Firm cadence · loading…"
+			const nr = d.next_ritual
+			return `Next: ${nr.label || nr.id} · ${nr.due || "—"}`
+		},
+		async fetchDailyIc() {
+			if (!["today", "ops", "signals", "portfolio"].includes(this.tab)) return
+			this.dailyIc.loading = true
+			this.dailyIc.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/daily-ic/summary")
+				if (!r || !r.ok) {
+					this.dailyIc.err = "Daily IC unavailable"
+					return
+				}
+				this.dailyIc.data = await r.json()
+			} catch (e) {
+				this.dailyIc.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.dailyIc.loading = false
+			}
+		},
+		dailyIcLine() {
+			const d = this.dailyIc.data
+			if (!d) return "Daily IC · loading…"
+			const m = d.mission || {}
+			const mk = d.market || {}
+			const p = d.portfolio || {}
+			return `IC · ${m.deploy_label || "—"} · ${mk.tradeability || "—"} · ${p.best_watch || p.best_trade || "—"} · belief ${(d.one_belief && d.one_belief.ticker) || "—"}`
+		},
+		dailyIcOnePagerLines() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildDailyIcOnePagerLines) {
+				return CCHelpers.buildDailyIcOnePagerLines(this.dailyIc.data)
+			}
+			return []
+		},
+		toggleDailyIcExpanded() {
+			this.dailyIc.expanded = !this.dailyIc.expanded
+		},
+		workflowStageLine() {
+			const stage = this.workflowStage()
+			return (stage && stage.label) || "Mission · 任務"
+		},
+		workflowStage() {
+			const opts = {
+				tab: this.tab,
+				deployOpen: this.deployOpen(),
+				tradeability: this.canonicalTradeability(),
+				near_miss: this.today7.near_miss || [],
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.resolveWorkflowStage) {
+				return CCHelpers.resolveWorkflowStage(opts)
+			}
+			return { id: "mission", label: "Mission · 任務" }
+		},
+		workflowStageHint() {
+			const stage = this.workflowStage()
+			const opts = { tab: this.tab, deployOpen: this.deployOpen() }
+			if (typeof CCHelpers !== "undefined" && CCHelpers.workflowStageHint) {
+				return CCHelpers.workflowStageHint(stage, opts)
+			}
+			return "You are in: " + ((stage && stage.label) || "Mission · 任務")
+		},
+		deployIntentJournalVisible() {
+			return this.deployOpen()
+		},
+		async fetchDeployIntentJournal(ticker, decisionId) {
+			if (!this.deployOpen()) {
+				this.deployIntentJournal.data = null
+				this.deployIntentJournal.err = ""
+				return
+			}
+			const mc = this.missionControl()
+			const sym = String(
+				ticker ||
+					(this.deployOpen() ? mc.best_trade || mc.best_monitor : mc.best_monitor) ||
+					""
+			)
+				.trim()
+				.toUpperCase()
+			const did = String(decisionId || "").trim()
+			this.deployIntentJournal.loading = true
+			this.deployIntentJournal.err = ""
+			try {
+				let u = "/api/v7/decision-journal/deploy-intent-checklist?"
+				if (sym) u += "ticker=" + encodeURIComponent(sym) + "&"
+				if (did) u += "decision_id=" + encodeURIComponent(did)
+				const r = await this.ccFetch(u)
+				if (!r || !r.ok) {
+					this.deployIntentJournal.err = "Deploy-intent journal checklist unavailable"
+					return
+				}
+				this.deployIntentJournal.data = await r.json()
+			} catch (e) {
+				this.deployIntentJournal.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.deployIntentJournal.loading = false
+			}
+		},
+		deployIntentJournalLine() {
+			if (!this.deployOpen()) return ""
+			const d = this.deployIntentJournal.data
+			if (this.deployIntentJournal.loading) return "Journal checklist · loading…"
+			if (this.deployIntentJournal.err) return this.deployIntentJournal.err
+			if (!d) return "Journal checklist · link readiness + POST stub"
+			if (d.complete) return `${d.ticker || "—"} · journal complete · human deploy still required`
+			const missing = (d.missing_fields || []).length
+			return `${d.ticker || "—"} · journal ${d.status} · ${missing} fields · link readiness + POST stub`
+		},
+		async fetchDecisionJournal() {
+			if (this.tab !== "ops") return
+			this.decisionJournal.loading = true
+			this.decisionJournal.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/decision-journal/recent?limit=10")
+				if (!r || !r.ok) {
+					this.decisionJournal.err = "Decision journal unavailable"
+					return
+				}
+				this.decisionJournal.data = await r.json()
+			} catch (e) {
+				this.decisionJournal.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.decisionJournal.loading = false
+			}
+		},
+		async fetchOverrideJournal() {
+			if (this.tab !== "ops") return
+			this.overrideJournal.loading = true
+			this.overrideJournal.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/override-journal/summary")
+				if (!r || !r.ok) {
+					this.overrideJournal.err = "Override journal unavailable"
+					return
+				}
+				this.overrideJournal.data = await r.json()
+			} catch (e) {
+				this.overrideJournal.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.overrideJournal.loading = false
+			}
+		},
+		async fetchCalibrationReport() {
+			if (this.tab !== "ops") return
+			this.calibrationReport.loading = true
+			this.calibrationReport.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/calibration/report")
+				if (!r || !r.ok) {
+					this.calibrationReport.err = "Calibration report unavailable"
+					return
+				}
+				this.calibrationReport.data = await r.json()
+			} catch (e) {
+				this.calibrationReport.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.calibrationReport.loading = false
+			}
+		},
+		async fetchWeeklyIcDigest() {
+			if (this.tab !== "ops") return
+			this.weeklyIcDigest.loading = true
+			this.weeklyIcDigest.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/weekly-ic/digest")
+				if (!r || !r.ok) {
+					this.weeklyIcDigest.err = "Weekly IC digest unavailable"
+					return
+				}
+				this.weeklyIcDigest.data = await r.json()
+			} catch (e) {
+				this.weeklyIcDigest.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.weeklyIcDigest.loading = false
+			}
+		},
+		async fetchUsageLogSummary() {
+			if (this.tab !== "ops") return
+			this.usageLogSummary.loading = true
+			this.usageLogSummary.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/usage-log/summary")
+				if (!r || !r.ok) {
+					this.usageLogSummary.err = "Usage log unavailable"
+					return
+				}
+				this.usageLogSummary.data = await r.json()
+			} catch (e) {
+				this.usageLogSummary.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.usageLogSummary.loading = false
+			}
+		},
+		async _fetchReviewPackEndpoint(url) {
+			try {
+				const r = await this.ccFetch(url, { retries: 1, backoff: 300, timeoutMs: 15000 })
+				if (!r || !r.ok) {
+					return { ok: false, status: r ? r.status : 0, error: "HTTP " + (r ? r.status : 0) }
+				}
+				return { ok: true, data: await r.json() }
+			} catch (e) {
+				return { ok: false, error: e && e.message ? e.message : String(e) }
+			}
+		},
+		async exportReviewPack() {
+			if (this.reviewPackLoading) return
+			this.reviewPackLoading = true
+			try {
+				const endpoints = [
+					{ page: "TODAY", title: "TODAY · Mission Control payload", url: "/api/v7/today" },
+					{ page: "TODAY", title: "Decision board · 決策板", url: "/api/v7/decision/board" },
+					{
+						page: "PLAYBOOK",
+						title: "PLAYBOOK · Top opportunities",
+						url: "/api/v7/playbook/ranked/snapshot?limit=30",
+						kind: "playbook",
+					},
+					{ page: "PORTFOLIO", title: "PORTFOLIO · Decision summary", url: "/api/v7/portfolio-decision" },
+					{ page: "OPS", title: "Belief review · 信念審查", url: "/api/v7/belief-review/summary" },
+					{ page: "OPS", title: "Firm cadence · 公司節奏", url: "/api/v7/firm-cadence/summary" },
+					{ page: "OPS", title: "Marginal ROC · 邊際回報", url: "/api/v7/capital/marginal-roc" },
+					{
+						page: "OPS",
+						title: "Decision journal · 決策日誌",
+						url: "/api/v7/decision-journal/recent?limit=10",
+					},
+					{ page: "OPS", title: "Override journal · 覆寫日誌", url: "/api/v7/override-journal/summary" },
+					{ page: "OPS", title: "Calibration report · 校準", url: "/api/v7/calibration/report" },
+					{ page: "OPS", title: "Weekly IC digest · 週IC", url: "/api/v7/weekly-ic/digest" },
+					{ page: "OPS", title: "Surface usage log · 使用紀錄", url: "/api/v7/usage-log/summary" },
+					{ page: "OPS", title: "Ops console · 運維總覽", url: "/api/v7/ops-console" },
+					{ page: "SYSTEM", title: "CC header · 系統標頭", url: "/api/ops/cc-header" },
+				]
+				const fetched = await Promise.all(
+					endpoints.map(async (ep) => {
+						const result = await this._fetchReviewPackEndpoint(ep.url)
+						return { ...ep, data: result.ok ? result.data : { fetch_error: result.error, status: result.status } }
+					}),
+				)
+				const meta = {
+					generated_at: new Date().toISOString(),
+					ui_mode: this.uiMode,
+					workflow_stage: this.workflowStage(),
+					research_only: true,
+					authority: "research_only",
+				}
+				const fourQuestions = this.fourQuestionsBlock()
+				const buildDoc =
+					typeof CCHelpers !== "undefined" && CCHelpers.buildReviewPackDocument
+						? CCHelpers.buildReviewPackDocument.bind(CCHelpers)
+						: null
+				if (!buildDoc) {
+					alert("Review pack builder unavailable — reload CC X and retry.")
+					return
+				}
+				const html = buildDoc({
+					meta,
+					fourQuestions,
+					sections: fetched.map((row) => ({
+						page: row.page,
+						title: row.title,
+						kind: row.kind || "json",
+						data: row.data,
+					})),
+				})
+				const popup = window.open("", "_blank", "noopener,noreferrer")
+				if (!popup) {
+					alert("Pop-up blocked — allow pop-ups for CC X, then click Export again.")
+					return
+				}
+				popup.document.open()
+				popup.document.write(html)
+				popup.document.close()
+				popup.focus()
+				setTimeout(() => {
+					try {
+						popup.print()
+					} catch (_e) {}
+				}, 400)
+			} catch (e) {
+				console.warn("exportReviewPack failed", e)
+				alert("Review pack export failed: " + (e && e.message ? e.message : String(e)))
+			} finally {
+				this.reviewPackLoading = false
+			}
+		},
+		async fetchDecisionReadiness(ticker) {
+			const sym = String(
+				ticker ||
+					(this.deployOpen() ? this.topDeployCandidate() : this.missionControl().best_monitor) ||
+					"",
+			)
+				.trim()
+				.toUpperCase()
+			if (!sym) return
+			this.decisionReadiness.loading = true
+			this.decisionReadiness.err = ""
+			try {
+				const r = await this.ccFetch(
+					"/api/v7/decision-readiness/checklist?ticker=" + encodeURIComponent(sym),
+				)
+				if (!r || !r.ok) {
+					this.decisionReadiness.err = "Decision readiness unavailable"
+					return
+				}
+				this.decisionReadiness.data = await r.json()
+			} catch (e) {
+				this.decisionReadiness.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.decisionReadiness.loading = false
+			}
+		},
+		decisionReadinessLine() {
+			const d = this.decisionReadiness.data
+			if (!d) return ""
+			if (d.complete) return `${d.ticker} · checklist complete · display only (no auto-deploy)`
+			const filled = d.filled_count != null ? d.filled_count : 0
+			const req = d.required_count != null ? d.required_count : 7
+			return `${d.ticker || "—"} · ${filled}/${req} fields · complete before deploy intent`
+		},
+		async fetchResearchQueue() {
+			this.researchQueue.loading = true
+			this.researchQueue.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/research-queue")
+				if (!r || !r.ok) {
+					this.researchQueue.err = "Research queue unavailable"
+					return
+				}
+				this.researchQueue.data = await r.json()
+			} catch (e) {
+				this.researchQueue.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.researchQueue.loading = false
+			}
+		},
+		researchQueueLine() {
+			const d = this.researchQueue.data
+			if (!d) return "Research queue · loading…"
+			const n = (d.items || []).length
+			const mins = d.total_budget_minutes != null ? d.total_budget_minutes : 0
+			return `${n} slot(s) · ${mins}m allocated · CIIO says Enough when expired`
+		},
+		topDeployCandidate() {
+			const mc = this.missionControl()
+			const top = (this.today7.top_ranked || [])[0]
+			const sym =
+				(this.deployOpen() ? mc.best_trade : mc.best_monitor) ||
+				(top && top.ticker) ||
+				""
+			return String(sym || "")
+				.trim()
+				.toUpperCase()
+		},
+		preDecisionGateVisible() {
+			if (!this.deployOpen()) return false
+			return !!this.topDeployCandidate()
+		},
+		async fetchPreDecisionGate() {
+			if (!this.preDecisionGateVisible()) {
+				this.preDecisionGate.data = null
+				return
+			}
+			const sym = this.topDeployCandidate()
+			this.preDecisionGate.loading = true
+			this.preDecisionGate.err = ""
+			try {
+				const r = await this.ccFetch(
+					"/api/v7/pre-decision/gate?ticker=" + encodeURIComponent(sym),
+				)
+				if (!r || !r.ok) {
+					this.preDecisionGate.err = "Pre-decision gate unavailable"
+					return
+				}
+				this.preDecisionGate.data = await r.json()
+				if (typeof CCHelpers !== "undefined" && CCHelpers.loadPreDecisionAck) {
+					this.preDecisionGate.acknowledged = CCHelpers.loadPreDecisionAck(sym)
+				}
+			} catch (e) {
+				this.preDecisionGate.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.preDecisionGate.loading = false
+			}
+		},
+		togglePreDecisionAck() {
+			const sym = this.topDeployCandidate()
+			if (!sym) return
+			this.preDecisionGate.acknowledged = !this.preDecisionGate.acknowledged
+			if (typeof CCHelpers !== "undefined" && CCHelpers.savePreDecisionAck) {
+				CCHelpers.savePreDecisionAck(sym, this.preDecisionGate.acknowledged)
+			}
+		},
+		async postJournalStubIfNeeded() {
+			const g = this.preDecisionGate.data
+			const j = g && g.journal
+			if (!j || j.complete) return
+			const sym = this.topDeployCandidate()
+			const body = {
+				ticker: sym,
+				decision: "DEPLOY_INTENT",
+				decision_id: (g && g.decision_id) || j.decision_id || undefined,
+				thesis: "Stub — record thesis before deploy.",
+				alternatives_considered: ["cash", "monitor_only"],
+				rejected_alternative: "Incomplete — auto-stub from pre-decision gate.",
+				expected_downside: "TBD",
+				expected_upside: "TBD",
+				why_now: "Pre-decision gate stub POST.",
+				what_changes_mind: "Complete Decision Journal entry.",
+				source: "pre_decision_gate",
+			}
+			try {
+				await this.ccFetch("/api/v7/decision-journal/entry", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(body),
+				})
+				await this.fetchDeployIntentJournal(sym, body.decision_id)
+				await this.fetchPreDecisionGate()
+			} catch (e) {
+				console.warn("postJournalStubIfNeeded", e)
+			}
+		},
+		preDecisionRedTeamLines() {
+			const ch = (this.preDecisionGate.data && this.preDecisionGate.data.red_team) || {}
+			const c = ch.challenges || {}
+			return [
+				{ key: "why_fails", label: "Why fails", value: c.why_this_fails },
+				{ key: "invalidate", label: "Would invalidate", value: c.would_invalidate },
+				{ key: "change_mind", label: "Change mind", value: c.would_change_mind },
+			].filter((x) => x.value)
+		},
+		preDecisionOutsideViewLine() {
+			const ov = (this.preDecisionGate.data && this.preDecisionGate.data.outside_view) || {}
+			const br = ov.base_rate || {}
+			return `${br.class || ov.setup_type || "setup"} · sample n=${br.sample_n != null ? br.sample_n : 0} · ${br.note || "stub base rate"}`
+		},
+		_syncAttentionBudgetUsageFromStorage() {
+			if (typeof CCHelpers === "undefined" || !CCHelpers.loadAttentionBudgetUsage) return
+			const u = CCHelpers.loadAttentionBudgetUsage()
+			this.attentionBudget.usage = u.categories || { research: 0, portfolio: 0, market: 0 }
+		},
+		tickAttentionBudget() {
+			if (typeof CCHelpers === "undefined") return
+			const now = Date.now()
+			if (!this._attentionBudgetLastTick) {
+				this._attentionBudgetLastTick = now
+				this._attentionBudgetTab = this.tab
+				this._syncAttentionBudgetUsageFromStorage()
+				return
+			}
+			const elapsedMin = Math.floor((now - this._attentionBudgetLastTick) / 60000)
+			if (elapsedMin < 1) return
+			const catFn = CCHelpers.attentionBudgetCategoryForTab
+			const cat = catFn ? catFn(this._attentionBudgetTab || this.tab) : "market"
+			const usage = CCHelpers.loadAttentionBudgetUsage
+				? CCHelpers.loadAttentionBudgetUsage()
+				: { date: new Date().toISOString().slice(0, 10), categories: { research: 0, portfolio: 0, market: 0 } }
+			usage.categories = usage.categories || { research: 0, portfolio: 0, market: 0 }
+			usage.categories[cat] = (usage.categories[cat] || 0) + elapsedMin
+			if (CCHelpers.saveAttentionBudgetUsage) CCHelpers.saveAttentionBudgetUsage(usage)
+			this.attentionBudget.usage = { ...usage.categories }
+			this._attentionBudgetLastTick = now
+			this._attentionBudgetTab = this.tab
+			this.fetchAttentionBudget()
+		},
+		onAttentionBudgetTabChange() {
+			this.tickAttentionBudget()
+			this._attentionBudgetLastTick = Date.now()
+			this._attentionBudgetTab = this.tab
+		},
+		async fetchAttentionBudget() {
+			this._syncAttentionBudgetUsageFromStorage()
+			const u = this.attentionBudget.usage || {}
+			this.attentionBudget.loading = true
+			this.attentionBudget.err = ""
+			try {
+				const q =
+					"?research=" +
+					encodeURIComponent(u.research || 0) +
+					"&portfolio=" +
+					encodeURIComponent(u.portfolio || 0) +
+					"&market=" +
+					encodeURIComponent(u.market || 0)
+				const r = await this.ccFetch("/api/v7/attention-budget/summary" + q)
+				if (!r || !r.ok) {
+					this.attentionBudget.err = "Attention budget unavailable"
+					return
+				}
+				this.attentionBudget.data = await r.json()
+			} catch (e) {
+				this.attentionBudget.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.attentionBudget.loading = false
+			}
+		},
+		attentionBudgetLine() {
+			const d = this.attentionBudget.data
+			if (!d) return "Attention · loading…"
+			if (d.any_exceeded && d.ciio_message) return d.ciio_message
+			const rem = d.total_remaining_minutes != null ? d.total_remaining_minutes : "—"
+			return `Attention ${d.total_used_minutes || 0}/${d.total_budget_minutes || 105}m · ${rem}m left`
+		},
+		attentionBudgetExceeded() {
+			const d = this.attentionBudget.data
+			return !!(d && d.any_exceeded)
+		},
+		async fetchPriorLessons(ticker) {
+			const sym = String(ticker || this.topDeployCandidate() || this.dos.ticker || "")
+				.trim()
+				.toUpperCase()
+			if (!sym) return
+			if (this.priorLessons.ticker === sym && this.priorLessons.data) return
+			this.priorLessons.loading = true
+			this.priorLessons.err = ""
+			this.priorLessons.ticker = sym
+			try {
+				const r = await this.ccFetch(
+					"/api/v7/knowledge/lessons?ticker=" + encodeURIComponent(sym),
+				)
+				if (!r || !r.ok) {
+					this.priorLessons.err = "Prior lessons unavailable"
+					return
+				}
+				this.priorLessons.data = await r.json()
+			} catch (e) {
+				this.priorLessons.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.priorLessons.loading = false
+			}
+		},
+		priorLessonsLine() {
+			const d = this.priorLessons.data
+			if (!d) return ""
+			if (!(d.lessons || []).length) return `${d.ticker || "—"} · no prior lessons`
+			const first = d.lessons[0]
+			return `${d.ticker} · ${d.lesson_count} lesson(s) · ${String(first.lesson || "").slice(0, 72)}`
+		},
+		async fetchBeliefDeployFlags() {
+			if (!this.deployOpen()) {
+				this.beliefDeployFlags.data = null
+				return
+			}
+			this.beliefDeployFlags.loading = true
+			this.beliefDeployFlags.err = ""
+			try {
+				const r = await this.ccFetch("/api/v7/belief-review/summary")
+				if (!r || !r.ok) {
+					this.beliefDeployFlags.err = "Belief deploy flags unavailable"
+					return
+				}
+				const d = await r.json()
+				this.beliefDeployFlags.data = d.deploy_flags || null
+			} catch (e) {
+				this.beliefDeployFlags.err = e && e.message ? e.message : String(e)
+			} finally {
+				this.beliefDeployFlags.loading = false
+			}
+		},
+		beliefDeployStripVisible() {
+			return this.deployOpen() && !!(this.beliefDeployFlags.data && this.beliefDeployFlags.data.active)
+		},
+		beliefDeployStripLine() {
+			const d = this.beliefDeployFlags.data
+			if (!d || !d.active) return ""
+			const tickers = (d.incomplete_tickers || []).slice(0, 4).join(", ")
+			return (d.headline || "Belief incomplete") + (tickers ? " · " + tickers : "")
+		},
 		degradedDecisionAuthorityLine() {
 			const dc = this.decisionAuthority().degraded_copy || {}
 			return dc.decision_authority_line || "Decision authority degraded"
@@ -4221,6 +5286,7 @@ function cc() {
 		},
 		cardShowsDeployLevels(opp) {
 			if (this.cardIsFallbackRow(opp) || this.pageAuthorityIsDegraded() || this.playbookBoardWait()) return false
+			if (this.priceProvenanceLine(opp).stale) return false
 			const g = String(this.cardExecutionGrade(opp) || "").toUpperCase()
 			return ["TRADE", "BUY", "BUY_ON_DIP", "STRONG_TRADE"].includes(g)
 		},
@@ -4228,6 +5294,7 @@ function cc() {
 			if (!opp || !opp.entry_price || !opp.stop_price || opp.entry_price <= opp.stop_price) return false
 			if (this.pageAuthorityIsDegraded() || this.todayUsesBriefFallback() || this.cardIsFallbackRow(opp))
 				return false
+			if (this.priceProvenanceLine(opp).stale) return false
 			const g = String(this.cardExecutionGrade(opp) || "").toUpperCase()
 			return ["TRADE", "BUY", "BUY_ON_DIP", "STRONG_TRADE"].includes(g)
 		},
@@ -4429,6 +5496,12 @@ function cc() {
 			const act = String(this.effectiveCardAction(r) || "").toUpperCase()
 			return !!(r.execution_ready && ["TRADE", "BUY", "BUY_ON_DIP"].includes(act))
 		},
+		topRankedHeroVisible() {
+			if (this.isWaitDay() || this.playbookBoardWait()) return false
+			const r = (this.today7.top_ranked || [])[0]
+			if (!r) return false
+			return !!this.topRankedHeroLabel()
+		},
 		topRankedHeroLabel() {
 			const td = this.today7.todays_decision
 			if (
@@ -4566,6 +5639,10 @@ function cc() {
 			const opts = {
 				tradeability: this.canonicalTradeability() || ss.tradeability || "WAIT",
 				verdict: v,
+				best_action: this.today7.best_action,
+				todays_decision: td,
+				near_miss: this.today7.near_miss || [],
+				sleeve_summary: this.today7.sleeve_summary,
 				market: this.canonicalRegimeLine() || this.today7.regime?.regime || "—",
 				broker: ibkr || "OFFLINE",
 				engine: this.cc_status.breaker ? "BLOCKED" : this.ops.running ? "ON" : "OFF",
@@ -4593,6 +5670,20 @@ function cc() {
 				deploy_label: opts.deployOpen ? "OPEN" : "BLOCKED",
 				deploy_open: opts.deployOpen,
 				best_monitor: v.best_monitor?.ticker || "—",
+				best_trade:
+					opts.best_action?.best_trade_now?.ticker ||
+					td.best_trade?.ticker ||
+					v.best_monitor?.ticker ||
+					"None",
+				near_miss_top:
+					opts.best_action?.best_watch_upgrade?.ticker ||
+					td.best_watch?.ticker ||
+					(opts.near_miss || [])[0]?.ticker ||
+					"—",
+				sleeve_gate_status:
+					opts.sleeve_summary?.active_today?.gate_status ||
+					opts.sleeve_summary?.fund_manager?.gate_status ||
+					"—",
 				why_not_deploy: [],
 				next_actions: [],
 				review_in_minutes: 20,
@@ -4600,6 +5691,58 @@ function cc() {
 		},
 		missionControl() {
 			return this.missionBriefCard()
+		},
+		missionControlLoading() {
+			if (this.tab !== "today") return false
+			if (this.today7.opportunity_verdict || this.today7.regime) return false
+			return this.healthMode === "loading" || !this.live
+		},
+		tradeabilityBadgeClass(tradeability) {
+			const t = tradeability != null ? tradeability : this.canonicalTradeability()
+			if (typeof CCHelpers !== "undefined" && CCHelpers.tradeabilityBadgeClass)
+				return CCHelpers.tradeabilityBadgeClass(t)
+			return "pw"
+		},
+		fourQuestionsBlock() {
+			const mc = this.missionBriefCard()
+			const opts = {
+				verdict: this.today7.opportunity_verdict || {},
+				systemState: this.systemState() || {},
+				bestAction: this.today7.best_action || {},
+				missionCard: mc,
+				market: mc.market,
+				broker: mc.broker,
+				engine: mc.engine,
+				deployOpen: this.deployOpen(),
+				scoreReconciliation: this.dashboardScoreReconciliation(),
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildFourQuestionsBlock)
+				return CCHelpers.buildFourQuestionsBlock(opts)
+			return {
+				know: "—",
+				believe: "—",
+				doubt: "—",
+				therefore: "—",
+				labels: {},
+			}
+		},
+		workflowStage() {
+			const opts = {
+				tab: this.tab,
+				deployOpen: this.deployOpen(),
+				tradeability: this.canonicalTradeability(),
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.resolveWorkflowStage)
+				return CCHelpers.resolveWorkflowStage(opts)
+			return { id: "mission", label: "Mission · 任務" }
+		},
+		workflowStageHint() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.workflowStageHint)
+				return CCHelpers.workflowStageHint(this.workflowStage(), {
+					tab: this.tab,
+					deployOpen: this.deployOpen(),
+				})
+			return "You are in: Mission · 任務"
 		},
 		isResearchSurfaceTab(tab) {
 			const t = tab != null ? tab : this.tab
@@ -4618,6 +5761,7 @@ function cc() {
 			return "Page Gate > Card Rank"
 		},
 		pageOperatorCompactVisible() {
+			if (this.tab === "today" && this.isWaitDay() && !this.deployOpen()) return false
 			return this.tab !== "guide" && this.tab !== "settings" && !this.globalSystemStripVisible()
 		},
 		guideSectionLabel(id) {
@@ -5994,8 +7138,11 @@ function cc() {
 		},
 		dashboardScoreReconciliationDetail() {
 			const sr = this.dashboardScoreReconciliation()
+			if (typeof CCHelpers !== "undefined" && CCHelpers.scoreReconciliationDetail)
+				return CCHelpers.scoreReconciliationDetail(sr, (this.today7.top_ranked || []).slice(0, 8))
 			if (!sr) return this.playbookScoreReconciliationDetail()
 			const bits = []
+			if ((sr.disagree_reasons || []).length) bits.push((sr.disagree_reasons || []).slice(0, 3).join(" · "))
 			if ((sr.divergent_tickers || []).length) bits.push("Divergent: " + (sr.divergent_tickers || []).join(", "))
 			if ((sr.contradictions || []).length) bits.push((sr.contradictions || []).slice(0, 2).join(" · "))
 			return bits.join(" — ") || "Council fit vs scanner rank disagree on top names."
@@ -6007,14 +7154,18 @@ function cc() {
 		playbookScoreReconciliationDetail() {
 			const rows = (this.rankedOpps.rows || []).slice(0, 12).filter((r) => this.rowScoreFamiliesDiverge(r))
 			return rows.length
-				? "Divergent: " +
-						rows
-							.map((r) => r.ticker)
-							.filter(Boolean)
-							.join(", ")
+				? rows
+						.map((r) => {
+							const rs = (r.score_families && r.score_families.reasons) || []
+							return (r.ticker || "?") + (rs[0] ? " · " + rs[0] : "")
+						})
+						.filter(Boolean)
+						.join(" | ")
 				: ""
 		},
 		rowScoreFamiliesDiverge(r) {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.scoreFamiliesDisagree)
+				return CCHelpers.scoreFamiliesDisagree(r)
 			if (!r) return false
 			const eq = r.evidence_quality || {}
 			const council = Number(r.score || eq.validated_score || 0)
@@ -6345,11 +7496,11 @@ function cc() {
 		},
 		async fetchDecisionBoardLight() {
 			try {
-				const r = await fetch("/api/v7/decision/board", {
-					headers: { "X-API-Key": window._apiKey || "dev-secret-local" },
-					signal: AbortSignal.timeout(8000),
+				const r = await this.ccFetch("/api/v7/decision/board", {
+					timeoutMs: 8000,
+					init: { signal: AbortSignal.timeout(8000) },
 				})
-				if (!r.ok) return
+				if (!r || !r.ok) return
 				const board = await r.json()
 				const prevHash = this.ccHeader?.decision_board_hash || this.today7?.decision_board_hash
 				if (prevHash && board.decision_board_hash === prevHash) return
@@ -6365,11 +7516,11 @@ function cc() {
 				if (this.tab) parts.push("tab=" + encodeURIComponent(this.tab))
 				if (light) parts.push("light=1")
 				const tabQ = parts.length ? "?" + parts.join("&") : ""
-				const r = await fetch("/api/ops/cc-header" + tabQ, {
-					headers: { "X-API-Key": window._apiKey || "dev-secret-local" },
-					signal: AbortSignal.timeout(light ? 8000 : 20000),
+				const r = await this.ccFetch("/api/ops/cc-header" + tabQ, {
+					timeoutMs: light ? 8000 : 20000,
+					init: { signal: AbortSignal.timeout(light ? 8000 : 20000) },
 				})
-				if (r.ok) {
+				if (r && r.ok) {
 					const h = await r.json()
 					const eng = h.engine || {}
 					this.ccHeader = {
@@ -6465,6 +7616,11 @@ function cc() {
 				minute: "2-digit",
 				second: "2-digit",
 			})
+			this._attentionBudgetSec = (this._attentionBudgetSec || 0) + 1
+			if (this._attentionBudgetSec >= 60) {
+				this._attentionBudgetSec = 0
+				this.tickAttentionBudget()
+			}
 		},
 		toggleStar(ticker) {
 			this.ccStarred[ticker] = !this.ccStarred[ticker]
@@ -6859,7 +8015,9 @@ function cc() {
 			}
 		},
 		switchTab(t) {
+			this.onAttentionBudgetTabChange()
 			this.tab = ccNormalizeTab(t, "today")
+			this.logSurfaceUsage("tab_" + this.tab, "open")
 			this.ccHeader.header_summary = null
 			this.fetchCcStatus()
 			const tSafe = this.tab
@@ -6889,6 +8047,7 @@ function cc() {
 			if (tSafe === "dossier") {
 				if (this.dos.ticker) {
 					this.fetchDossier()
+					this.fetchPriorLessons(this.dos.ticker)
 				} else {
 					this.dos.status = "idle_no_query"
 					this.dos.error = ""
@@ -6929,13 +8088,40 @@ function cc() {
 			if (tSafe === "command") {
 				this.fetchCommandBoard()
 			}
+			if (tSafe === "today") {
+				this.fetchFirmCadence()
+				this.fetchMarginalRoc()
+				this.fetchDailyIc()
+				this.fetchDecisionReadiness()
+				this.fetchDeployIntentJournal()
+				this.fetchPreDecisionGate()
+				this.fetchAttentionBudget()
+				this.fetchBeliefDeployFlags()
+				if (this.topDeployCandidate()) this.fetchPriorLessons(this.topDeployCandidate())
+			}
+			if (tSafe === "signals") {
+				this.fetchDailyIc()
+			}
+			if (tSafe === "portfolio") {
+				this.fetchMarginalRoc()
+				this.fetchDailyIc()
+			}
 			if (tSafe === "ops") {
 				this.fetchCcStatus()
 				this.fetchOpsRuntime()
 				this.fetchOpsConsole()
 				this.fetchChangelog()
-				this.fetchErrorLog()
+				this.refreshIdentifiedErrors()
 				this.fetchNotifyLog()
+				this.fetchBeliefReview()
+				this.fetchFirmCadence()
+				this.fetchDecisionJournal()
+				this.fetchOverrideJournal()
+				this.fetchCalibrationReport()
+				this.fetchWeeklyIcDigest()
+				this.fetchUsageLogSummary()
+				this.fetchResearchQueue()
+				this.fetchAttentionBudget()
 			}
 			if (tSafe === "ibkr") {
 				this.ibkrRefreshAll()
@@ -7278,7 +8464,8 @@ function cc() {
 		},
 		pfDemoteResearch() {
 			const cre = this.pfDecision && this.pfDecision.critical_risk_event
-			return !!(cre && cre.active)
+			if (cre && cre.active) return true
+			return this.hideMockSurfacesOnDeploy()
 		},
 		pfPosRisk(pos) {
 			const px = pos.current_price || pos.entry_price || pos.avg_cost || 0
@@ -8197,6 +9384,7 @@ function cc() {
 				}
 			} finally {
 				this.errorLog.loading = false
+				this.rebuildIdentifiedErrors()
 			}
 		},
 
@@ -8437,16 +9625,33 @@ function cc() {
 				this.sig.no_trade_reason = "⚠ Failed to connect to the scanner. Check if the server is running."
 			}
 		},
+		portfolioSsotFallbackActive() {
+			return !!(this.pf && this.pf.ssotFallback)
+		},
+		portfolioSsotBannerLine() {
+			return "Browser cache only — not synced to server · 僅本機快取，未同步伺服器"
+		},
 		async fetchPortfolio() {
 			this.pf.loading = true
+			this.pf.ssotFallback = false
 			try {
+				try {
+					const ssotR = await this.ccFetch("/api/v7/portfolio", { retries: 2, backoff: 300 })
+					if (ssotR && ssotR.ok) {
+						const ssot = await ssotR.json()
+						this.pf.ssot = ssot.ssot || "server"
+						this.pf.source = ssot.source || "server"
+					}
+				} catch (e) {
+					console.warn("portfolio SSOT skipped:", e)
+				}
 				const r = await fetch("/api/portfolio/monitor")
 				if (!r.ok) throw 0
 				const d = await r.json()
-				this.pf.positions = this.mergeLocalPortfolioHoldings(d.positions || [])
+				this.pf.positions = d.positions || []
 				this.pf.alerts = d.alerts || []
 				this.pf.summary = d.summary || null
-				this.pf.source = "manual"
+				if (this.pf.source !== "ibkr") this.pf.source = d.summary?.source || this.pf.source || "server"
 				// ── IBKR auto-sync: when broker is connected, broker positions become canonical ──
 				// Manual entries are kept as overlay (e.g. for stop/target metadata) but counts/equity reflect IBKR
 				try {
@@ -8533,7 +9738,9 @@ function cc() {
 				const local = this.hydratePortfolioFromLocal()
 				if (local && local.holdings && local.holdings.length) {
 					this.pf.positions = local.holdings
-					this.pf.source = "manual"
+					this.pf.source = "local_cache"
+					this.pf.ssot = "local_cache"
+					this.pf.ssotFallback = true
 					const totalVal = local.holdings.reduce(
 						(s, p) => s + (p.market_value || p.entry_price * p.shares || 0),
 						0,
@@ -8548,7 +9755,12 @@ function cc() {
 						total_cost: Math.round(totalCost * 100) / 100,
 						total_pnl: Math.round((totalVal - totalCost) * 100) / 100,
 						total_pnl_pct: totalCost ? Math.round((totalVal / totalCost - 1) * 10000) / 100 : 0,
+						source: "local_cache",
 					}
+				} else {
+					this.pf.positions = []
+					this.pf.source = "unavailable"
+					this.pf.summary = this.pf.summary || null
 				}
 			} finally {
 				this.pf.loading = false
@@ -10874,7 +12086,109 @@ function cc() {
 				this.marketStrip.loading = false
 			}
 		},
+		initReplayFromStorage() {
+			try {
+				const stored = localStorage.getItem("cc_replay_as_of")
+				if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) {
+					this.replay.as_of = stored
+					this.replay.active = true
+					this.replay.banner =
+						"Historical replay as of " + stored + " — LIVE AUTHORITY: NONE"
+				}
+			} catch (e) {}
+		},
+		replayDashboardUrl(refresh) {
+			let u = "/api/v7/replay/dashboard?as_of=" + encodeURIComponent(this.replay.as_of || "")
+			if (this.replay.session_id) u += "&session=" + encodeURIComponent(this.replay.session_id)
+			if (refresh) u += "&refresh=true"
+			return u
+		},
+		async enterReplayMode(asOf) {
+			const d = String(asOf || "").trim().slice(0, 10)
+			if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+				this.replay.error = "Invalid replay date — use YYYY-MM-DD"
+				return
+			}
+			this.replay.error = ""
+			this.replay.as_of = d
+			this.replay.active = true
+			this.replay.loading = true
+			try {
+				localStorage.setItem("cc_replay_as_of", d)
+			} catch (e) {}
+			await this.refreshReplaySurfaces()
+		},
+		exitReplayMode() {
+			this.replay.active = false
+			this.replay.as_of = ""
+			this.replay.session_id = ""
+			this.replay.error = ""
+			this.replay.banner = ""
+			this.replay.loading = false
+			try {
+				localStorage.removeItem("cc_replay_as_of")
+			} catch (e) {}
+			this.trust = { mode: "LIVE", source: "cc-header" }
+			this.fetchToday7()
+			this.fetchRanked({ refresh: true })
+			this.fetchDecisionBoardLight()
+		},
+		async refreshReplaySurfaces(refresh) {
+			if (!this.replay.active || !this.replay.as_of) return
+			this.replay.loading = true
+			this.replay.error = ""
+			try {
+				const r = await this.ccFetch(this.replayDashboardUrl(refresh), {
+					retries: 1,
+					backoff: 400,
+					timeoutMs: 45000,
+				})
+				if (!r || !r.ok) throw new Error("HTTP " + (r ? r.status : "fail"))
+				const d = await r.json()
+				this.replay.session_id = d.session_id || this.replay.session_id
+				this.replay.banner =
+					d.banner ||
+					"Historical replay as of " + d.as_of + " — LIVE AUTHORITY: NONE"
+				this.applyReplayDashboard(d)
+			} catch (e) {
+				console.warn("refreshReplaySurfaces failed", e)
+				this.replay.error = "Replay fetch failed — " + String(e.message || e)
+			} finally {
+				this.replay.loading = false
+			}
+		},
+		applyReplayDashboard(d) {
+			if (!d || typeof d !== "object") return
+			this.trust = d.trust || { mode: "REPLAY", source: "historical_decision_replay", as_of: d.as_of }
+			this.today7.regime = d.market_regime || null
+			this.today7.decision_authority = d.decision_authority || null
+			this.today7.top_ranked = d.top_5 || []
+			this.today7.todays_decision = d.todays_decision || null
+			this.today7.filter_funnel = d.filter_funnel || null
+			this.today7.surface_authority = d.surface_authority || null
+			this.today7.historical_opportunities = d.historical_opportunities || null
+			this.today7.date = d.date || d.as_of
+			this.today7.replay_mode = true
+			this.ccHeader.page_authority_mode = "replay"
+			this.ccHeader.decision_authority = d.decision_authority || null
+			if (d.opportunities && d.opportunities.length) {
+				this.applyRankedPayload(
+					{
+						opportunities: d.opportunities,
+						near_miss: [],
+						decision_authority: d.decision_authority,
+						surface_authority: d.surface_authority,
+						replay_mode: true,
+						as_of: d.as_of,
+					},
+					{ fromReplay: true },
+				)
+			}
+		},
 		async fetchToday7() {
+			if (this.replay.active && this.replay.as_of) {
+				return this.refreshReplaySurfaces()
+			}
 			try {
 				const prevHash = this.today7?.decision_board_hash || ""
 				const r = await this.ccFetch("/api/v7/today", { retries: 1, backoff: 400, timeoutMs: 12000 })
@@ -11035,6 +12349,7 @@ function cc() {
 				}
 				if (!this.playbookBoardHasContent()) this.fetchWarmupBriefBoard()
 			}
+			this.rebuildIdentifiedErrors()
 		},
 		hydrateToday7FromCache() {
 			try {
@@ -11163,6 +12478,10 @@ function cc() {
 			}
 		},
 		async fetchRanked(opts = {}) {
+			if (this.replay.active && this.replay.as_of) {
+				if (!(this.rankedOpps.rows || []).length) await this.refreshReplaySurfaces()
+				return
+			}
 			const hadRows = (this.rankedOpps.rows || []).length > 0
 			if (!hadRows) this.hydrateRankedFromCache()
 			const needsBoard = !(this.rankedOpps.rows || []).length
@@ -12518,6 +13837,7 @@ function cc() {
 				this.opsConsole.error = this.surfaceFetchErrorLine(e.message || "ops console failed", "ops")
 			} finally {
 				this.opsConsole.loading = false
+				this.rebuildIdentifiedErrors()
 			}
 		},
 

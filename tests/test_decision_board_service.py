@@ -221,9 +221,12 @@ def test_board_includes_unlock_deploy_and_regime():
 def test_board_includes_gate_snapshot_and_rows():
     payload = _base_payload(tradeability="WAIT")
     payload["top_5"] = [{"ticker": "AAPL", "rank": 1, "action": "WATCH"}]
+    payload["near_miss"] = [{"ticker": "MSFT", "rank": 2, "action": "WATCH"}]
     board = build_decision_board(payload, source="today")
     assert "gate_snapshot" in board
     assert board["gate_snapshot"]["deploy_open"] is False
-    assert len(board["board_rows"]) == 1
+    assert len(board["board_rows"]) == 2
+    tickers = {r["ticker"] for r in board["board_rows"]}
+    assert tickers == {"AAPL", "MSFT"}
     assert board["board_rows"][0]["attribution_root_ref"].startswith("attr-root-")
     assert board["board_rows"][0]["decision_id"].startswith("dec-AAPL-")

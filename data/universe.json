@@ -1,0 +1,2946 @@
+{
+  "meta": {
+    "version": "2026.08.31",
+    "source": "curated_liquid_us",
+    "provenance": "static_config",
+    "description": "CC X investable universe \u2014 core (fast refresh) + extended (research pad)"
+  },
+  "tiers": {
+    "core": {
+      "description": "RS cards, watchlist, regime benchmarks \u2014 fast refresh",
+      "scan_cap": 150
+    },
+    "extended": {
+      "description": "Discovery / monitor pool padding \u2014 research tier only",
+      "scan_cap": 400
+    }
+  },
+  "symbols": [
+    {
+      "ticker": "DIA",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Dow 30"
+    },
+    {
+      "ticker": "IJH",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Mid Cap"
+    },
+    {
+      "ticker": "IJR",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Small Cap"
+    },
+    {
+      "ticker": "ITOT",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Total Market"
+    },
+    {
+      "ticker": "IVV",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "S&P 500"
+    },
+    {
+      "ticker": "IWB",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Russell 1000"
+    },
+    {
+      "ticker": "IWM",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Russell 2000"
+    },
+    {
+      "ticker": "IWV",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Russell 3000"
+    },
+    {
+      "ticker": "MDY",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Mid Cap"
+    },
+    {
+      "ticker": "ONEQ",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Nasdaq Composite"
+    },
+    {
+      "ticker": "QQQ",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Nasdaq 100"
+    },
+    {
+      "ticker": "RSP",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Equal Weight S&P"
+    },
+    {
+      "ticker": "SCHB",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Total Market"
+    },
+    {
+      "ticker": "SCHX",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Large Cap"
+    },
+    {
+      "ticker": "SPLG",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "S&P 500"
+    },
+    {
+      "ticker": "SPMD",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Mid Cap"
+    },
+    {
+      "ticker": "SPY",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Broad Market"
+    },
+    {
+      "ticker": "VOO",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "S&P 500"
+    },
+    {
+      "ticker": "VTI",
+      "asset_class": "index_proxy",
+      "tier": "core",
+      "sector": "Index",
+      "theme": "Total Market"
+    },
+    {
+      "ticker": "XLB",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Materials"
+    },
+    {
+      "ticker": "XLC",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Communication"
+    },
+    {
+      "ticker": "XLE",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Energy"
+    },
+    {
+      "ticker": "XLF",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Financials"
+    },
+    {
+      "ticker": "XLI",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Industrials"
+    },
+    {
+      "ticker": "XLK",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Technology"
+    },
+    {
+      "ticker": "XLP",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Consumer Staples"
+    },
+    {
+      "ticker": "XLRE",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Real Estate"
+    },
+    {
+      "ticker": "XLU",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Utilities"
+    },
+    {
+      "ticker": "XLV",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Healthcare"
+    },
+    {
+      "ticker": "XLY",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Consumer Disc."
+    },
+    {
+      "ticker": "AGG",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "AIQ",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "ARKG",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "ARKK",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Innovation"
+    },
+    {
+      "ticker": "ARKQ",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "ARKW",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "BITO",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Bitcoin"
+    },
+    {
+      "ticker": "BND",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "BOTZ",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "BUG",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "CIBR",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "CLOU",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "DGRO",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "EEM",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Emerging Markets"
+    },
+    {
+      "ticker": "FDN",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "FXI",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "China Large Cap"
+    },
+    {
+      "ticker": "GDX",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Gold Miners"
+    },
+    {
+      "ticker": "GDXJ",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "GLD",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Gold"
+    },
+    {
+      "ticker": "GNOM",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "HACK",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "HYG",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "High Yield"
+    },
+    {
+      "ticker": "IAI",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "IBB",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "ICLN",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "IEF",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "IGV",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Software"
+    },
+    {
+      "ticker": "IHF",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "IHI",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "ITA",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Aerospace/Defense"
+    },
+    {
+      "ticker": "IYR",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "IYT",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "IYZ",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "JETS",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "KBE",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "KRE",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "KWEB",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "China Internet"
+    },
+    {
+      "ticker": "LABU",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "LIT",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "LQD",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "MOAT",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "MTUM",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "OIH",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "PAVE",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "PNQI",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "PPA",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "PSI",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "PSJ",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "PTF",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "QQQM",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Nasdaq 100"
+    },
+    {
+      "ticker": "QUAL",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "REMX",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "ROBO",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SCHD",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Dividend"
+    },
+    {
+      "ticker": "SDY",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SHY",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SIL",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SILJ",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SIZE",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SKYY",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SLV",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SMH",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Semiconductors"
+    },
+    {
+      "ticker": "SOXX",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Semiconductors"
+    },
+    {
+      "ticker": "SPHB",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SPHQ",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SPLV",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "SVXY",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "TAN",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "TLT",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Long Treasuries"
+    },
+    {
+      "ticker": "UNG",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "URA",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "URNM",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "USMV",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "USO",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "VIG",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "VIXY",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "VLUE",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "VNQ",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "REITs"
+    },
+    {
+      "ticker": "VWO",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "WCLD",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "XAR",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "XBI",
+      "asset_class": "etf",
+      "tier": "core",
+      "sector": "ETF",
+      "theme": "Biotech"
+    },
+    {
+      "ticker": "XES",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "XHB",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "XHS",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "XME",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "XOP",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "XPH",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "XRT",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "XSD",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "XSW",
+      "asset_class": "etf",
+      "tier": "extended",
+      "sector": "ETF",
+      "theme": "Thematic"
+    },
+    {
+      "ticker": "AAPL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "MSFT",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "NVDA",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "GOOGL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "GOOG",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "AMZN",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Discretionary",
+      "theme": ""
+    },
+    {
+      "ticker": "META",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "TSLA",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Discretionary",
+      "theme": ""
+    },
+    {
+      "ticker": "AMD",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "AVGO",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "INTC",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "QCOM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "TXN",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "MU",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "AMAT",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "LRCX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "KLAC",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "ADI",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "MRVL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "ON",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "ARM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "SMCI",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "CRDO",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "ANET",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "DELL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "CRM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "ORCL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "ADBE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "NOW",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "INTU",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "PANW",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "CRWD",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "SNOW",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "DDOG",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "ZS",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "NET",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "PLTR",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "SHOP",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "UBER",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Discretionary",
+      "theme": ""
+    },
+    {
+      "ticker": "ABNB",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Discretionary",
+      "theme": ""
+    },
+    {
+      "ticker": "COIN",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "HOOD",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "NFLX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Communication Services",
+      "theme": ""
+    },
+    {
+      "ticker": "DIS",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Communication Services",
+      "theme": ""
+    },
+    {
+      "ticker": "CMCSA",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Communication Services",
+      "theme": ""
+    },
+    {
+      "ticker": "NKE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Discretionary",
+      "theme": ""
+    },
+    {
+      "ticker": "SBUX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Discretionary",
+      "theme": ""
+    },
+    {
+      "ticker": "MCD",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Discretionary",
+      "theme": ""
+    },
+    {
+      "ticker": "COST",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Staples",
+      "theme": ""
+    },
+    {
+      "ticker": "WMT",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Staples",
+      "theme": ""
+    },
+    {
+      "ticker": "HD",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Discretionary",
+      "theme": ""
+    },
+    {
+      "ticker": "LOW",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Consumer Discretionary",
+      "theme": ""
+    },
+    {
+      "ticker": "JPM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "BAC",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "WFC",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "GS",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "MS",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "V",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "MA",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "AXP",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "SCHW",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "BLK",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "PYPL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "UNH",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Healthcare",
+      "theme": ""
+    },
+    {
+      "ticker": "LLY",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Healthcare",
+      "theme": ""
+    },
+    {
+      "ticker": "JNJ",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Healthcare",
+      "theme": ""
+    },
+    {
+      "ticker": "PFE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Healthcare",
+      "theme": ""
+    },
+    {
+      "ticker": "ABBV",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Healthcare",
+      "theme": ""
+    },
+    {
+      "ticker": "MRK",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Healthcare",
+      "theme": ""
+    },
+    {
+      "ticker": "GILD",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Healthcare",
+      "theme": ""
+    },
+    {
+      "ticker": "REGN",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Healthcare",
+      "theme": ""
+    },
+    {
+      "ticker": "ISRG",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Healthcare",
+      "theme": ""
+    },
+    {
+      "ticker": "VRTX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Healthcare",
+      "theme": ""
+    },
+    {
+      "ticker": "XOM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Energy",
+      "theme": ""
+    },
+    {
+      "ticker": "CVX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Energy",
+      "theme": ""
+    },
+    {
+      "ticker": "COP",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Energy",
+      "theme": ""
+    },
+    {
+      "ticker": "BA",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Industrials",
+      "theme": ""
+    },
+    {
+      "ticker": "CAT",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Industrials",
+      "theme": ""
+    },
+    {
+      "ticker": "GE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Industrials",
+      "theme": ""
+    },
+    {
+      "ticker": "RTX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Industrials",
+      "theme": ""
+    },
+    {
+      "ticker": "LMT",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Industrials",
+      "theme": ""
+    },
+    {
+      "ticker": "DE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Industrials",
+      "theme": ""
+    },
+    {
+      "ticker": "HON",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Industrials",
+      "theme": ""
+    },
+    {
+      "ticker": "SOFI",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "MSTR",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "IONQ",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Technology",
+      "theme": ""
+    },
+    {
+      "ticker": "RBLX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Communication Services",
+      "theme": ""
+    },
+    {
+      "ticker": "XYZ",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "Financials",
+      "theme": ""
+    },
+    {
+      "ticker": "BRK.B",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "LIN",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TMUS",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CHTR",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "WELL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "AMT",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CCI",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "EQIX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "O",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PLD",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "NOC",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "GD",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "EMR",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ETN",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ITW",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PH",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ROK",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "FTV",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "WM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "RSG",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "VRSK",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PAYX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ADP",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CTAS",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "FAST",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "GWW",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "UPS",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "FDX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "NSC",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CSX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PCAR",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "WAB",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TDG",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "HWM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "EXPD",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "STE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ALLE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "HII",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "DHR",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TMO",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ABT",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "BMY",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CI",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ELV",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "HCA",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "HUM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CNC",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MOH",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PGR",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "AFL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MET",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PRU",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TRV",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "AIG",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ALL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CINF",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "AJG",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MMC",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "AON",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TROW",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ICE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CME",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MCO",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "SPGI",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ACGL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "RJF",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "STT",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "NTRS",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "COF",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "SYF",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "GL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "L",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ERIE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "RE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "FDS",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MKTX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CBOE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "NDAQ",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "BKNG",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TJX",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MAR",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "HLT",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "LVS",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CZR",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "RCL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CCL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "NCLH",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "LEN",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "DHI",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PHM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "NVR",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "BURL",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ULTA",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "GPC",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "EXPE",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CPRT",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PENN",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "F",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "GM",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "APTV",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "BWA",
+      "asset_class": "equity",
+      "tier": "core",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ADSK",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "WDAY",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TEAM",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MELI",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "SE",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "GRAB",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "APP",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "RDDT",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "DUOL",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TOST",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CAVA",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "BROS",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "AXON",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "FICO",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TTWO",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "EA",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "LULU",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "DECK",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ONON",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CROX",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "DASH",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "LYFT",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "AFRM",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "UPST",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "VST",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CEG",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "FSLR",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ENPH",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "DKNG",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "SNAP",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PINS",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MTCH",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "LYV",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "FOXA",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "OMC",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "IPG",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "T",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "VZ",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "WBD",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PARA",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "SPOT",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ROKU",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TTD",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ATVI",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "U",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "DOCU",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "OKTA",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MDB",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ESTC",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CFLT",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "GTLB",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "HUBS",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "VEEV",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "BILL",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PAYC",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PCTY",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TWLO",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PATH",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "AI",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "SOUN",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "BBAI",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "RKLB",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ASTS",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "LUNR",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "JOBY",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ACHR",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "RIVN",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "LCID",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "NIO",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "XPEV",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "LI",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "BIDU",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "JD",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "PDD",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "BABA",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TSM",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ASML",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "SAP",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "NVO",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "AZN",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "GSK",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "SNY",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "UL",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "DEO",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "BTI",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MO",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "STZ",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TAP",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MNST",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "KDP",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "KHC",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "GIS",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "K",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "HSY",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CL",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CHD",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "EL",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CLX",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "SJM",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "MKC",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CAG",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "CPB",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "HRL",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "TSN",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "SYY",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "KR",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    },
+    {
+      "ticker": "ADM",
+      "asset_class": "equity",
+      "tier": "extended",
+      "sector": "",
+      "theme": ""
+    }
+  ]
+}

@@ -152,6 +152,48 @@
       .cc-expand-rail-icon{font-size:14px;line-height:1}
       .cc-expand-rail-label{font-size:8px;opacity:.9}
       @media (max-width:640px){.cc-expand-rail{right:6px;padding:7px 5px;max-width:46px}}
+      /* ── Institutional visual system (8px grid) ── */
+      .cc-surface-pad{padding:8px 12px 0}
+      .page-gate-strip{background:var(--s0);border-bottom:1px solid var(--bd);padding:4px 12px;font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:600;letter-spacing:.4px;color:var(--t3);text-align:center}
+      .research-banner{background:rgba(88,166,255,.06);border-bottom:1px solid rgba(88,166,255,.14);padding:6px 12px;font-size:9px;font-weight:600;color:var(--t2);text-align:center;line-height:1.45}
+      .workflow-hint-strip{background:var(--s0);border-bottom:1px solid var(--bd);padding:4px 12px;font-size:8px;color:var(--t3);text-align:center}
+      .mc-card{padding:12px 14px;border-left:3px solid var(--bd);background:var(--s1)}
+      .mc-card.mc-wait,.mc-card.mc-status-wait{border-left-color:rgba(251,191,36,.55)}
+      .mc-card.mc-selective,.mc-card.mc-status-selective{border-left-color:rgba(88,166,255,.55)}
+      .mc-card.mc-trade,.mc-card.mc-status-trade{border-left-color:rgba(0,212,170,.55)}
+      .mc-card.mc-notrade,.mc-card.mc-status-notrade{border-left-color:rgba(255,92,92,.45)}
+      .mc-loading{display:flex;align-items:center;gap:8px;padding:16px;font-size:10px;color:var(--t3)}
+      .mc-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+      .mc-header-left{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+      .mc-title-label{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3)}
+      .workflow-stage-pill{background:rgba(230,237,243,.06)!important;color:var(--t2)!important}
+      .status-wait{background:rgba(251,191,36,.1);color:#d4a017}
+      .status-selective{background:rgba(88,166,255,.1);color:#6ea8e0}
+      .status-trade{background:rgba(0,212,170,.1);color:#00b894}
+      .status-notrade{background:rgba(255,92,92,.1);color:#e07070}
+      .idos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:8px}
+      @media (min-width:768px){.idos-grid{grid-template-columns:repeat(4,1fr)}}
+      .idos-cell{padding:8px;background:var(--s2);border:1px solid var(--bd);border-radius:6px;min-height:56px}
+      .idos-therefore-cell{border-color:rgba(0,212,170,.22);background:rgba(0,212,170,.04)}
+      .idos-label{font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:.55px;color:var(--t3);margin-bottom:4px}
+      .idos-value{font-size:10px;font-weight:600;color:var(--t1);line-height:1.4}
+      .idos-doubt{color:var(--t2);font-weight:500}
+      .idos-therefore{color:var(--green);font-weight:700}
+      .mc-verdict{font-size:11px;font-weight:700;color:var(--t1);line-height:1.45;margin-bottom:6px;padding-top:4px;border-top:1px solid var(--bd)}
+      .mc-detail{font-size:8px;color:var(--t2);line-height:1.45;margin-bottom:6px}
+      .mc-footer-row{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px;border-top:1px dashed var(--bd);font-size:8px}
+      .mc-footer-item{flex:1;min-width:140px;padding:6px 8px;background:var(--s2);border-radius:4px;border:1px solid rgba(255,255,255,.04)}
+      .mc-footer-label{display:block;font-size:7px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--t3);margin-bottom:2px}
+      .mc-footer-value{display:block;color:var(--t2);line-height:1.35}
+      .ops-section-hdr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.45px;color:var(--t3);padding:8px 0 4px;margin-top:8px}
+      .ops-section-purpose{font-size:8px;color:var(--t2);margin-bottom:8px;line-height:1.45}
+      nav[data-cc-bottom-nav] a{min-width:44px;min-height:44px;padding:4px 2px;justify-content:center}
+      /* Review pack popup uses embedded @media print in generated HTML; hide chrome if user prints Settings */
+      @media print{
+        nav[data-cc-bottom-nav],.tab-bar,.trust-strip,.research-banner,.page-gate-strip,.workflow-hint-strip{display:none!important}
+        main{display:block!important}
+        body{background:#fff;color:#111}
+      }
     </style>
   </head>
 
@@ -168,6 +210,19 @@
           </div>
         </div>
         <div class="flex items-center gap-3">
+          <!-- ── LIVE | REPLAY control ── -->
+          <div style="display:flex;align-items:center;border-radius:6px;overflow:hidden;border:1px solid var(--bd);font-size:10px;font-weight:700">
+            <button @click="exitReplayMode()" type="button"
+              :style="!replay.active?'background:#065f46;color:#6ee7b7;padding:4px 10px;border:none;cursor:pointer':'background:var(--s2);color:var(--t3);padding:4px 10px;border:none;cursor:pointer'"
+              title="Live dashboard — current decision authority">LIVE</button>
+            <button @click="replay.active ? null : (tt.show=true)" type="button"
+              :style="replay.active?'background:#312e81;color:#c4b5fd;padding:4px 10px;border:none;cursor:pointer':'background:var(--s2);color:var(--t3);padding:4px 10px;border:none;cursor:pointer'"
+              :title="replay.active ? ('Replay as of '+replay.as_of) : 'Enter historical replay — pick a date in Time Travel panel'"
+              x-text="replay.active ? ('REPLAY · '+replay.as_of) : 'DEMO/REPLAY'"></button>
+          </div>
+          <button x-show="replay.active" @click="exitReplayMode()" type="button"
+            style="padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;background:#4338ca;color:#e0e7ff;border:1px solid #6366f1;cursor:pointer"
+            title="Return to live dashboard">Exit Replay</button>
           <!-- ── MODE PILL (LIVE/PAPER/DRY) — click → Ops ── -->
           <button @click="switchTab('ops')" style="display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.6px;border:none;cursor:pointer"
             :style="cc_status.mode==='LIVE'?'background:#065f46;color:#6ee7b7;border:1px solid #10b981':cc_status.mode==='PAPER'?'background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6':'background:#3f3f46;color:#a1a1aa;border:1px solid #52525b'"
@@ -230,6 +285,18 @@
         </div>
       </div>
     </header>
+    <!-- ══════ REPLAY BANNER (global purple/indigo) ══════ -->
+    <div x-show="replay.active" x-cloak
+      style="background:linear-gradient(90deg,#312e81,#4338ca);color:#e0e7ff;padding:10px 16px;border-bottom:1px solid #6366f1;font-size:11px;display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+      <span style="font-weight:800;letter-spacing:.5px">⏪ HISTORICAL REPLAY</span>
+      <span x-text="replay.banner || ('As of '+replay.as_of+' — LIVE AUTHORITY: NONE')"></span>
+      <span x-show="replay.loading" style="opacity:.85">Loading snapshot…</span>
+      <span x-show="replay.error" style="color:#fca5a5" x-text="replay.error"></span>
+      <button @click="refreshReplaySurfaces(true)" type="button" :disabled="replay.loading"
+        style="margin-left:auto;padding:4px 10px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(255,255,255,.12);color:#e0e7ff;border:1px solid rgba(255,255,255,.25);cursor:pointer">↻ Refresh</button>
+      <button @click="exitReplayMode()" type="button"
+        style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:700;background:#1e1b4b;color:#c4b5fd;border:1px solid #6366f1;cursor:pointer">Exit Replay · 返回 LIVE</button>
+    </div>
     <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}</style>
 
     <!-- ══════ POSITION RISK ALERTS MODAL ══════ -->
@@ -336,6 +403,7 @@
             </select>
           </div>
           <button @click="runTimeTravel()" class="btn-s text-[11px]" :disabled="tt.loading" style="padding:6px 12px;font-weight:700" x-text="tt.loading?'⏳ Running…':'▶ Run replay'"></button>
+          <button @click="enterReplayMode(tt.date); tt.show=false" class="btn-s text-[11px]" :disabled="!tt.date||replay.loading" style="padding:6px 12px;font-weight:700;background:#4338ca;color:#e0e7ff;border:1px solid #6366f1" title="Full dashboard replay for this date">📊 Dashboard replay</button>
           <div style="margin-left:auto;font-size:10px;color:var(--t3)">Causal — no look-ahead</div>
         </div>
         <div x-show="tt.err" style="background:#7f1d1d;color:#fca5a5;padding:8px;border-radius:6px;font-size:11px;margin-bottom:10px" x-text="tt.err"></div>
@@ -480,14 +548,17 @@
     </div>
 
     <!-- ══════ Page Gate philosophy (permanent) ══════ -->
-    <div data-cc="page-gate-philosophy-strip" x-show="tab!=='guide'" x-cloak
-      style="background:var(--s0);border-bottom:1px solid var(--bd);padding:3px 12px;font-size:8px;font-weight:700;letter-spacing:.35px;color:var(--t3);text-align:center">
+    <div data-cc="page-gate-philosophy-strip" class="page-gate-strip" x-show="tab!=='guide'" x-cloak>
       <span x-text="pageGatePhilosophyLine()"></span>
     </div>
 
+    <!-- ══════ Workflow stage hint ══════ -->
+    <div data-cc="workflow-stage-hint" class="workflow-hint-strip" x-show="tab!=='guide'&&tab!=='settings'" x-cloak>
+      <span x-text="workflowStageHint()"></span>
+    </div>
+
     <!-- ══════ Research-only banner (one line) ══════ -->
-    <div data-cc="research-only-banner" x-show="isResearchSurfaceTab()" x-cloak
-      style="background:rgba(59,130,246,.08);border-bottom:1px solid rgba(59,130,246,.22);padding:5px 12px;font-size:9px;font-weight:700;color:var(--blue);text-align:center;line-height:1.4">
+    <div data-cc="research-only-banner" class="research-banner" x-show="isResearchSurfaceTab()" x-cloak>
       <span x-text="researchOnlyBannerLine()"></span>
     </div>
 
@@ -601,7 +672,7 @@
           </template>
           <template x-if="headerSummary().show_decision_chips && !pageAuthorityIsDegraded() && today7.todays_decision">
             <span class="text-[10px] font-bold" :class="deployOpen()?'text-green-400':'text-amber-300'" x-text="today7.todays_decision.deploy_posture"></span>
-            <span class="text-[10px] truncate" style="color:var(--t2);max-width:220px" x-text="pmDecisionTickerLine()"></span>
+            <span class="text-[10px] truncate" style="color:var(--t2);max-width:320px" x-text="pmDecisionTickerLine()"></span>
           </template>
         </div>
         <div class="pm-strip-chip-menu" x-show="pmStripUseChipMenu()" @click.outside="pmStripChipMenuOpen=false">
@@ -1031,38 +1102,165 @@
 
     <!-- @cc-partial deploy_surfaces -->
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
-      <!-- ── Mission Control (operator landing — 5-second decision) ── -->
+      <!-- Belief incomplete amber strip (deploy_open + held tickers missing thesis/kill) -->
+      <div x-show="tab==='today'&&beliefDeployStripVisible()" data-cc="belief-deploy-strip" class="cc-surface-pad" style="padding-bottom:0">
+        <div class="p-2 rounded text-[9px]" style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);color:var(--amber);line-height:1.55">
+          <span class="pill pa text-[7px] font-bold mr-1">BELIEF</span>
+          <span class="font-bold" x-text="beliefDeployStripLine()"></span>
+        </div>
+      </div>
+      <!-- ── Mission Control (IDOS Four Questions — operator landing) ── -->
       <template x-if="tab==='today'">
-        <div data-cc="mission-control-card" style="padding:4px 12px 0">
-          <div class="card card-p" style="padding:10px 12px;border-left:4px solid var(--green);background:linear-gradient(135deg,rgba(0,212,170,.06),rgba(88,166,255,.04))">
-            <div class="flex flex-wrap items-center gap-2 mb-2">
-              <span class="pill text-[8px] font-bold uppercase" :class="missionControl().mission_label==='MISSION'?'pg':'pa'" x-text="missionControl().mission_label"></span>
-              <span class="text-[9px] font-bold uppercase" style="color:var(--t3)" x-text="missionControl().title"></span>
+        <div data-cc="mission-control-card" class="cc-surface-pad">
+          <template x-if="missionControlLoading()">
+            <div class="card mc-card mc-loading">
+              <span class="spin"></span>
+              <span>Refreshing mission… · 更新任務狀態</span>
             </div>
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[8px] mb-2">
-              <div><span class="font-bold" style="color:var(--t3)">Market · 市場</span><div class="text-white font-semibold" x-text="missionControl().market_state"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Deploy? · 部署?</span><div class="text-white font-semibold" x-text="missionControl().deploy"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Opportunity · 機會</span><div class="text-white font-semibold" x-text="missionControl().good_opportunity"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Action · 行動</span><div class="text-amber-300 font-semibold" x-text="missionControl().what_to_do"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Why · 原因</span><div style="color:var(--t2);line-height:1.35" x-text="missionControl().why"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Review · 再檢視</span><div style="color:var(--t3)" x-text="missionControl().next_review"></div></div>
+          </template>
+          <div x-show="!missionControlLoading()" class="card mc-card" :class="'mc-'+tradeabilityBadgeClass(missionControl().tradeability)">
+            <div class="mc-header">
+              <div class="mc-header-left">
+                <span class="pill text-[8px] font-bold uppercase workflow-stage-pill" x-text="workflowStage().label"></span>
+                <span class="pill text-[8px] font-bold uppercase" :class="tradeabilityBadgeClass(missionControl().tradeability)" x-text="canonicalTradeability()||missionControl().tradeability"></span>
+                <span class="pill text-[8px] font-bold uppercase" :class="missionControl().mission_label==='MISSION'?'pg':'pa'" x-text="missionControl().mission_label"></span>
+              </div>
+              <span class="mc-title-label" x-text="missionControl().title"></span>
             </div>
-            <div class="text-[10px] font-bold text-white mb-1" x-text="missionControl().quality_headline"></div>
-            <div class="text-[8px] mb-1" x-show="missionControl().why_not_deploy.length">
-              <template x-for="w in missionControl().why_not_deploy" :key="'mcw-'+w"><div style="color:var(--t2)" x-text="'• '+w"></div></template>
+            <div data-cc="four-questions-block" class="idos-grid">
+              <div class="idos-cell">
+                <div class="idos-label" x-text="fourQuestionsBlock().labels.know||'WE KNOW'"></div>
+                <div class="idos-value" x-text="fourQuestionsBlock().know"></div>
+              </div>
+              <div class="idos-cell">
+                <div class="idos-label" x-text="fourQuestionsBlock().labels.believe||'WE BELIEVE'"></div>
+                <div class="idos-value" x-text="fourQuestionsBlock().believe"></div>
+              </div>
+              <div class="idos-cell">
+                <div class="idos-label" x-text="fourQuestionsBlock().labels.doubt||'WE DON\'T KNOW'"></div>
+                <div class="idos-value idos-doubt" x-text="fourQuestionsBlock().doubt"></div>
+              </div>
+              <div class="idos-cell idos-therefore-cell">
+                <div class="idos-label" x-text="fourQuestionsBlock().labels.therefore||'THEREFORE'"></div>
+                <div class="idos-value idos-therefore" x-text="fourQuestionsBlock().therefore"></div>
+              </div>
             </div>
-            <div class="text-[8px]" x-show="missionControl().next_actions.length">
-              <template x-for="a in missionControl().next_actions" :key="'mca-'+a"><div style="color:var(--t2)" x-text="'→ '+a"></div></template>
+            <div class="mc-verdict" x-text="missionControl().quality_headline"></div>
+            <div class="mc-detail" x-show="pmDecisionTickerLine()" data-cc="pm-board-ssot-strip">
+              <span class="mc-footer-label">Board SSOT</span>
+              <span x-text="pmDecisionTickerLine()"></span>
             </div>
+            <div class="mc-detail text-[8px]" style="color:var(--t3);line-height:1.45" x-show="missionControl().best_trade||missionControl().near_miss_top||missionControl().sleeve_gate_status">
+              <span class="mc-footer-label">PM parity</span>
+              <span x-text="'Deploy '+missionControl().best_trade+' · Near-miss '+missionControl().near_miss_top+' · Sleeve '+missionControl().sleeve_gate_status"></span>
+            </div>
+            <div class="mc-detail" x-show="missionControl().why_not_deploy.length&&todayContextExpanded">
+              <template x-for="w in missionControl().why_not_deploy" :key="'mcw-'+w"><div x-text="'• '+w"></div></template>
+            </div>
+            <div class="mc-detail" x-show="missionControl().next_actions.length&&!isWaitDay()">
+              <template x-for="a in missionControl().next_actions" :key="'mca-'+a"><div x-text="'→ '+a"></div></template>
+            </div>
+            <div class="mc-footer-row">
+              <div class="mc-footer-item" data-cc="firm-cadence-strip">
+                <span class="mc-footer-label">Cadence</span>
+                <span class="mc-footer-value" x-text="firmCadenceNextLine()"></span>
+              </div>
+              <div class="mc-footer-item" data-cc="marginal-roc-strip">
+                <span class="mc-footer-label">Marginal ROC</span>
+                <span class="mc-footer-value" x-text="marginalRocLadderLine()"></span>
+              </div>
+              <div class="mc-footer-item" data-cc="decision-readiness-strip" x-show="decisionReadinessLine()">
+                <span class="mc-footer-label">Pre-decision</span>
+                <span class="mc-footer-value" x-text="decisionReadinessLine()"></span>
+              </div>
+              <div class="mc-footer-item" data-cc="daily-ic-strip">
+                <button type="button" class="btn-s text-[8px] mr-1" @click="toggleDailyIcExpanded()" x-text="dailyIc.expanded?'Hide IC':'Expand IC'"></button>
+                <span class="mc-footer-label">Daily IC</span>
+                <span class="mc-footer-value" x-text="dailyIcLine()"></span>
+                <div data-cc="daily-ic-one-pager" class="daily-ic-one-pager text-[8px] mt-1" style="color:var(--t3);line-height:1.5" x-show="dailyIc.expanded||dailyIc.data">
+                  <template x-for="sec in dailyIcOnePagerLines()" :key="'dic-'+sec.key">
+                    <div class="mt-0.5"><span class="font-bold text-white" x-text="sec.label+':'"></span> <span x-text="sec.line"></span></div>
+                  </template>
+                  <div x-show="dailyIc.err" class="text-red-400 mt-1" x-text="dailyIc.err"></div>
+                </div>
+              </div>
+              <div class="mc-footer-item" data-cc="deploy-intent-journal-strip" x-show="deployIntentJournalVisible()">
+                <span class="mc-footer-label">Journal</span>
+                <span class="mc-footer-value" x-text="deployIntentJournalLine()"></span>
+                <div class="text-[8px] mt-0.5" style="color:var(--t3)" x-show="deployIntentJournal.data?.readiness_path">
+                  <span>Readiness: </span><span class="mono" x-text="deployIntentJournal.data.readiness_path"></span>
+                  <span class="ml-2">POST: </span><span class="mono" x-text="deployIntentJournal.data.journal_post_path"></span>
+                </div>
+              </div>
+              <div class="mc-footer-item" data-cc="attention-budget-strip">
+                <span class="mc-footer-label">Attention</span>
+                <span class="mc-footer-value" :style="attentionBudgetExceeded()?'color:var(--amber);font-weight:700':''" x-text="attentionBudgetLine()"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+      <!-- Pre-Decision Gate (display-only — deploy_open + top row) -->
+      <template x-if="tab==='today'&&preDecisionGateVisible()">
+        <div data-cc="pre-decision-gate-panel" class="cc-surface-pad" style="padding-top:0">
+          <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--green)">
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--green)">Decision Readiness · 部署前閘</div>
+              <span class="pill pw text-[7px]">DISPLAY ONLY</span>
+            </div>
+            <div class="text-[8px] mb-2" style="color:var(--t3)">Acknowledge checklist — tracks compliance in localStorage; does not block deploy.</div>
+            <template x-if="preDecisionGate.loading"><div class="text-[9px]" style="color:var(--t3)">Loading gate…</div></template>
+            <template x-if="preDecisionGate.data">
+              <div class="text-[9px] font-bold mono text-white mb-1" x-text="preDecisionGate.data.ticker||topDeployCandidate()"></div>
+              <label class="flex items-center gap-2 text-[8px] mb-2 cursor-pointer">
+                <input type="checkbox" :checked="preDecisionGate.acknowledged" @change="togglePreDecisionAck()" />
+                <span>I acknowledge the pre-decision checklist · 我已確認部署前清單</span>
+              </label>
+              <div class="text-[8px] mb-1" style="color:var(--t2)" x-text="decisionReadinessLine()"></div>
+              <div class="text-[8px] font-bold uppercase mt-2 mb-0.5" style="color:var(--red)">Red Team · 紅隊</div>
+              <template x-for="rt in preDecisionRedTeamLines()" :key="'rt-'+rt.key">
+                <div class="text-[8px] mb-0.5" style="color:var(--t2)"><span class="font-bold" x-text="rt.label+': '"></span><span x-text="rt.value"></span></div>
+              </template>
+              <div class="text-[8px] font-bold uppercase mt-2 mb-0.5" style="color:var(--blue)">Outside View · 外部視角</div>
+              <div class="text-[8px] mb-1" style="color:var(--t2)" x-text="preDecisionOutsideViewLine()"></div>
+              <div class="text-[8px] font-bold uppercase mt-2 mb-0.5" style="color:var(--purple)">Decision Journal · 決策日誌</div>
+              <div class="text-[8px] mb-1" style="color:var(--t2)" x-text="deployIntentJournalLine()||'Record thesis before deploy · 部署前記錄論點'"></div>
+              <button type="button" class="btn-s text-[8px] mt-1" @click="postJournalStubIfNeeded()" x-show="preDecisionGate.data.journal&&!preDecisionGate.data.journal.complete">Record thesis stub · POST journal</button>
+            </template>
+            <div x-show="preDecisionGate.err" class="text-[9px] text-red-400" x-text="preDecisionGate.err"></div>
+          </div>
+        </div>
+      </template>
+      <!-- Prior lessons strip (knowledge retrieval) -->
+      <template x-if="tab==='today'&&priorLessonsLine()">
+        <div data-cc="prior-lessons-strip" class="cc-surface-pad" style="padding-top:0">
+          <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--purple)">
+            <div class="text-[8px] font-bold uppercase mb-0.5" style="color:var(--purple)">Prior lessons · 以往教訓</div>
+            <div class="text-[8px]" style="color:var(--t2);line-height:1.45" x-text="priorLessonsLine()"></div>
+          </div>
+        </div>
+      </template>
+      <template x-if="tab==='today'&&dashboardScoreReconciliationActive()">
+        <div data-cc="score-families-strip" class="cc-surface-pad" style="padding-top:0">
+          <div class="p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.28);color:var(--t2);line-height:1.55">
+            <span class="pill pa text-[7px] font-bold mr-1">SCORE FAMILIES</span>
+            <span class="font-bold" style="color:var(--amber)" x-text="dashboardScoreReconciliationMessage()"></span>
+            <span class="block mt-1 text-[8px]" style="color:var(--t3)" x-text="dashboardScoreReconciliationDetail()"></span>
           </div>
         </div>
       </template>
       <div x-show="tab==='today'&&isWaitDay()&&!deployOpen()" style="padding:4px 12px 0">
         <button type="button" class="btn-s text-[8px]" @click="toggleTodayContextExpanded()"
-          x-text="todayContextExpanded?'Hide monitor context · 收起監察脈絡':'Show monitor context · 展開監察脈絡'"></button>
+          x-text="todayContextExpanded?'Hide context · 收起脈絡':'Expand context · 展開脈絡'"></button>
+      </div>
+      <div x-show="tab==='today'&&(today7.as_of||today7.top_ranked?.length)" data-cc="price-provenance-strip" class="cc-surface-pad" style="padding-top:4px">
+        <div class="text-[7px] mono" style="color:var(--t3);line-height:1.45">
+          <span class="font-bold uppercase mr-1">Provenance</span>
+          <span x-text="priceProvenanceLine((today7.top_ranked&&today7.top_ranked[0])||today7||{}).label"></span>
+        </div>
       </div>
       <div x-show="tab==='today'&&todaySecondaryContextVisible()">
-      <!-- ── Opportunity verdict (first screen — monitor counts, never deploy authority) ── -->
+      <!-- ── Opportunity verdict (expanded context — monitor counts, never deploy authority) ── -->
       <template x-if="tab==='today'&&today7.opportunity_verdict&&todaySecondaryContextVisible()">
         <div data-cc="opportunity-verdict-block" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)" :style="opportunityVerdictMuted()?'opacity:.72':''">
@@ -1150,7 +1348,7 @@
         </div>
       </template>
 
-      <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
+      <!-- ── Ops / IB / Monitor strip (expanded context only) ── -->
       <div x-show="tab==='today'&&todaySecondaryContextVisible()" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
         <span class="pill text-[8px]" :class="cc_status.breaker?'pr':(ops.running?'pg':'pw')" x-text="cc_status.breaker?'BREAKER':(ops.running?'ENGINE ON':'ENGINE OFF')"></span>
@@ -1203,18 +1401,8 @@
         </div>
       </template>
 
-      <template x-if="dashboardScoreReconciliationActive()">
-        <div style="padding:4px 12px 0">
-          <div class="p-2 rounded text-[9px]" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.28);color:var(--t2);line-height:1.55">
-            <span class="pill pr text-[7px] font-bold mr-1">SCORE FAMILIES</span>
-            <span class="font-bold text-red-400" x-text="dashboardScoreReconciliationMessage()"></span>
-            <span class="block mt-1 text-[8px]" style="color:var(--t3)" x-text="dashboardScoreReconciliationDetail()"></span>
-          </div>
-        </div>
-      </template>
-
-      <!-- ── WAIT board stance (honest top comment) ── -->
-      <template x-if="isWaitDay()&&!globalSystemStripVisible()">
+      <!-- ── WAIT board stance (expanded context only — Mission Control owns above-fold) ── -->
+      <template x-if="isWaitDay()&&!globalSystemStripVisible()&&todayContextExpanded">
         <div style="padding:4px 12px 0">
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--amber);background:rgba(251,191,36,.06)">
             <div class="text-[10px] font-bold uppercase mb-1" style="color:var(--amber)">Board stance</div>
@@ -1794,8 +1982,8 @@
         </div>
       </template>
 
-      <!-- ── TOP-1 hero — label follows day_state (trade vs watch/pilot) ── -->
-      <template x-if="(today7.top_ranked||[]).length>0 && topRankedHeroLabel()">
+      <!-- ── TOP-1 hero — hidden on WAIT days (rank ≠ action) ── -->
+      <template x-if="topRankedHeroVisible()">
         <div style="padding:8px 12px">
           <div class="card" style="overflow:hidden;border:2px solid var(--green);background:linear-gradient(135deg,rgba(0,212,170,.08),rgba(0,212,170,.02))" :style="topRankedIsTrade()?'':'border-color:var(--amber);background:linear-gradient(135deg,rgba(251,191,36,.08),rgba(0,0,0,.02))'">
             <div :style="'height:3px;background:var(--'+(topRankedIsTrade()?'green':'amber')+')'"></div>
@@ -2245,6 +2433,7 @@
                   <span class="pill text-[7px] pw" x-show="cardQualityTier(opp)" :class="qualityTierClass(cardQualityTier(opp))" x-text="cardQualityTier(opp)"></span>
                   <span class="pill text-[7px] pb" x-show="opp.rank_bucket" x-text="opp.rank_bucket||''"></span>
                   <span class="pill text-[7px] pp" x-show="opp.authority_label||opp.opportunity_verdict?.authority" x-text="opp.authority_label||opp.opportunity_verdict?.authority||''"></span>
+                  <span x-show="rowScoreFamiliesDiverge(opp)" class="pill pa text-[7px]" title="Score families disagree — do not size on rank alone">Families ⚠</span>
                   <!-- Position conflict: already in book? -->
                   <template x-if="(pf?.positions||[]).find(p=>(p.ticker||p.symbol)===opp.ticker)"><span class="pill pb text-[7px] font-bold" title="已在倉內 · 加倉會提高集中度">📊 在倉</span></template>
                   <!-- R-multiple risk per share -->
@@ -2601,6 +2790,10 @@
     <!-- SURFACE 2: SIGNALS / SCANNER                           -->
     <!-- ═══════════════════════════════════════════════════════ -->
         <main x-show="tab==='signals'" class="fade" data-cc="playbook-surface">
+      <div data-cc="workflow-stage-hint-playbook" class="workflow-hint-strip mx-3 mt-1 mb-0" x-cloak>
+        <span class="pill text-[7px] workflow-stage-pill mr-1" x-text="workflowStage().label"></span>
+        <span x-text="workflowStageHint()"></span>
+      </div>
       <div class="trust-strip">
         <span :style="sig.mode==='SCAN'?'color:var(--green)':sig.mode==='PAPER'?'color:var(--blue)':sig.mode==='OFFLINE'?'color:var(--red)':'color:var(--green)'" x-text="'● '+(sig.mode||'—')"></span>
         <span x-text="playbookFunnelLabel(rankedOpps.filter_funnel||today7.filter_funnel, rankedOpps.rows)" :title="'Funnel 只係 watch-qualified · board scan pool 只作 monitor ranking'"></span>
@@ -2613,8 +2806,8 @@
         <span x-show="playbookBoardWait()&&playbookNearMissUpgradeLine()&&!pageAuthorityIsDegraded()" class="text-[9px] text-green-400" x-text="playbookNearMissUpgradeLine()"></span>
         <span x-show="playbookBoardWait()&&todayBoardHeroSynthesisLine()" class="text-[8px] text-amber-300" x-text="todayBoardHeroSynthesisLine()"></span>
         <span x-text="'As-of: '+(sig.as_of?sig.as_of.slice(0,19):'—')"></span>
-        <span x-show="sig.scan_meta" class="text-[9px]" style="color:var(--t3)" x-text="'· calibrated '+(sig.scan_meta?(sig.scan_meta.calibrated_at||sig.scan_meta.last_calibration||sig.scan_meta.model_version||'live'):'—')"></span>
         <span x-show="sig.data_freshness" class="text-[9px]" :class="(sig.data_freshness?.stale)?'text-amber-300':'text-green-400'" x-text="'· data '+((sig.data_freshness?.stale)?'STALE':'FRESH')"></span>
+        <span class="text-[8px] mono" style="color:var(--t3)" x-text="priceProvenanceLine(sig||{}).label"></span>
       </div>
       <div class="mx-3 mb-1 px-2 text-[7px]" style="color:var(--t3);line-height:1.55" x-text="playbookLayerDefinitionsNote()"></div>
       <!-- Emergency board — explicit CTA when pipeline unavailable -->
@@ -2921,6 +3114,7 @@
                   <span class="pill text-[7px] pw" x-show="cardQualityTier(r)" :class="qualityTierClass(cardQualityTier(r))" x-text="cardQualityTier(r)"></span>
                   <span class="pill text-[7px] pb" x-show="r.rank_bucket" x-text="r.rank_bucket||''"></span>
                   <span class="pill text-[7px] pp" x-show="r.authority_label||r.opportunity_verdict?.authority" x-text="r.authority_label||r.opportunity_verdict?.authority||''"></span>
+                  <span x-show="rowScoreFamiliesDiverge(r)" class="pill pa text-[7px]" title="Score families disagree — do not size on rank alone">Families ⚠</span>
                   <span x-show="flowPlaybookCrossBadge(r.ticker)" class="pill pb text-[7px]" title="Flow 只屬確認輔助，唔係 deploy trigger">Flow 輔助 · confirm</span>
                   <span x-show="r.watch_intelligence?.alert_worthy" class="pill pa text-[7px]">Alert</span>
                   <span x-show="r.watch_intelligence?.upgrade_probability>=0.55" class="pill pg text-[7px] mono" x-text="'P(up) '+Math.round((r.watch_intelligence?.upgrade_probability||0)*100)+'%'"></span>
@@ -3785,7 +3979,7 @@
             </template>
               </div>
             </details>
-            <template x-if="dos.intel&&dos.intel.portfolio_fit">
+            <template x-if="dos.intel&&dos.intel.portfolio_fit&&!hideMockSurfacesOnDeploy()">
               <div class="card card-p mb-2">
                 <div class="text-[9px] font-bold uppercase mb-1">Portfolio fit</div>
                 <div class="text-[11px] font-bold" :class="dos.intel.portfolio_fit.score>=60?'text-green-400':'text-amber-300'" x-text="dos.intel.portfolio_fit.score+'/100 · '+dos.intel.portfolio_fit.fit_label"></div>
@@ -3802,6 +3996,9 @@
                 <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="(dos.intel.portfolio_fit.notes||[]).join(' · ')"></div>
               </div>
             </template>
+            <div x-show="hideMockSurfacesOnDeploy()&&dos.intel&&dos.intel.portfolio_fit" class="card card-p mb-2 opacity-70" style="border-left:3px solid var(--amber)">
+              <div class="text-[9px]" style="color:var(--amber)">Heuristic portfolio-fit factors hidden on deploy day — broker truth only.</div>
+            </div>
             <template x-if="dos.intel&&dos.intel.thesis">
               <div class="card card-p mb-2"><div class="text-[9px] font-bold uppercase mb-1">Thesis engine</div><div class="text-[8px] text-green-400" x-text="'Bull: '+((dos.intel.thesis.bull_case||[]).slice(0,2).join(' · ')||'—')"></div><div class="text-[8px] text-red-400" x-text="'Bear: '+((dos.intel.thesis.bear_case||[]).slice(0,2).join(' · ')||'—')"></div></div>
             </template>
@@ -4875,6 +5072,12 @@
         <div class="text-[10px] font-bold mb-2" style="color:var(--t1)">Data contract strip · 資料合約列</div>
         <button type="button" class="btn-s text-[10px] mb-2" @click="dataContractDismissed=false;localStorage.removeItem('cc_data_contract_dismissed')">Show data contract again · 重新顯示資料合約列</button>
         <div class="text-[9px]" style="color:var(--t3)">Engine / IBKR / runtime: use Ops tab · 引擎同券商設定請用 Ops 分頁。</div>
+        <div class="text-[10px] font-bold mb-2 mt-4" style="color:var(--t1)">Review pack · 審查包</div>
+        <div class="text-[9px] mb-2" style="color:var(--t3);line-height:1.45">One-click export of CC X surfaces for ChatGPT review (Save as PDF) · 一鍵匯出主要分頁供 ChatGPT 審查（另存 PDF）。</div>
+        <button type="button" data-cc="export-review-pack" class="btn-p text-[10px]" :disabled="reviewPackLoading" @click="exportReviewPack()">
+          <span x-show="!reviewPackLoading">Export review pack · 匯出審查包</span>
+          <span x-show="reviewPackLoading"><span class="spin mr-1"></span>Building review pack… · 正在建立審查包…</span>
+        </button>
       </div>
     </main>
 
@@ -5390,6 +5593,10 @@
         <!-- SURFACE: PORTFOLIO MANAGEMENT                          -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='portfolio'" class="fade" x-init="$watch('tab',v=>{if(v==='portfolio'){fetchPortfolio();fetchPortfolioDecision();fetchPortfolioEquity();fetchDesk()}})">
+      <div data-cc="workflow-stage-hint-portfolio" class="workflow-hint-strip mx-3 mt-1 mb-0" x-cloak>
+        <span class="pill text-[7px] workflow-stage-pill mr-1" x-text="workflowStage().label"></span>
+        <span x-text="workflowStageHint()"></span>
+      </div>
       <div class="trust-strip">
         <span :style="pfBrokerSource().pillClass" x-text="'● '+pfBrokerSource().pill"></span>
         <span x-text="portfolioSummaryPositionsLabel()"></span>
@@ -5397,6 +5604,9 @@
         <span x-show="pfDecision&&pfDecision.ibkr_linkage" class="text-[9px]" style="color:var(--t3)" x-text="'Sync '+(pfDecision?.ibkr_linkage?.last_sync||'—')"></span>
         <span x-show="pfDecision&&pfDecision.ibkr_linkage&&pfDecision.ibkr_linkage.unsynced_count>0" class="text-[9px]" style="color:var(--amber)" x-text="(pfDecision?.ibkr_linkage?.unsynced_count||0)+' local-only'"></span>
         <span x-show="pfDecision&&pfDecision.ibkr_linkage" class="text-[9px]" :style="pfDecision?.ibkr_linkage?.broker_truth?'color:var(--green)':'color:var(--amber)'" x-text="pfDecision?.ibkr_linkage?.local_model_note||''"></span>
+      </div>
+      <div x-show="portfolioSsotFallbackActive()" data-cc="portfolio-ssot-fallback-banner" class="mx-3 mt-2 p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.28);color:var(--amber)">
+        <span x-text="portfolioSsotBannerLine()"></span>
       </div>
       <div class="p-3 space-y-3">
         <!-- Allocator Decision Summary -->
@@ -5430,6 +5640,23 @@
             </div>
           </div>
         </template>
+        <!-- Marginal ROC (research_only stub) -->
+        <div class="card card-p mb-2" style="border-left:3px solid var(--amber)" data-cc="marginal-roc-panel" x-show="marginalRoc.data">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">Marginal ROC · 邊際資本回報</div>
+            <button type="button" class="btn-s text-[8px]" @click="fetchMarginalRoc()" :disabled="marginalRoc.loading">↻</button>
+          </div>
+          <div class="text-[8px] mb-1 pill pw">RESEARCH ONLY · no deploy authority</div>
+          <div class="text-[10px] font-bold text-white mb-1" x-text="marginalRoc.data.headline"></div>
+          <div class="text-[8px] mb-2" style="color:var(--t2)" x-text="marginalRocHeadline()"></div>
+          <template x-for="row in (marginalRoc.data.ladder||[])" :key="'mroc-'+row.ticker">
+            <div class="flex items-center justify-between text-[8px] py-0.5" style="border-bottom:1px solid var(--bd)">
+              <span class="mono" x-text="'#'+row.rank+' '+row.ticker"></span>
+              <span :class="row.vs_cash==='beats_cash'?'text-green-400':'text-amber-300'" x-text="row.marginal_return_on_capital_bps+'bps'"></span>
+            </div>
+          </template>
+          <div x-show="marginalRoc.err" class="text-[9px] text-red-400" x-text="marginalRoc.err"></div>
+        </div>
         <!-- 1 · CRITICAL RISK EVENT -->
         <template x-if="pfDecision&&pfDecision.critical_risk_event&&pfDecision.critical_risk_event.active">
           <div class="card card-p mb-2" style="border-left:4px solid var(--red);background:rgba(255,92,92,.06)">
@@ -6043,6 +6270,7 @@
                   <template x-if="!pos.quote_pending">
                     <div class="font-bold" :class="(pos.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="'$'+(pos.current_price||0).toFixed(2)"></div>
                     <div class="text-[8px]" :class="(pos.change_pct||0)>=0?'text-green-400':'text-red-400'" x-text="(pos.change_pct>=0?'+':'')+pos.change_pct+'% today'"></div>
+                    <div class="text-[7px] mono mt-0.5" style="color:var(--t3)" x-text="priceProvenanceLine(pos).label"></div>
                   </template>
                 </div>
                 <div class="p-1 rounded" style="background:var(--s2)">
@@ -7829,6 +8057,41 @@
         <span x-show="errorLog.entries.length" class="pill pr text-[8px]" x-text="opsLogCountLabel()"></span>
       </div>
       <div class="p-3 space-y-3">
+        <!-- Identified Errors — unified aggregation (inform only, no deploy authority) -->
+        <div class="card card-p" style="border-left:3px solid var(--red)" data-cc="identified-errors-panel">
+          <div class="flex items-start justify-between gap-2 mb-1">
+            <div>
+              <div class="text-[10px] font-bold uppercase" style="color:var(--t3)" x-text="identifiedErrorsTitle()"></div>
+              <div class="text-[9px] mt-1 leading-relaxed" style="color:var(--t2)" x-text="identifiedErrorsIntro()"></div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <span x-show="identifiedErrorsPanel.items.length" class="pill pr text-[8px]" x-text="identifiedErrorsCountLabel()"></span>
+              <button type="button" class="btn-s text-[8px]" @click="refreshIdentifiedErrors()" :disabled="identifiedErrorsPanel.loading">重新整理 Refresh</button>
+            </div>
+          </div>
+          <div x-show="identifiedErrorsPanel.loading && !identifiedErrorsPanel.items.length" class="text-[10px]" style="color:var(--t3)" x-text="opsPanelLoadingShort()"></div>
+          <div x-show="identifiedErrorsPanel.error" class="text-[9px] mb-2" style="color:var(--amber)" x-text="identifiedErrorsPanel.error"></div>
+          <template x-if="!identifiedErrorsPanel.loading && !identifiedErrorsPanel.items.length && !identifiedErrorsPanel.error">
+            <div class="text-[10px]" style="color:var(--t2)" x-text="identifiedErrorsEmptyCopy()"></div>
+          </template>
+          <div class="space-y-2 mt-2">
+            <template x-for="(row,i) in identifiedErrorsPanel.items" :key="row.id||('ie-'+i)">
+              <div class="p-2 rounded" style="background:var(--s2);border-left:3px solid" :style="row.severity==='critical'?'border-left-color:var(--red)':row.severity==='warning'?'border-left-color:var(--amber)':'border-left-color:var(--blue)'">
+                <div class="flex items-start gap-2 flex-wrap">
+                  <span class="pill text-[8px] shrink-0"
+                    :style="row.severity==='critical'?'background:rgba(255,68,68,.15);color:#ff4444':row.severity==='warning'?'background:rgba(255,140,0,.15);color:#ff8c00':'background:rgba(88,101,242,.15);color:#5865f2'"
+                    x-text="row.severity||'info'"></span>
+                  <span class="pill pw text-[7px] shrink-0" x-text="identifiedErrorsSourceLabel(row.source)"></span>
+                  <span x-show="row.research_only" class="pill text-[7px] shrink-0" style="background:rgba(139,92,246,.12);color:var(--purple)" x-text="identifiedErrorsResearchOnlyLabel()"></span>
+                  <span class="mono text-[8px] shrink-0" style="color:var(--t3)" x-text="row.timestamp?(row.timestamp.slice(11,19)+' UTC'):''"></span>
+                </div>
+                <div class="text-[10px] font-semibold mt-1" style="color:var(--t1)" x-text="row.message"></div>
+                <div x-show="row.detail" class="text-[9px] mt-0.5 leading-relaxed" style="color:var(--t2)" x-text="row.detail"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+
         <!-- Ops sub-sections -->
         <div class="flex gap-1 flex-wrap">
           <button type="button" class="btn-s text-[9px]" :class="opsPanel==='health'?'btn-p':''" @click="opsPanel='health'" x-text="opsSubNavLabel('health')"></button>
@@ -8266,7 +8529,214 @@
           </div>
         </template>
 
-        <!-- Self-Learn Engine Panel (Ops) -->
+        <!-- Firm Health — cadence, beliefs, journal -->
+        <div class="ops-section-hdr" x-show="tab==='ops'">Firm Health · 機構健康</div>
+        <div class="ops-section-purpose" x-show="tab==='ops'">Governance cadence, belief review, and decision journal — research only, no deploy authority.</div>
+
+        <!-- Belief Review (v14 compounding — research_only stub) -->
+        <div class="card card-p mb-2" style="border-left:3px solid var(--blue)" data-cc="belief-review-panel" x-show="tab==='ops'">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--blue)">Belief Review · 信念複核</div>
+            <button type="button" class="btn-s text-[8px]" @click="fetchBeliefReview()" :disabled="beliefReview.loading">↻</button>
+          </div>
+          <div class="text-[8px] mb-1 pill pw">RESEARCH ONLY · no deploy authority</div>
+          <template x-if="beliefReview.loading"><div class="text-[9px]" style="color:var(--t3)">Loading…</div></template>
+          <template x-if="beliefReview.data">
+            <div class="text-[10px] font-bold text-white mb-1" x-text="beliefReview.data.headline"></div>
+            <div class="grid grid-cols-3 gap-2 text-[8px]">
+              <div><span style="color:var(--t3)">Due</span><div class="mono" x-text="beliefReview.data.beliefs_due||0"></div></div>
+              <div><span style="color:var(--t3)">Reviewed MTD</span><div class="mono" x-text="beliefReview.data.beliefs_reviewed_mtd||0"></div></div>
+              <div><span style="color:var(--t3)">Forward marks</span><div class="mono" x-text="beliefReview.data.forward_outcome_marks||0"></div></div>
+            </div>
+            <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="beliefReview.data.next_review||'—'"></div>
+            <template x-if="(beliefReview.data.items||[]).length">
+              <div class="mt-2 pt-2" style="border-top:1px dashed var(--bd)">
+                <template x-for="it in (beliefReview.data.items||[]).slice(0,5)" :key="'br-'+it.id">
+                  <div class="mb-2 pb-2" style="border-bottom:1px solid var(--bd)">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="mono text-[9px] font-bold text-white" x-text="it.ticker"></span>
+                      <span class="pill text-[7px] pw" x-text="it.status||'due_review'"></span>
+                    </div>
+                    <label class="text-[7px] uppercase" style="color:var(--t3)">Thesis · 論點</label>
+                    <textarea class="w-full text-[8px] mono mb-1 p-1 rounded" rows="2" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" x-model="it.thesis" placeholder="What you believe and why"></textarea>
+                    <label class="text-[7px] uppercase" style="color:var(--t3)">Kill condition · 失效條件</label>
+                    <textarea class="w-full text-[8px] mono mb-1 p-1 rounded" rows="2" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" x-model="it.kill_condition" placeholder="What would change your mind"></textarea>
+                    <button type="button" class="btn-s text-[7px]" @click="saveBeliefItem(it)" :disabled="beliefReview.saving">Save · 儲存</button>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </template>
+          <div x-show="beliefReview.err" class="text-[9px] text-red-400" x-text="beliefReview.err"></div>
+        </div>
+
+        <!-- Research queue (workflow — CIIO time allocation, read-only list) -->
+        <div class="card card-p mb-2" style="border-left:3px solid var(--blue)" data-cc="research-queue-panel" x-show="tab==='ops'">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--blue)">Research Queue · 研究隊列</div>
+            <button type="button" class="btn-s text-[8px]" @click="fetchResearchQueue()" :disabled="researchQueue.loading">↻</button>
+          </div>
+          <div class="text-[8px] mb-1 pill pw">RESEARCH ONLY · time budget · not watchlist</div>
+          <template x-if="researchQueue.loading"><div class="text-[9px]" style="color:var(--t3)">Loading…</div></template>
+          <template x-if="researchQueue.data">
+            <div class="text-[8px] mb-1" style="color:var(--t2)" x-text="researchQueueLine()"></div>
+            <template x-for="rq in (researchQueue.data.items||[])" :key="'rq-'+rq.ticker">
+              <div class="flex items-center justify-between text-[8px] py-0.5 mono" style="border-bottom:1px solid var(--bd)">
+                <span x-text="rq.ticker"></span>
+                <span style="color:var(--t3)" x-text="(rq.budget_minutes||0)+'m · '+(rq.category||'Research')"></span>
+              </div>
+            </template>
+            <div x-show="!(researchQueue.data.items||[]).length" class="text-[8px]" style="color:var(--t3)">Queue empty · add via API</div>
+          </template>
+          <div x-show="researchQueue.err" class="text-[9px] text-red-400" x-text="researchQueue.err"></div>
+        </div>
+
+        <!-- Attention Budget (CCX-164 — session localStorage tracking) -->
+        <div class="card card-p mb-2" style="border-left:3px solid var(--amber)" data-cc="attention-budget-panel" x-show="tab==='ops'">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">Attention Budget · 專注預算</div>
+            <button type="button" class="btn-s text-[8px]" @click="fetchAttentionBudget()" :disabled="attentionBudget.loading">↻</button>
+          </div>
+          <div class="text-[8px] mb-1 pill pw">RESEARCH ONLY · 60m research / 30m portfolio / 15m market</div>
+          <template x-if="attentionBudget.loading"><div class="text-[9px]" style="color:var(--t3)">Loading…</div></template>
+          <template x-if="attentionBudget.data">
+            <div class="text-[9px] font-bold mb-1" :style="attentionBudgetExceeded()?'color:var(--amber)':'color:var(--t2)'" x-text="attentionBudgetLine()"></div>
+            <template x-for="cat in (attentionBudget.data.categories_live||[])" :key="'ab-'+cat.id">
+              <div class="flex items-center justify-between text-[8px] py-0.5 mono" style="border-bottom:1px solid var(--bd)">
+                <span x-text="cat.label||cat.id"></span>
+                <span :style="cat.exceeded?'color:var(--amber);font-weight:700':'color:var(--t3)'" x-text="(cat.used_minutes||0)+'/'+(cat.budget_minutes||0)+'m'"></span>
+              </div>
+            </template>
+            <div x-show="attentionBudgetExceeded()" class="text-[8px] mt-1 font-bold" style="color:var(--amber)" x-text="attentionBudget.data.ciio_message||'Enough — come back tomorrow'"></div>
+          </template>
+          <div x-show="attentionBudget.err" class="text-[9px] text-red-400" x-text="attentionBudget.err"></div>
+        </div>
+
+        <!-- Firm cadence (v16 governance — display only) -->
+        <div class="card card-p mb-2" style="border-left:3px solid var(--green)" data-cc="firm-cadence-panel" x-show="tab==='ops'">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--green)">Firm Cadence · 機構節奏</div>
+            <button type="button" class="btn-s text-[8px]" @click="fetchFirmCadence()" :disabled="firmCadence.loading">↻</button>
+          </div>
+          <div class="text-[8px] mb-1 pill pw">RESEARCH ONLY · governance display · no deploy authority</div>
+          <template x-if="firmCadence.loading"><div class="text-[9px]" style="color:var(--t3)">Loading…</div></template>
+          <template x-if="firmCadence.data">
+            <div class="text-[10px] font-bold text-white mb-1" x-text="firmCadence.data.headline"></div>
+            <div class="text-[8px] mb-2" style="color:var(--t2)" x-text="firmCadenceNextLine()"></div>
+            <template x-for="rit in (firmCadence.data.rituals||[])" :key="'fc-'+rit.id">
+              <div class="flex items-center justify-between text-[8px] py-0.5" style="border-bottom:1px solid var(--bd)">
+                <span x-text="rit.label_bilingual||rit.label"></span>
+                <span class="mono" style="color:var(--t3)" x-text="rit.next_due"></span>
+              </div>
+            </template>
+          </template>
+          <div x-show="firmCadence.err" class="text-[9px] text-red-400" x-text="firmCadence.err"></div>
+        </div>
+
+        <!-- Decision Journal (IDOS Phase 1 — read-only) -->
+        <div class="card card-p mb-2" style="border-left:3px solid var(--purple)" data-cc="decision-journal-panel" x-show="tab==='ops'">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">Decision Journal · 決策日誌</div>
+            <button type="button" class="btn-s text-[8px]" @click="fetchDecisionJournal()" :disabled="decisionJournal.loading">↻</button>
+          </div>
+          <div class="text-[8px] mb-1 pill pw">RESEARCH ONLY · pre-outcome records · no deploy authority</div>
+          <template x-if="decisionJournal.loading"><div class="text-[9px]" style="color:var(--t3)">Loading…</div></template>
+          <template x-if="decisionJournal.data">
+            <div class="text-[10px] font-bold text-white mb-1" x-text="decisionJournal.data.headline"></div>
+            <div class="text-[8px] mb-2" style="color:var(--t2)" x-text="'Recent · ' + (decisionJournal.data.recent_count||0) + ' · stubs ' + (decisionJournal.data.stub_count_recent||0)"></div>
+            <template x-for="ent in (decisionJournal.data.entries||[]).slice(0,8)" :key="'dj-'+ent.entry_id">
+              <div class="mb-2 pb-2" style="border-bottom:1px solid var(--bd)">
+                <div class="flex items-center gap-2 mb-0.5">
+                  <span class="mono text-[9px] font-bold text-white" x-text="ent.ticker||'—'"></span>
+                  <span class="pill text-[7px] pw" x-text="ent.decision"></span>
+                  <span class="pill text-[7px] pa" x-show="ent.stub">stub</span>
+                </div>
+                <div class="text-[8px]" style="color:var(--t2)" x-text="ent.thesis||'—'"></div>
+                <div class="text-[7px] mt-0.5" style="color:var(--t3)" x-text="ent.date + ' · ' + (ent.why_now||'').slice(0,80)"></div>
+              </div>
+            </template>
+          </template>
+          <div x-show="decisionJournal.err" class="text-[9px] text-red-400" x-text="decisionJournal.err"></div>
+        </div>
+
+        <!-- Override journal (CCX-044) -->
+        <div class="card card-p mb-2" style="border-left:3px solid var(--amber)" data-cc="override-journal-panel" x-show="tab==='ops'">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--amber)">Override Journal · 覆寫日誌</div>
+            <button type="button" class="btn-s text-[8px]" @click="fetchOverrideJournal()" :disabled="overrideJournal.loading">↻</button>
+          </div>
+          <div class="text-[8px] mb-1 pill pw">RESEARCH ONLY · audit when operator bypasses CC advice</div>
+          <template x-if="overrideJournal.loading"><div class="text-[9px]" style="color:var(--t3)">Loading…</div></template>
+          <template x-if="overrideJournal.data">
+            <div class="text-[10px] font-bold text-white mb-1" x-text="'Total overrides · '+overrideJournal.data.total"></div>
+            <div class="text-[8px] mb-1" :class="overrideJournal.data.cooldown?.in_cooldown?'text-amber-300':'text-green-400'" x-text="overrideJournal.data.cooldown?.in_cooldown?'In cooldown window · wait before next override':'No active cooldown'"></div>
+            <template x-for="ent in (overrideJournal.data.recent||[]).slice(0,5)" :key="'ov-'+ent.as_of">
+              <div class="text-[8px] py-0.5" style="border-bottom:1px solid var(--bd);color:var(--t2)">
+                <span class="mono font-bold" x-text="ent.advice_class"></span>
+                <span x-text="' · '+ent.action+' · '+(ent.reason||'').slice(0,60)"></span>
+              </div>
+            </template>
+          </template>
+          <div x-show="overrideJournal.err" class="text-[9px] text-red-400" x-text="overrideJournal.err"></div>
+        </div>
+
+        <!-- Calibration report (CCX-045) -->
+        <div class="card card-p mb-2" style="border-left:3px solid var(--blue)" data-cc="calibration-report-panel" x-show="tab==='ops'">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--blue)">Calibration Report · 校準報告</div>
+            <button type="button" class="btn-s text-[8px]" @click="fetchCalibrationReport()" :disabled="calibrationReport.loading">↻</button>
+          </div>
+          <div class="text-[8px] mb-1 pill pw">RESEARCH ONLY · confidence vs forward outcomes</div>
+          <template x-if="calibrationReport.loading"><div class="text-[9px]" style="color:var(--t3)">Loading…</div></template>
+          <template x-if="calibrationReport.data">
+            <div class="text-[10px] font-bold text-white mb-1" x-text="calibrationReport.data.headline"></div>
+            <div class="text-[8px] mb-1" style="color:var(--t2)" x-text="calibrationReport.data.recommendation"></div>
+            <div class="text-[8px]" style="color:var(--t3)" x-text="'Marks '+((calibrationReport.data.sample||{}).forward_marks||0)+' · win rate '+(((calibrationReport.data.sample||{}).win_rate!=null)?Math.round((calibrationReport.data.sample.win_rate||0)*100)+'%':'—')"></div>
+          </template>
+          <div x-show="calibrationReport.err" class="text-[9px] text-red-400" x-text="calibrationReport.err"></div>
+        </div>
+
+        <!-- Weekly IC digest (CCX-136) -->
+        <div class="card card-p mb-2" style="border-left:3px solid var(--green)" data-cc="weekly-ic-panel" x-show="tab==='ops'">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--green)">Weekly IC · 週投委</div>
+            <button type="button" class="btn-s text-[8px]" @click="fetchWeeklyIcDigest()" :disabled="weeklyIcDigest.loading">↻</button>
+          </div>
+          <div class="text-[8px] mb-1 pill pw">RESEARCH ONLY · one-page review prompts</div>
+          <template x-if="weeklyIcDigest.loading"><div class="text-[9px]" style="color:var(--t3)">Loading…</div></template>
+          <template x-if="weeklyIcDigest.data">
+            <div class="text-[10px] font-bold text-white mb-1" x-text="weeklyIcDigest.data.headline"></div>
+            <div class="text-[8px] mb-2 text-amber-300" x-text="weeklyIcDigest.data.one_action"></div>
+            <template x-for="sec in (weeklyIcDigest.data.sections||[])" :key="'wic-'+sec.key">
+              <div class="text-[8px] mb-1" style="color:var(--t2)"><span class="font-bold text-white" x-text="sec.title+': '"></span><span x-text="sec.prompt"></span></div>
+            </template>
+          </template>
+          <div x-show="weeklyIcDigest.err" class="text-[9px] text-red-400" x-text="weeklyIcDigest.err"></div>
+        </div>
+
+        <!-- MIE usage log (CCX-132) -->
+        <div class="card card-p mb-2" style="border-left:3px solid var(--purple)" data-cc="usage-log-panel" x-show="tab==='ops'">
+          <div class="flex items-center justify-between mb-1">
+            <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">Surface Usage · 介面使用</div>
+            <button type="button" class="btn-s text-[8px]" @click="fetchUsageLogSummary()" :disabled="usageLogSummary.loading">↻</button>
+          </div>
+          <div class="text-[8px] mb-1 pill pw">RESEARCH ONLY · deletion ceremony inputs</div>
+          <template x-if="usageLogSummary.loading"><div class="text-[9px]" style="color:var(--t3)">Loading…</div></template>
+          <template x-if="usageLogSummary.data">
+            <div class="text-[10px] font-bold text-white mb-1" x-text="'Events · '+usageLogSummary.data.total_events"></div>
+            <div class="text-[8px] mb-1" style="color:var(--t2)" x-show="(usageLogSummary.data.deletion_candidates||[]).length">
+              Zero-use candidates: <span class="mono text-amber-300" x-text="(usageLogSummary.data.deletion_candidates||[]).join(', ')"></span>
+            </div>
+            <template x-for="ent in (usageLogSummary.data.recent||[]).slice(0,5)" :key="'us-'+ent.as_of">
+              <div class="text-[8px] py-0.5 mono" style="color:var(--t3)" x-text="ent.surface+' · '+ent.event+' · '+ent.tab"></div>
+            </template>
+          </template>
+          <div x-show="usageLogSummary.err" class="text-[9px] text-red-400" x-text="usageLogSummary.err"></div>
+        </div>
+
+        <!-- Self-Learn Engine Panel (Ops) — Calibration -->
+        <div class="ops-section-hdr" x-show="tab==='ops'&&(opsSectionShowAdvanced() || selfLearn.status)">Calibration · 校準</div>
+        <div class="ops-section-purpose" x-show="tab==='ops'&&(opsSectionShowAdvanced() || selfLearn.status)">Forward outcomes and model drift — informs belief updates, never deploy permission.</div>
         <div class="card card-p" style="border-left:3px solid var(--purple)" x-show="opsSectionShowAdvanced() || selfLearn.status">
           <div class="flex items-center justify-between mb-2">
             <div class="text-[10px] font-bold uppercase" style="color:var(--purple)">🧠 <span x-text="opsSelfLearningEngineTitle()"></span></div>
@@ -8662,7 +9132,7 @@
     <footer class="px-4 py-2 text-center text-[9px]" style="color:var(--t3);border-top:1px solid var(--bd)">CC · Clarity Console · regime-aware market intelligence · MIT License</footer>
 
     <!-- ══════ BOTTOM NAV ══════ -->
-    <nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50">
+    <nav data-cc-bottom-nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50">
       <div class="flex justify-around max-w-lg mx-auto">
         <a href="#" data-cc-nav="today" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">☀</span>今日<span style="font-size:8px;opacity:.5">Today</span></a>
         <a href="#" data-cc-nav="signals" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📋</span>策略<span style="font-size:8px;opacity:.5">Playbook</span></a>

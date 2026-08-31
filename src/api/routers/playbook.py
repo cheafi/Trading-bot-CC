@@ -484,6 +484,9 @@ def _finalize_ranked_response(
 
         data = finalize_ranked_payload_authority(data)
         opps = data.get("opportunities") or []
+        tb_upper = str(tb).upper()
+        ss = data.get("system_state") or {}
+        deploy_open = bool(ss.get("deploy_open"))
         data["score_reconciliation"] = build_score_reconciliation(
             opps,
             contradiction_flags=[
@@ -492,6 +495,12 @@ def _finalize_ranked_response(
                 if str(r.get("conflict_level") or "").upper() == "HIGH"
                 for c in [f"{r.get('ticker')}: high conflict"]
             ],
+            deploy_open=deploy_open,
+            tradeability=tb_upper,
+            brief_stale=bool(data.get("brief_stale")),
+        )
+        data["score_families_summary"] = data["score_reconciliation"].get(
+            "score_families_summary"
         )
     except Exception:
         pass

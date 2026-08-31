@@ -187,6 +187,11 @@ def attach_score_families_to_row(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 SCORE_DIVERGENCE_THRESHOLD = 1.5
+DISAGREEMENT_MESSAGE = "Score families disagree — do not size on rank alone"
+
+_WEAK_QUALITY_TIERS = frozenset({"WEAK", "REJECT"})
+_STRONG_QUALITY_TIER = "STRONG"
+_TOP_RANK_DISAGREE = 3
 
 
 def _normalize_score_0_10(value: Any) -> Optional[float]:
@@ -199,6 +204,202 @@ def _normalize_score_0_10(value: Any) -> Optional[float]:
     if f > 20:
         return round(f / 10.0, 2)
     return round(f, 2)
+
+
+def _resolve_rank(row: Dict[str, Any], *, index: Optional[int] = None) -> int:
+    try:
+        return int(row.get("rank") or (index + 1 if index is not None else 99))
+    except (TypeError, ValueError):
+        return 99
+
+
+def _quality_tier(row: Dict[str, Any]) -> str:
+    q = row.get("quality") or {}
+    return str(q.get("tier") or row.get("quality_tier") or "—").upper()
+
+
+def _row_ev_score(row: Dict[str, Any]) -> Optional[float]:
+    raw = row.get("ev_score")
+    if raw is None:
+        raw = (row.get("ev_components") or {}).get("ev_score")
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def detect_score_family_disagreement(
+    row: Dict[str, Any],
+    *,
+    rank_total: int = 0,
+    peers: Optional[List[Dict[str, Any]]] = None,
+    deploy_open: bool = False,
+    tradeability: str = "WAIT",
+    brief_stale: bool = False,
+    index: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Compare rank, quality tier, deploy authority, and EV band.
+    Research/display only — never grants deploy from rank.
+    """
+    reasons: List[str] = []
+    rank = _resolve_rank(row, index=index)
+    tier = _quality_tier(row)
+    tb = str(tradeability or row.get("tradeability") or "WAIT").upper()
+    exec_ready = bool(row.get("execution_ready"))
+    ev_f = _row_ev_score(row)
+
+    families: Dict[str, Any] = {
+        "rank": rank,
+        "rank_label": f"#{rank}" + (f" / {rank_total}" if rank_total else ""),
+        "quality_tier": tier,
+        "authority": "DEPLOY" if exec_ready else "MONITOR",
+        "deploy_open": deploy_open,
+        "gate": tb,
+        "ev_score": ev_f,
+        "execution_ready": exec_ready,
+    }
+
+    if rank <= 1 and tier in _WEAK_QUALITY_TIERS:
+        reasons.append(f"rank #{rank} · quality {tier}")
+
+    if (
+        rank <= _TOP_RANK_DISAGREE
+        and not exec_ready
+        and tier != _STRONG_QUALITY_TIER
+        and (not deploy_open or tb in ("WAIT", "NO_TRADE"))
+    ):
+        reasons.append(f"rank #{rank} · gate {tb} · quality {tier}")
+
+    peer_rows = peers or []
+    if peer_rows and rank <= _TOP_RANK_DISAGREE and ev_f is not None:
+        peer_evs = [v for v in (_row_ev_score(p) for p in peer_rows) if v is not None]
+        if peer_evs:
+            median_ev = sorted(peer_evs)[len(peer_evs) // 2]
+            max_ev = max(peer_evs)
+            if ev_f < median_ev * 0.75 or (rank == 1 and ev_f < max_ev * 0.85):
+                reasons.append(f"rank #{rank} · EV {ev_f:.2f} below peers")
+
+    if (
+        tier == _STRONG_QUALITY_TIER
+        and (tb in ("WAIT", "NO_TRADE") or not deploy_open)
+        and not exec_ready
+    ):
+        reasons.append(f"quality STRONG · gate {tb}")
+
+    if row_has_council_scanner_divergence(row):
+        reasons.append("council vs scanner score diverge")
+
+    if str(row.get("conflict_level") or "").upper() in ("HIGH", "CRITICAL"):
+        reasons.append("high structural conflict")
+
+    if (brief_stale or row.get("research_context_only")) and rank <= _TOP_RANK_DISAGREE:
+        reasons.append(f"rank #{rank} · research context only")
+
+    unique: List[str] = []
+    seen: set[str] = set()
+    for item in reasons:
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
+
+    disagree = bool(unique)
+    return {
+        "disagree": disagree,
+        "families": families,
+        "message": DISAGREEMENT_MESSAGE if disagree else "",
+        "reasons": unique[:4],
+    }
+
+
+def attach_score_families_disagreement_to_row(
+    row: Dict[str, Any],
+    *,
+    rank_total: int = 0,
+    peers: Optional[List[Dict[str, Any]]] = None,
+    deploy_open: bool = False,
+    tradeability: str = "WAIT",
+    brief_stale: bool = False,
+    index: Optional[int] = None,
+) -> Dict[str, Any]:
+    out = dict(row)
+    out["score_families"] = detect_score_family_disagreement(
+        out,
+        rank_total=rank_total,
+        peers=peers,
+        deploy_open=deploy_open,
+        tradeability=tradeability,
+        brief_stale=brief_stale,
+        index=index,
+    )
+    if "score_card" not in out:
+        out = attach_score_families_to_row(out)
+    return out
+
+
+def attach_score_families_disagreement_to_rows(
+    rows: Optional[List[Dict[str, Any]]],
+    *,
+    deploy_open: bool = False,
+    tradeability: str = "WAIT",
+    brief_stale: bool = False,
+) -> List[Dict[str, Any]]:
+    if not rows:
+        return []
+    total = len(rows)
+    return [
+        attach_score_families_disagreement_to_row(
+            r,
+            rank_total=total,
+            peers=rows,
+            deploy_open=deploy_open,
+            tradeability=tradeability,
+            brief_stale=brief_stale,
+            index=i,
+        )
+        for i, r in enumerate(rows)
+    ]
+
+
+def build_score_families_summary(
+    rows: Optional[List[Dict[str, Any]]],
+    *,
+    deploy_open: bool = False,
+    tradeability: str = "WAIT",
+    brief_stale: bool = False,
+) -> Dict[str, Any]:
+    """Payload-level summary for board/today APIs."""
+    disagree_rows: List[Dict[str, Any]] = []
+    for i, row in enumerate(rows or []):
+        sf = row.get("score_families")
+        if not sf:
+            sf = detect_score_family_disagreement(
+                row,
+                rank_total=len(rows or []),
+                peers=rows,
+                deploy_open=deploy_open,
+                tradeability=tradeability,
+                brief_stale=brief_stale,
+                index=i,
+            )
+        if sf.get("disagree"):
+            disagree_rows.append(
+                {
+                    "ticker": row.get("ticker"),
+                    "rank": (sf.get("families") or {}).get("rank"),
+                    "reasons": sf.get("reasons") or [],
+                }
+            )
+    tickers = [str(d["ticker"]) for d in disagree_rows if d.get("ticker")][:8]
+    return {
+        "active": bool(disagree_rows),
+        "message": DISAGREEMENT_MESSAGE,
+        "disagree_count": len(disagree_rows),
+        "disagree_rows": disagree_rows[:8],
+        "disagree_tickers": tickers,
+    }
 
 
 def row_has_council_scanner_divergence(row: Dict[str, Any]) -> bool:
@@ -221,19 +422,41 @@ def build_score_reconciliation(
     *,
     cross_asset: Optional[Dict[str, Any]] = None,
     contradiction_flags: Optional[List[str]] = None,
+    deploy_open: bool = False,
+    tradeability: str = "WAIT",
+    brief_stale: bool = False,
 ) -> Dict[str, Any]:
     """
-    Dashboard / today payload: warn when council vs scanner families diverge
-    or explicit contradiction flags are present.
+    Dashboard / today payload: warn when score families diverge
+    (rank vs quality vs authority vs EV) or explicit contradictions exist.
     """
     rows = rows or []
     divergent: List[str] = []
-    for row in rows[:20]:
-        if not row_has_council_scanner_divergence(row):
-            continue
+    disagree_reasons: List[str] = []
+    family_disagree_tickers: List[str] = []
+
+    for i, row in enumerate(rows[:20]):
+        sf = row.get("score_families")
+        if not sf:
+            sf = detect_score_family_disagreement(
+                row,
+                rank_total=len(rows),
+                peers=rows,
+                deploy_open=deploy_open,
+                tradeability=tradeability,
+                brief_stale=brief_stale,
+                index=i,
+            )
         tk = str(row.get("ticker") or "").upper()
-        if tk:
+        if sf.get("disagree") and tk:
+            family_disagree_tickers.append(tk)
+            for reason in sf.get("reasons") or []:
+                line = f"{tk}: {reason}" if tk not in reason else reason
+                if line not in disagree_reasons:
+                    disagree_reasons.append(line)
+        if row_has_council_scanner_divergence(row) and tk and tk not in divergent:
             divergent.append(tk)
+
     contradictions: List[str] = list(contradiction_flags or [])
     for row in rows[:20]:
         if str(row.get("conflict_level") or "").upper() in ("HIGH", "CRITICAL"):
@@ -247,13 +470,26 @@ def build_score_reconciliation(
             contradictions.append("Macro cross-asset conflicts elevated")
     contradictions = contradictions[:8]
     divergent = divergent[:5]
-    active = bool(divergent or contradictions)
+    merged_tickers = []
+    for tk in family_disagree_tickers + divergent:
+        if tk and tk not in merged_tickers:
+            merged_tickers.append(tk)
+    merged_tickers = merged_tickers[:8]
+    summary = build_score_families_summary(
+        rows,
+        deploy_open=deploy_open,
+        tradeability=tradeability,
+        brief_stale=brief_stale,
+    )
+    active = bool(merged_tickers or contradictions or summary.get("active"))
     return {
         "active": active,
-        "message": "Score families disagree — do not size on rank alone",
-        "divergent_tickers": divergent,
+        "message": DISAGREEMENT_MESSAGE,
+        "divergent_tickers": merged_tickers,
         "contradictions": contradictions,
         "council_scanner_divergence": bool(divergent),
+        "disagree_reasons": disagree_reasons[:6],
+        "score_families_summary": summary,
     }
 
 

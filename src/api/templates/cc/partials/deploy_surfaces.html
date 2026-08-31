@@ -1,36 +1,163 @@
       <div x-show="tab==='today'" data-cc="today-deploy-chrome">
-      <!-- ── Mission Control (operator landing — 5-second decision) ── -->
+      <!-- Belief incomplete amber strip (deploy_open + held tickers missing thesis/kill) -->
+      <div x-show="tab==='today'&&beliefDeployStripVisible()" data-cc="belief-deploy-strip" class="cc-surface-pad" style="padding-bottom:0">
+        <div class="p-2 rounded text-[9px]" style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);color:var(--amber);line-height:1.55">
+          <span class="pill pa text-[7px] font-bold mr-1">BELIEF</span>
+          <span class="font-bold" x-text="beliefDeployStripLine()"></span>
+        </div>
+      </div>
+      <!-- ── Mission Control (IDOS Four Questions — operator landing) ── -->
       <template x-if="tab==='today'">
-        <div data-cc="mission-control-card" style="padding:4px 12px 0">
-          <div class="card card-p" style="padding:10px 12px;border-left:4px solid var(--green);background:linear-gradient(135deg,rgba(0,212,170,.06),rgba(88,166,255,.04))">
-            <div class="flex flex-wrap items-center gap-2 mb-2">
-              <span class="pill text-[8px] font-bold uppercase" :class="missionControl().mission_label==='MISSION'?'pg':'pa'" x-text="missionControl().mission_label"></span>
-              <span class="text-[9px] font-bold uppercase" style="color:var(--t3)" x-text="missionControl().title"></span>
+        <div data-cc="mission-control-card" class="cc-surface-pad">
+          <template x-if="missionControlLoading()">
+            <div class="card mc-card mc-loading">
+              <span class="spin"></span>
+              <span>Refreshing mission… · 更新任務狀態</span>
             </div>
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[8px] mb-2">
-              <div><span class="font-bold" style="color:var(--t3)">Market · 市場</span><div class="text-white font-semibold" x-text="missionControl().market_state"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Deploy? · 部署?</span><div class="text-white font-semibold" x-text="missionControl().deploy"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Opportunity · 機會</span><div class="text-white font-semibold" x-text="missionControl().good_opportunity"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Action · 行動</span><div class="text-amber-300 font-semibold" x-text="missionControl().what_to_do"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Why · 原因</span><div style="color:var(--t2);line-height:1.35" x-text="missionControl().why"></div></div>
-              <div><span class="font-bold" style="color:var(--t3)">Review · 再檢視</span><div style="color:var(--t3)" x-text="missionControl().next_review"></div></div>
+          </template>
+          <div x-show="!missionControlLoading()" class="card mc-card" :class="'mc-'+tradeabilityBadgeClass(missionControl().tradeability)">
+            <div class="mc-header">
+              <div class="mc-header-left">
+                <span class="pill text-[8px] font-bold uppercase workflow-stage-pill" x-text="workflowStage().label"></span>
+                <span class="pill text-[8px] font-bold uppercase" :class="tradeabilityBadgeClass(missionControl().tradeability)" x-text="canonicalTradeability()||missionControl().tradeability"></span>
+                <span class="pill text-[8px] font-bold uppercase" :class="missionControl().mission_label==='MISSION'?'pg':'pa'" x-text="missionControl().mission_label"></span>
+              </div>
+              <span class="mc-title-label" x-text="missionControl().title"></span>
             </div>
-            <div class="text-[10px] font-bold text-white mb-1" x-text="missionControl().quality_headline"></div>
-            <div class="text-[8px] mb-1" x-show="missionControl().why_not_deploy.length">
-              <template x-for="w in missionControl().why_not_deploy" :key="'mcw-'+w"><div style="color:var(--t2)" x-text="'• '+w"></div></template>
+            <div data-cc="four-questions-block" class="idos-grid">
+              <div class="idos-cell">
+                <div class="idos-label" x-text="fourQuestionsBlock().labels.know||'WE KNOW'"></div>
+                <div class="idos-value" x-text="fourQuestionsBlock().know"></div>
+              </div>
+              <div class="idos-cell">
+                <div class="idos-label" x-text="fourQuestionsBlock().labels.believe||'WE BELIEVE'"></div>
+                <div class="idos-value" x-text="fourQuestionsBlock().believe"></div>
+              </div>
+              <div class="idos-cell">
+                <div class="idos-label" x-text="fourQuestionsBlock().labels.doubt||'WE DON\'T KNOW'"></div>
+                <div class="idos-value idos-doubt" x-text="fourQuestionsBlock().doubt"></div>
+              </div>
+              <div class="idos-cell idos-therefore-cell">
+                <div class="idos-label" x-text="fourQuestionsBlock().labels.therefore||'THEREFORE'"></div>
+                <div class="idos-value idos-therefore" x-text="fourQuestionsBlock().therefore"></div>
+              </div>
             </div>
-            <div class="text-[8px]" x-show="missionControl().next_actions.length">
-              <template x-for="a in missionControl().next_actions" :key="'mca-'+a"><div style="color:var(--t2)" x-text="'→ '+a"></div></template>
+            <div class="mc-verdict" x-text="missionControl().quality_headline"></div>
+            <div class="mc-detail" x-show="pmDecisionTickerLine()" data-cc="pm-board-ssot-strip">
+              <span class="mc-footer-label">Board SSOT</span>
+              <span x-text="pmDecisionTickerLine()"></span>
             </div>
+            <div class="mc-detail text-[8px]" style="color:var(--t3);line-height:1.45" x-show="missionControl().best_trade||missionControl().near_miss_top||missionControl().sleeve_gate_status">
+              <span class="mc-footer-label">PM parity</span>
+              <span x-text="'Deploy '+missionControl().best_trade+' · Near-miss '+missionControl().near_miss_top+' · Sleeve '+missionControl().sleeve_gate_status"></span>
+            </div>
+            <div class="mc-detail" x-show="missionControl().why_not_deploy.length&&todayContextExpanded">
+              <template x-for="w in missionControl().why_not_deploy" :key="'mcw-'+w"><div x-text="'• '+w"></div></template>
+            </div>
+            <div class="mc-detail" x-show="missionControl().next_actions.length&&!isWaitDay()">
+              <template x-for="a in missionControl().next_actions" :key="'mca-'+a"><div x-text="'→ '+a"></div></template>
+            </div>
+            <div class="mc-footer-row">
+              <div class="mc-footer-item" data-cc="firm-cadence-strip">
+                <span class="mc-footer-label">Cadence</span>
+                <span class="mc-footer-value" x-text="firmCadenceNextLine()"></span>
+              </div>
+              <div class="mc-footer-item" data-cc="marginal-roc-strip">
+                <span class="mc-footer-label">Marginal ROC</span>
+                <span class="mc-footer-value" x-text="marginalRocLadderLine()"></span>
+              </div>
+              <div class="mc-footer-item" data-cc="decision-readiness-strip" x-show="decisionReadinessLine()">
+                <span class="mc-footer-label">Pre-decision</span>
+                <span class="mc-footer-value" x-text="decisionReadinessLine()"></span>
+              </div>
+              <div class="mc-footer-item" data-cc="daily-ic-strip">
+                <button type="button" class="btn-s text-[8px] mr-1" @click="toggleDailyIcExpanded()" x-text="dailyIc.expanded?'Hide IC':'Expand IC'"></button>
+                <span class="mc-footer-label">Daily IC</span>
+                <span class="mc-footer-value" x-text="dailyIcLine()"></span>
+                <div data-cc="daily-ic-one-pager" class="daily-ic-one-pager text-[8px] mt-1" style="color:var(--t3);line-height:1.5" x-show="dailyIc.expanded||dailyIc.data">
+                  <template x-for="sec in dailyIcOnePagerLines()" :key="'dic-'+sec.key">
+                    <div class="mt-0.5"><span class="font-bold text-white" x-text="sec.label+':'"></span> <span x-text="sec.line"></span></div>
+                  </template>
+                  <div x-show="dailyIc.err" class="text-red-400 mt-1" x-text="dailyIc.err"></div>
+                </div>
+              </div>
+              <div class="mc-footer-item" data-cc="deploy-intent-journal-strip" x-show="deployIntentJournalVisible()">
+                <span class="mc-footer-label">Journal</span>
+                <span class="mc-footer-value" x-text="deployIntentJournalLine()"></span>
+                <div class="text-[8px] mt-0.5" style="color:var(--t3)" x-show="deployIntentJournal.data?.readiness_path">
+                  <span>Readiness: </span><span class="mono" x-text="deployIntentJournal.data.readiness_path"></span>
+                  <span class="ml-2">POST: </span><span class="mono" x-text="deployIntentJournal.data.journal_post_path"></span>
+                </div>
+              </div>
+              <div class="mc-footer-item" data-cc="attention-budget-strip">
+                <span class="mc-footer-label">Attention</span>
+                <span class="mc-footer-value" :style="attentionBudgetExceeded()?'color:var(--amber);font-weight:700':''" x-text="attentionBudgetLine()"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+      <!-- Pre-Decision Gate (display-only — deploy_open + top row) -->
+      <template x-if="tab==='today'&&preDecisionGateVisible()">
+        <div data-cc="pre-decision-gate-panel" class="cc-surface-pad" style="padding-top:0">
+          <div class="card card-p" style="padding:10px 12px;border-left:3px solid var(--green)">
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-[10px] font-bold uppercase" style="color:var(--green)">Decision Readiness · 部署前閘</div>
+              <span class="pill pw text-[7px]">DISPLAY ONLY</span>
+            </div>
+            <div class="text-[8px] mb-2" style="color:var(--t3)">Acknowledge checklist — tracks compliance in localStorage; does not block deploy.</div>
+            <template x-if="preDecisionGate.loading"><div class="text-[9px]" style="color:var(--t3)">Loading gate…</div></template>
+            <template x-if="preDecisionGate.data">
+              <div class="text-[9px] font-bold mono text-white mb-1" x-text="preDecisionGate.data.ticker||topDeployCandidate()"></div>
+              <label class="flex items-center gap-2 text-[8px] mb-2 cursor-pointer">
+                <input type="checkbox" :checked="preDecisionGate.acknowledged" @change="togglePreDecisionAck()" />
+                <span>I acknowledge the pre-decision checklist · 我已確認部署前清單</span>
+              </label>
+              <div class="text-[8px] mb-1" style="color:var(--t2)" x-text="decisionReadinessLine()"></div>
+              <div class="text-[8px] font-bold uppercase mt-2 mb-0.5" style="color:var(--red)">Red Team · 紅隊</div>
+              <template x-for="rt in preDecisionRedTeamLines()" :key="'rt-'+rt.key">
+                <div class="text-[8px] mb-0.5" style="color:var(--t2)"><span class="font-bold" x-text="rt.label+': '"></span><span x-text="rt.value"></span></div>
+              </template>
+              <div class="text-[8px] font-bold uppercase mt-2 mb-0.5" style="color:var(--blue)">Outside View · 外部視角</div>
+              <div class="text-[8px] mb-1" style="color:var(--t2)" x-text="preDecisionOutsideViewLine()"></div>
+              <div class="text-[8px] font-bold uppercase mt-2 mb-0.5" style="color:var(--purple)">Decision Journal · 決策日誌</div>
+              <div class="text-[8px] mb-1" style="color:var(--t2)" x-text="deployIntentJournalLine()||'Record thesis before deploy · 部署前記錄論點'"></div>
+              <button type="button" class="btn-s text-[8px] mt-1" @click="postJournalStubIfNeeded()" x-show="preDecisionGate.data.journal&&!preDecisionGate.data.journal.complete">Record thesis stub · POST journal</button>
+            </template>
+            <div x-show="preDecisionGate.err" class="text-[9px] text-red-400" x-text="preDecisionGate.err"></div>
+          </div>
+        </div>
+      </template>
+      <!-- Prior lessons strip (knowledge retrieval) -->
+      <template x-if="tab==='today'&&priorLessonsLine()">
+        <div data-cc="prior-lessons-strip" class="cc-surface-pad" style="padding-top:0">
+          <div class="card card-p" style="padding:6px 10px;border-left:3px solid var(--purple)">
+            <div class="text-[8px] font-bold uppercase mb-0.5" style="color:var(--purple)">Prior lessons · 以往教訓</div>
+            <div class="text-[8px]" style="color:var(--t2);line-height:1.45" x-text="priorLessonsLine()"></div>
+          </div>
+        </div>
+      </template>
+      <template x-if="tab==='today'&&dashboardScoreReconciliationActive()">
+        <div data-cc="score-families-strip" class="cc-surface-pad" style="padding-top:0">
+          <div class="p-2 rounded text-[9px]" style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.28);color:var(--t2);line-height:1.55">
+            <span class="pill pa text-[7px] font-bold mr-1">SCORE FAMILIES</span>
+            <span class="font-bold" style="color:var(--amber)" x-text="dashboardScoreReconciliationMessage()"></span>
+            <span class="block mt-1 text-[8px]" style="color:var(--t3)" x-text="dashboardScoreReconciliationDetail()"></span>
           </div>
         </div>
       </template>
       <div x-show="tab==='today'&&isWaitDay()&&!deployOpen()" style="padding:4px 12px 0">
         <button type="button" class="btn-s text-[8px]" @click="toggleTodayContextExpanded()"
-          x-text="todayContextExpanded?'Hide monitor context · 收起監察脈絡':'Show monitor context · 展開監察脈絡'"></button>
+          x-text="todayContextExpanded?'Hide context · 收起脈絡':'Expand context · 展開脈絡'"></button>
+      </div>
+      <div x-show="tab==='today'&&(today7.as_of||today7.top_ranked?.length)" data-cc="price-provenance-strip" class="cc-surface-pad" style="padding-top:4px">
+        <div class="text-[7px] mono" style="color:var(--t3);line-height:1.45">
+          <span class="font-bold uppercase mr-1">Provenance</span>
+          <span x-text="priceProvenanceLine((today7.top_ranked&&today7.top_ranked[0])||today7||{}).label"></span>
+        </div>
       </div>
       <div x-show="tab==='today'&&todaySecondaryContextVisible()">
-      <!-- ── Opportunity verdict (first screen — monitor counts, never deploy authority) ── -->
+      <!-- ── Opportunity verdict (expanded context — monitor counts, never deploy authority) ── -->
       <template x-if="tab==='today'&&today7.opportunity_verdict&&todaySecondaryContextVisible()">
         <div data-cc="opportunity-verdict-block" style="padding:4px 12px 0">
           <div class="card card-p" style="padding:8px 10px;border-left:3px solid var(--blue)" :style="opportunityVerdictMuted()?'opacity:.72':''">
@@ -118,7 +245,7 @@
         </div>
       </template>
 
-      <!-- ── Ops / IB / Monitor strip (institutional cockpit) ── -->
+      <!-- ── Ops / IB / Monitor strip (expanded context only) ── -->
       <div x-show="tab==='today'&&todaySecondaryContextVisible()" data-cc="deploy-status-strip" style="padding:6px 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <span class="pill text-[8px]" :class="ibkrStateFrom(today7.execution_readiness).level==='ready'?'pg':ibkrStateFrom(today7.execution_readiness).level==='blocked'?'pr':'pa'" x-text="'IBKR '+ibkrUnifiedShort(today7.execution_readiness)"></span>
         <span class="pill text-[8px]" :class="cc_status.breaker?'pr':(ops.running?'pg':'pw')" x-text="cc_status.breaker?'BREAKER':(ops.running?'ENGINE ON':'ENGINE OFF')"></span>
