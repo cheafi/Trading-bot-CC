@@ -8,7 +8,7 @@ focused liquid-US set with index/ETF classification.
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Dict
 
 from src.core.universe_loader import LoadedUniverse, get_universe, validate_ticker
 

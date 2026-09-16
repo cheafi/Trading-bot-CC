@@ -1,17 +1,7 @@
-/* cc-i18n.js — bilingual augmentation for Clarity Console.
+/* cc-i18n.js — Traditional Chinese augmentation for Clarity Console.
  *
- * Goal: Traditional Chinese as the PRIMARY displayed language, English kept as
- * reference. Implemented as a runtime DOM augmentation layer rather than editing
- * the 14k-line template, so:
- *   - index.html static content is unchanged (every file-content test + the
- *     JS<->Python recovery-copy parity stay valid),
- *   - English substrings are preserved (assertions that look for them pass),
- *   - one dictionary is the single source of truth (maintainable, reversible).
- *
- * Mechanism: for LITERAL static leaf elements whose trimmed text exactly matches
- * a dictionary key, replace text with "<繁中> · <English>". x-text/x-html bound
- * nodes are skipped so we never fight Alpine reactivity. Idempotent: the
- * augmented string is not itself a key, so re-scans are no-ops.
+ * English source strings stay in index.html for tests; this layer replaces
+ * them at runtime with 繁體中文. x-text/x-html bound nodes are skipped.
  *
  * Authority note: this is presentation only. It never changes any data-cc /
  * data-cc-nav selector, never alters authority/banner logic, and is purely
@@ -329,9 +319,108 @@
 		"Near-miss upgrade": "接近達標升級",
 		"Rejected / Avoid": "否決／避免",
 		"Monitor ranking": "監控排序",
+		// ── Header / replay / alerts (static) ──
+		"Loading snapshot…": "載入快照中…",
+		"Exit Replay": "退出重播",
+		"Exit Replay · 返回 LIVE": "退出重播 · 返回 LIVE",
+		"HISTORICAL REPLAY": "歷史重播",
+		"↻ Refresh": "↻ 重新整理",
+		"✕ Close": "✕ 關閉",
+		"Position Risk Alerts": "持倉風險警報",
+		"No active risk alerts.": "無活躍風險警報。",
+		"No persisted alerts yet.": "尚無持久化警報。",
+		Sev: "嚴重度",
+		Kind: "類型",
+		Message: "訊息",
+		Member: "成員",
+		Vote: "投票",
+		Score: "分數",
+		"As of": "截至",
+		"Final action": "最終動作",
+		"Council avg": "委員會平均",
+		"Reference only · decision surfaces suspended": "僅供參考 · 決策介面已暫停",
+		"RUNTIME · WARMING": "運行時 · 預熱中",
+		"Backend importing — monitor-only until modules ready": "後端匯入中 — 模組就緒前僅供監控",
+		"Advanced aggregate — not deploy gate": "進階聚合 — 非部署閘門",
+		"No setups. Ensure brief data is loaded.": "無型態。請確認晨報資料已載入。",
+		"Select a ticker from the left rail": "請從左側欄選擇代碼",
+		"or click ↻ Refresh to load your watchlist": "或點擊 ↻ 重新整理以載入觀察清單",
+		"Confidence Breakdown": "信心分解",
+		"Final Confidence": "最終信心",
+		"Portfolio Fit": "投組適配",
+		"Critic notes:": "評論筆記：",
+		"No critical objections.": "無重大反對意見。",
+		"Select a ticker to see reasoning": "選擇代碼以查看推理",
+		"Board stance": "看板立場",
+		"Passive baseline": "被動基準",
+		"Morning context": "晨間脈絡",
+		"Filter breakdown": "篩選分解",
+		"Top watch upgrades": "頭部觀察升級",
+		"Closest to passing": "最接近通過",
+		"Monitor next": "下一個監控",
+		"Execution readiness": "執行就緒",
+		"Operator sentence": "操盤手摘要",
+		"Why no setup today?": "今日為何無型態？",
+		"Promotion candidates": "升級候選",
+		"Open Dashboard": "開啟儀表板",
+		"Open Playbook": "開啟策略簿",
+		"Open Discovery": "開啟探索",
+		"☀ Morning briefing": "☀ 晨間簡報",
+		"💼 Portfolio risk": "💼 持倉風險",
+		"Load Funds": "載入基金",
+		"Open Leaders →": "開啟領漲股 →",
+		"Dashboard replay": "儀表板重播",
+		Trend: "趨勢",
+		Risks: "風險",
+		"SURFACE BAR": "介面列",
+		"Status ▾": "狀態 ▾",
+		BELIEF: "信念",
+		"DISPLAY ONLY": "僅顯示",
+		"Loading gate…": "載入閘門中…",
+		"SCORE FAMILIES": "分數族群",
+		Provenance: "溯源",
+		"Known then": "當時已知",
+		"Trade decisions": "交易決策",
+		"Outcome labeled": "結果已標記",
+		"Journal entries": "日誌條目",
+		Overrides: "覆寫",
+		"Calibration marks": "校準標記",
+		"Loading journal linkage…": "載入日誌連結中…",
+		Quality: "品質",
+		"Stale brief · muted": "晨報過期 · 已淡化",
+		"No urgent move": "無緊急動作",
+		"Top promotion": "頭號升級",
+		"Strongest live": "最強實盤",
+		"Strongest training": "最強訓練",
+		"Sleeve action now": "策略組當前動作",
+		"Risk budget": "風險預算",
+		"Controls capital": "控制資金",
+		"Top adds:": "主要加碼：",
+		"No triggers — refresh after market open or load brief.": "無觸發 — 開盤後重新整理或載入晨報。",
+		"Institutional monitor": "機構監控",
+		"Quality by market bucket": "依市場桶的品質",
+		"Open Backtest Lab": "開啟回測室",
+		"Open Rejections": "開啟否決",
+		"Open Discovery scanners →": "開啟探索掃描器 →",
+		"Send to Playbook review": "送至策略簿審閱",
+		"⋯ More": "⋯ 更多",
+		Conf: "信心",
+		"DEMO/REPLAY": "演示／重播",
+		"No persisted agent runs yet.": "尚無持久化 Agent 執行紀錄。",
+		"No resolved outcomes yet. Reliability appears after outcome labeling.":
+			"尚無已解析結果。可靠度於結果標記後顯示。",
+		"Board SSOT": "看板 SSOT",
+		"PM parity": "PM 一致性",
+		Cadence: "節奏",
+		"Marginal ROC": "邊際 ROC",
+		"Pre-decision": "決策前",
+		"Daily IC": "每日 IC",
+		Journal: "日誌",
+		Attention: "關注",
+		"Quant clusters (monitor)": "量化集群（監控）",
+		"Causal — no look-ahead": "因果 — 無前瞻",
 	}
 
-	var SEP = " · "
 	var ATTR = "data-zh-done"
 
 	function augment(el) {
@@ -343,7 +432,7 @@
 		if (el.querySelector("*")) return
 		var key = (el.textContent || "").trim()
 		if (!key || !Object.prototype.hasOwnProperty.call(ZH, key)) return
-		el.textContent = ZH[key] + SEP + key
+		el.textContent = ZH[key]
 		el.setAttribute(ATTR, "1")
 	}
 

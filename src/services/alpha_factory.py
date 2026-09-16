@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.core.alpha_object import AlphaEvidence, AlphaLifecycleStage, AlphaObject
-from src.services.investment_object_factory import make_attribution_root_ref, make_decision_id
+from src.services.investment_object_factory import (
+    make_attribution_root_ref,
+    make_decision_id,
+)
 
 logger = logging.getLogger(__name__)
 

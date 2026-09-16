@@ -95,7 +95,9 @@ def build_playbook_near_miss_rows(
 
     candidates.sort(key=_sort_key)
     try:
-        from src.services.opportunity_scan_filters import filter_watch_promotion_candidates
+        from src.services.opportunity_scan_filters import (
+            filter_watch_promotion_candidates,
+        )
 
         filtered, _stats = filter_watch_promotion_candidates(candidates[: limit * 2])
         return filtered[:limit]

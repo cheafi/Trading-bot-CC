@@ -155,6 +155,24 @@ class TradingScheduler:
             replace_existing=True,
         )
 
+        # 4:50 PM - Autonomous learning loop (observe/calibrate/propose only)
+        self.scheduler.add_job(
+            self._job_autonomous_learning_loop,
+            CronTrigger(hour=16, minute=50, day_of_week="mon-fri"),
+            id="autonomous_learning_loop",
+            name="Autonomous Learning Loop",
+            replace_existing=True,
+        )
+
+        # Sunday 5:00 PM ET - Weekly IC digest cache for Ops export
+        self.scheduler.add_job(
+            self._job_weekly_ic_digest,
+            CronTrigger(day_of_week="sun", hour=17, minute=0),
+            id="weekly_ic_digest",
+            name="Weekly IC Digest Cache",
+            replace_existing=True,
+        )
+
         # 8:00 PM - Historical data backfill
         self.scheduler.add_job(
             self._job_historical_backfill,
@@ -409,7 +427,9 @@ class TradingScheduler:
         """Mark due T+1/T+5/T+20 forward outcomes for calibration."""
         logger.info("Starting forward outcome marks")
         try:
-            from src.services.forward_outcomes import run_forward_outcome_marks  # noqa: PLC0415
+            from src.services.forward_outcomes import (
+                run_forward_outcome_marks,  # noqa: PLC0415
+            )
 
             result = await asyncio.to_thread(run_forward_outcome_marks)
             logger.info(
@@ -419,6 +439,42 @@ class TradingScheduler:
             )
         except Exception as exc:
             logger.warning("Forward outcome marks failed (non-fatal): %s", exc)
+
+    async def _job_autonomous_learning_loop(self):
+        """Observe → calibrate → propose belief updates (research_only, no apply)."""
+        logger.info("Starting autonomous learning loop")
+        try:
+            from src.services.autonomous_learning_loop import (
+                run_learning_cycle,  # noqa: PLC0415
+            )
+
+            result = await asyncio.to_thread(
+                run_learning_cycle,
+                phases=["observe", "calibrate", "propose"],
+                apply_changes=False,
+            )
+            logger.info(
+                "Autonomous learning loop: %s",
+                result.get("headline", "complete"),
+            )
+        except Exception as exc:
+            logger.warning("Autonomous learning loop failed (non-fatal): %s", exc)
+
+    async def _job_weekly_ic_digest(self):
+        """Cache weekly IC digest JSON for Ops / review pack export."""
+        logger.info("Caching weekly IC digest")
+        try:
+            from src.services.autonomous_learning_loop import (
+                persist_weekly_ic_digest,  # noqa: PLC0415
+            )
+
+            digest = await asyncio.to_thread(persist_weekly_ic_digest, board=None)
+            logger.info(
+                "Weekly IC digest cached: %s",
+                (digest.get("headline") or "")[:80],
+            )
+        except Exception as exc:
+            logger.warning("Weekly IC digest cache failed (non-fatal): %s", exc)
 
     async def _job_eod_processing(self):
         """End of day processing: build brief, review portfolio, send Discord summary."""

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 _SIGNAL_TYPES = frozenset(
     {"BREAKOUT", "TREND", "RS_LEADER", "ETF_THEME", "REVERSAL"}
@@ -45,7 +45,6 @@ def _confidence_tier(row: Dict[str, Any]) -> str:
     score = _f(row.get("score") or row.get("final_conf"))
     thesis = _f(row.get("thesis_conf"))
     timing = _f(row.get("timing_conf"))
-    data_c = _f(row.get("data_conf"))
     if row.get("execution_ready") and row.get("trade_bar", {}).get("passes_trade_bar"):
         return "DEPLOY"
     if score >= 7.5 and thesis >= 0.6 and timing >= 0.55:

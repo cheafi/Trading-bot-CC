@@ -204,6 +204,9 @@ class BrokerManager:
         stop_price: Optional[float] = None,
         market: Market = Market.US,
         broker: Optional[BrokerType] = None,
+        *,
+        dry_run: bool = True,
+        account: str = "",
     ) -> OrderResult:
         """
         Place an order through the specified or active broker.
@@ -229,6 +232,11 @@ class BrokerManager:
                 broker=str(broker or self._active_broker),
             )
 
+        from src.core.order_execution import (
+            assert_live_order_permitted,
+            record_dry_run_order,
+        )
+
         order = OrderRequest(
             ticker=ticker,
             side=side,
@@ -239,7 +247,20 @@ class BrokerManager:
             market=market,
         )
 
-        result = await target_broker.place_order(order)
+        if dry_run:
+            record_dry_run_order(
+                source="broker_manager",
+                symbol=ticker,
+                side=side.value,
+                quantity=quantity,
+                order_type=order_type.value,
+                extra={"market": market.value},
+            )
+            paper = self._brokers.get(BrokerType.PAPER) or target_broker
+            return await paper.place_order(order, dry_run=True)
+
+        assert_live_order_permitted(dry_run=False, account=account)
+        result = await target_broker.place_order(order, dry_run=False)
 
         # Notify callbacks
         if result.success:

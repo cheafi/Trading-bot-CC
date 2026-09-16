@@ -1,0 +1,124 @@
+# Copy to docker-compose.override.yml and customize for your VPS.
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#
+# Brings up one orchestrator per venue (crash isolation) + dead-man's switch.
+# Live trading gate (fail-closed) — ALL required for live:
+#   LIVE_TRADING=1  IB_MODE=live  IB_API_PORT=4003
+# Default below is paper by construction (DRY_RUN=true, IB_MODE=paper, port 4002).
+
+x-orchestrator: &orchestrator
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.engine
+  restart: unless-stopped
+  command: ["python", "-m", "src.engines.main"]
+  depends_on:
+    postgres:
+      condition: service_healthy
+    ib-gateway:
+      condition: service_started
+  volumes:
+    - state_data:/app/data/state
+  environment: &orchestrator-env
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    STATE_DATA_DIR: /app/data/state
+    IB_HOST: ib-gateway
+    DRY_RUN: ${DRY_RUN:-true}
+    TRADING_ENV: ${TRADING_ENV:-paper}
+    LIVE_TRADING: ${LIVE_TRADING:-0}
+    IB_MODE: ${IB_MODE:-paper}
+    IB_API_PORT: ${IB_API_PORT:-4002}
+    HEARTBEAT_URL: ${HEARTBEAT_URL:-}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    LOG_FORMAT: json
+    CYCLE_INTERVAL: ${CYCLE_INTERVAL:-60}
+    TZ: America/New_York
+  healthcheck:
+    test:
+      [
+        "CMD",
+        "python",
+        "-c",
+        "import os,time; from pathlib import Path; p=Path(os.environ.get('STATE_DATA_DIR','/app/data/state'))/'engine_heartbeat'; assert p.exists() and time.time()-p.stat().st_mtime<180",
+      ]
+    interval: 60s
+    timeout: 10s
+    retries: 3
+    start_period: 120s
+  networks:
+    - trading_network
+
+services:
+  orchestrator-us:
+    <<: *orchestrator
+    container_name: tradingai_orchestrator_us
+    environment:
+      <<: *orchestrator-env
+      ORCHESTRATOR_VENUE: us
+      IB_CLIENT_ID: 1
+      SERVICE_NAME: orchestrator_us
+
+  orchestrator-hk:
+    <<: *orchestrator
+    container_name: tradingai_orchestrator_hk
+    environment:
+      <<: *orchestrator-env
+      ORCHESTRATOR_VENUE: hk
+      IB_CLIENT_ID: 2
+      SERVICE_NAME: orchestrator_hk
+
+  orchestrator-futures:
+    <<: *orchestrator
+    container_name: tradingai_orchestrator_futures
+    environment:
+      <<: *orchestrator-env
+      ORCHESTRATOR_VENUE: futures
+      IB_CLIENT_ID: 3
+      SERVICE_NAME: orchestrator_futures
+
+  # Optional: APScheduler jobs (ingestion, reports) — separate crash domain
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.scheduler
+    container_name: tradingai_scheduler
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - state_data:/app/data/state
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      STATE_DATA_DIR: /app/data/state
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TZ: America/New_York
+    networks:
+      - trading_network
+
+  # Profile ai — cloud/local LLM sidecar env passthrough (extend on VPS)
+  api:
+    profiles: ["ai"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: tradingai_api_ai
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - API_SECRET_KEY=${API_SECRET_KEY:-dev-secret-local}
+      - RUNNING_IN_DOCKER=1
+      - LOCAL_LLM_ENABLED=${LOCAL_LLM_ENABLED:-auto}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
+      - TRADING_ENV=paper
+      - DRY_RUN=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - trading_network

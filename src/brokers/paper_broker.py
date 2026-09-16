@@ -332,7 +332,7 @@ class PaperBroker(BaseBroker):
 
         return round(fill, 4)
 
-    async def place_order(self, order: OrderRequest) -> OrderResult:
+    async def place_order(self, order: OrderRequest, *, dry_run: bool = True) -> OrderResult:
         """Place a simulated trading order with realistic fills."""
         order_id = str(uuid.uuid4())[:8]
 

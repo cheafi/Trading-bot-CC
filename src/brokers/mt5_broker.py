@@ -195,7 +195,30 @@ class MetaTraderBroker(BaseBroker):
     # Orders
     # ------------------------------------------------------------------
 
-    async def place_order(self, order: OrderRequest) -> OrderResult:
+    async def place_order(self, order: OrderRequest, *, dry_run: bool = True) -> OrderResult:
+        from src.core.order_execution import (
+            assert_live_order_permitted,
+            record_dry_run_order,
+        )
+
+        if dry_run:
+            record_dry_run_order(
+                source="mt5_broker",
+                symbol=order.ticker,
+                side=order.side.value,
+                quantity=order.quantity,
+                order_type=order.order_type.value,
+            )
+            return OrderResult(
+                success=True,
+                order_id="dry-run",
+                status=OrderStatus.FILLED,
+                filled_qty=order.quantity,
+                message="Dry-run — MT5 order_send not called",
+            )
+
+        assert_live_order_permitted(dry_run=False, account=getattr(self, "account_id", ""))
+
         if not self.is_connected:
             return OrderResult(success=False, message="MT5 not connected")
 

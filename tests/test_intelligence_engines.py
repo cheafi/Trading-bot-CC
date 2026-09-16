@@ -219,10 +219,11 @@ class TestSelfLearningEngine:
 
     def test_premature_stop_adjustment(self):
         engine = SelfLearningEngine()
+        engine.enable()
         engine.state.min_sample_size = 5  # lower for testing
         outcomes = [
             {"pnl_pct": -1.0, "exit_reason": "stop_hit", "would_have_recovered": True}
-            for _ in range(8)
+            for _ in range(12)
         ] + [
             {"pnl_pct": 2.0, "exit_reason": "target_hit", "would_have_recovered": False}
             for _ in range(5)
@@ -258,8 +259,15 @@ class TestSelfLearningEngine:
         engine.enable()
         assert engine.state.enabled
 
-    def test_audit_trail(self):
+    def test_audit_trail(self, tmp_path, monkeypatch):
+        audit_file = tmp_path / "self_learning_audit.json"
+        monkeypatch.setattr(
+            "src.engines.self_learning.AUDIT_DIR",
+            tmp_path,
+        )
         engine = SelfLearningEngine()
+        engine._audit_path = audit_file
+        engine.enable()
         adj = RuleAdjustment(
             rule_name="test", parameter="stop_loss_pct",
             old_value=0.03, new_value=0.035,

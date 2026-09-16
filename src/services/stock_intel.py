@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.api.deps import sanitize_for_json
 
@@ -16,7 +16,7 @@ _CORE_DOSSIER_TIMEOUT_SEC = 10.0
 _FULL_DOSSIER_TIMEOUT_SEC = 18.0
 
 
-def _fetch_failed(result: Any, label: str) -> Optional[str]:
+def _fetch_failed(result: Any, label: str) -> str | None:
     """Return error message when a bounded sub-fetch failed."""
     if isinstance(result, BaseException):
         return str(result)
@@ -43,7 +43,7 @@ async def _await_bounded(coro, timeout_sec: float, label: str):
         }
 
 
-async def _minimal_dossier(request, ticker: str) -> Dict[str, Any]:
+async def _minimal_dossier(request, ticker: str) -> dict[str, Any]:
     """Fast quote-only dossier when full live_dossier is slow or unavailable."""
     mds = request.app.state.market_data
     q_raw = await mds.get_quote(ticker)
@@ -79,11 +79,11 @@ async def _resolve_dossier(
     ticker: str,
     *,
     timeout_sec: float = _CORE_DOSSIER_TIMEOUT_SEC,
-) -> tuple[Dict[str, Any], Dict[str, Optional[str]]]:
+) -> tuple[dict[str, Any], dict[str, str | None]]:
     """Fetch dossier with timeout; fall back to minimal quote payload."""
     from src.api.routers.live_dossier import live_dossier
 
-    module_errors: Dict[str, Optional[str]] = {}
+    module_errors: dict[str, str | None] = {}
     dossier_raw = await _await_bounded(
         live_dossier(ticker, request), timeout_sec, "dossier"
     )
@@ -111,9 +111,9 @@ async def _resolve_dossier(
 
 
 def _build_unified_decision(
-    dossier: Dict[str, Any],
-    conviction: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
+    dossier: dict[str, Any],
+    conviction: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Merge dossier verdict heuristics, conviction action, and trade_plan."""
     from src.utils.numeric_parse import (
         coerce_float,
@@ -126,12 +126,13 @@ def _build_unified_decision(
     conf = (dossier.get("confidence") or {}).get("final")
     if conf is None:
         conf = (dossier.get("signal") or {}).get("confidence", {}).get("final")
+    signal = dossier.get("signal") if isinstance(dossier.get("signal"), dict) else {}
     conflict = (
         (dossier.get("conflict") or {}).get("conflict_level")
-        or (dossier.get("signal") or {}).get("conflict", {}).get("conflict_level")
+        or (signal.get("conflict") or {}).get("conflict_level")
         or "LOW"
     )
-    sect = dossier.get("sector") or dossier.get("signal", {}).get("sector") or {}
+    sect = dossier.get("sector") or signal.get("sector") or {}
     leader = sect.get("leader_status") == "LEADER"
     tp = normalize_trade_plan(dossier.get("trade_plan") or {})
     conf_value = parse_numeric(conf, None) if conf is not None else None
@@ -140,7 +141,7 @@ def _build_unified_decision(
     label = "WATCH"
     pill = "pa"
     color = "amber"
-    reason_parts: List[str] = []
+    reason_parts: list[str] = []
 
     if not trade_ok:
         label = "NO TRADE"
@@ -217,11 +218,11 @@ def _build_unified_decision(
 
 
 def _narrative_structured(
-    dossier: Dict[str, Any], conviction: Optional[Dict[str, Any]]
-) -> Dict[str, Any]:
+    dossier: dict[str, Any], conviction: dict[str, Any] | None
+) -> dict[str, Any]:
     """Rule-based bull/bear/contradiction — no LLM wall of text."""
-    bull: List[str] = []
-    bear: List[str] = []
+    bull: list[str] = []
+    bear: list[str] = []
     for w in dossier.get("why_buy") or []:
         if isinstance(w, str) and w.strip():
             bull.append(w.strip()[:120])
@@ -237,7 +238,7 @@ def _narrative_structured(
                 bear.append(str(w)[:120])
 
     conflict_level = (dossier.get("conflict") or {}).get("conflict_level", "LOW")
-    contradictions: List[str] = []
+    contradictions: list[str] = []
     if conflict_level == "HIGH":
         contradictions.append("Technical and fundamental signals disagree materially.")
     t = dossier.get("technicals") or {}
@@ -269,9 +270,9 @@ def _narrative_structured(
 
 
 def _catalyst_strip(
-    p9_earnings: Optional[Dict[str, Any]], events: Optional[Dict[str, Any]]
-) -> Dict[str, Any]:
-    items: List[Dict[str, Any]] = []
+    p9_earnings: dict[str, Any] | None, events: dict[str, Any] | None
+) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
     earnings_status = "unavailable"
     dividend_status = "unavailable"
     feed_status = "unavailable"
@@ -437,11 +438,11 @@ def _catalyst_strip(
 
 
 def _ownership_panel(
-    conviction: Optional[Dict[str, Any]], edgar_insider: Optional[Dict[str, Any]]
-) -> Dict[str, Any]:
+    conviction: dict[str, Any] | None, edgar_insider: dict[str, Any] | None
+) -> dict[str, Any]:
     insider = (conviction or {}).get("insider") or {}
     sponsor = (conviction or {}).get("sponsor") or {}
-    filings: List[Dict[str, Any]] = []
+    filings: list[dict[str, Any]] = []
     if edgar_insider and isinstance(edgar_insider, dict):
         summary = edgar_insider
         filings.append(
@@ -473,12 +474,12 @@ def _ownership_panel(
 
 
 def _smart_money_summary(
-    ownership: Dict[str, Any],
-    options: Optional[Dict[str, Any]],
-    conviction: Optional[Dict[str, Any]],
+    ownership: dict[str, Any],
+    options: dict[str, Any] | None,
+    conviction: dict[str, Any] | None,
     *,
-    unified: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    unified: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Evidence-weighted smart money — not gossip."""
     filings = ownership.get("filings_summary") or []
     insider_data = (conviction or {}).get("insider") or ownership.get("insider") or {}
@@ -533,14 +534,12 @@ def _smart_money_summary(
     thesis_support = "neutral"
     if insider_sig == "bullish" and verdict in ("TRADE", "WATCH"):
         thesis_support = "support"
-    elif insider_sig == "bearish" and verdict in ("TRADE", "WATCH"):
-        thesis_support = "contradict"
-    elif insider_sig == "bearish":
+    elif insider_sig == "bearish" and verdict in ("TRADE", "WATCH") or insider_sig == "bearish":
         thesis_support = "contradict"
 
     def _row(
         signal: str, status: str, strength: str, timing: str, use: str
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         return {
             "signal": signal,
             "status": status,
@@ -651,9 +650,9 @@ def _price_in_entry_zone(price: float, entry_zone: Any) -> bool:
 
 
 def _timing_assessment(
-    dossier: Dict[str, Any],
-    unified: Dict[str, Any],
-) -> Dict[str, Any]:
+    dossier: dict[str, Any],
+    unified: dict[str, Any],
+) -> dict[str, Any]:
     """Entry-zone vs extension / RSI — separates thesis quality from timing."""
     from src.utils.numeric_parse import coerce_float
 
@@ -691,10 +690,10 @@ def _timing_assessment(
 
 def _build_why_not_now(
     action_now: str,
-    unified: Dict[str, Any],
-    timing: Dict[str, Any],
+    unified: dict[str, Any],
+    timing: dict[str, Any],
     exec_mode: str,
-) -> List[str]:
+) -> list[str]:
     """Why-not copy — never claim 'outside zone' when price is inside but timing is weak."""
     if action_now == "AVOID":
         return [unified.get("reason") or "Risk/reward or regime blocks new entry"]
@@ -706,7 +705,7 @@ def _build_why_not_now(
     rsi_hot = timing.get("rsi_overheated")
 
     if in_zone and (extended or rsi_hot):
-        parts: List[str] = []
+        parts: list[str] = []
         if extended:
             parts.append("the setup is extended")
         if rsi_hot:
@@ -734,7 +733,7 @@ def _build_why_not_now(
 
 def _decision_stack_interpretation(
     primary_state: str,
-    execution_style: Optional[str],
+    execution_style: str | None,
     board_gate: str,
 ) -> str:
     if primary_state in ("AVOID", "NO TRADE", "PASS"):
@@ -755,12 +754,12 @@ def _decision_stack_interpretation(
 
 
 def _build_decision_stack(
-    unified: Dict[str, Any],
-    action_box: Dict[str, Any],
-    pm_answer: Dict[str, Any],
+    unified: dict[str, Any],
+    action_box: dict[str, Any],
+    pm_answer: dict[str, Any],
     *,
     regime_ok: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Institutional decision stack — primary state, optional execution style, board gate."""
     verdict = (unified.get("label") or "WATCH").upper()
     exec_state = (action_box or {}).get("state") or "WATCH_CONFIRM"
@@ -776,13 +775,11 @@ def _build_decision_stack(
     }
     primary_state = primary_map.get(verdict, "WATCH")
 
-    execution_style: Optional[str] = None
+    execution_style: str | None = None
     if exec_state in ("BUY_ON_PULLBACK", "BUY_NOW") and primary_state in (
         "WATCH",
         "TRADE",
-    ):
-        execution_style = exec_state
-    elif exec_state not in ("AVOID_NOW", "WATCH_CONFIRM") and primary_state != "AVOID":
+    ) or exec_state not in ("AVOID_NOW", "WATCH_CONFIRM") and primary_state != "AVOID":
         execution_style = exec_state
 
     if not regime_ok:
@@ -799,10 +796,10 @@ def _build_decision_stack(
 
 
 def _build_confidence_metrics(
-    conf_display: Dict[str, Any],
-    confluence: Optional[Dict[str, Any]],
-    portfolio_fit: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
+    conf_display: dict[str, Any],
+    confluence: dict[str, Any] | None,
+    portfolio_fit: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Two-metric confidence model — decision reliability vs thesis quality."""
     cf = int((confluence or {}).get("score") or 0)
     pf = int((portfolio_fit or {}).get("score") or 50)
@@ -843,12 +840,12 @@ def _build_confidence_metrics(
 
 
 def _compute_size_shares(
-    dossier: Dict[str, Any],
-    unified: Dict[str, Any],
+    dossier: dict[str, Any],
+    unified: dict[str, Any],
     *,
     equity: float = 100_000.0,
     risk_pct: float = 0.01,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """1% risk sizing from entry-zone midpoint vs stop (ATR fallback)."""
     from src.utils.numeric_parse import coerce_float
 
@@ -856,8 +853,8 @@ def _compute_size_shares(
     stop = unified.get("stop")
     atr = coerce_float((dossier.get("technicals") or {}).get("atr"), 0.0)
 
-    risk_per_share: Optional[float] = None
-    mid: Optional[float] = None
+    risk_per_share: float | None = None
+    mid: float | None = None
     if ez and len(ez) >= 2:
         mid = (coerce_float(ez[0], 0.0) + coerce_float(ez[1], 0.0)) / 2
         if mid > 0 and stop is not None:
@@ -892,7 +889,7 @@ _RESEARCH_ONLY_LABELS = frozenset(
 )
 
 
-def _rr_unavailable(unified: Dict[str, Any]) -> bool:
+def _rr_unavailable(unified: dict[str, Any]) -> bool:
     """True when R:R is missing or not actionable for sizing."""
     from src.utils.numeric_parse import coerce_float
 
@@ -915,7 +912,7 @@ def _rr_unavailable(unified: Dict[str, Any]) -> bool:
     return coerce_float(rr, 0.0) <= 0
 
 
-def _blocked_size_info(reason: str) -> Dict[str, Any]:
+def _blocked_size_info(reason: str) -> dict[str, Any]:
     return {
         "shares": 0,
         "risk_per_share": None,
@@ -929,10 +926,10 @@ def _blocked_size_info(reason: str) -> Dict[str, Any]:
 def _sizing_block_reason(
     *,
     load_phase: str,
-    unified: Dict[str, Any],
-    dossier: Dict[str, Any],
-    module_errors: Optional[Dict[str, str]] = None,
-) -> Optional[str]:
+    unified: dict[str, Any],
+    dossier: dict[str, Any],
+    module_errors: dict[str, str] | None = None,
+) -> str | None:
     """Return blocked-copy reason when dossier must not expose actionable sizing."""
     module_errors = module_errors or {}
     if load_phase == "core":
@@ -954,13 +951,13 @@ def _sizing_block_reason(
 
 
 def _apply_sizing_authority(
-    size_info: Dict[str, Any],
+    size_info: dict[str, Any],
     *,
     load_phase: str,
-    unified: Dict[str, Any],
-    dossier: Dict[str, Any],
-    module_errors: Optional[Dict[str, str]] = None,
-) -> tuple[Dict[str, Any], bool]:
+    unified: dict[str, Any],
+    dossier: dict[str, Any],
+    module_errors: dict[str, str] | None = None,
+) -> tuple[dict[str, Any], bool]:
     reason = _sizing_block_reason(
         load_phase=load_phase,
         unified=unified,
@@ -974,9 +971,9 @@ def _apply_sizing_authority(
 
 def _build_page_summary(
     ticker: str,
-    unified: Dict[str, Any],
-    decision_stack: Dict[str, Any],
-    timing: Dict[str, Any],
+    unified: dict[str, Any],
+    decision_stack: dict[str, Any],
+    timing: dict[str, Any],
 ) -> str:
     """One-line institutional summary for dossier header."""
     sym = ticker.upper()
@@ -994,7 +991,7 @@ def _build_page_summary(
         )
 
     qual = f"{sym} is a watch-quality name, not a buy-quality name right now."
-    tail_parts: List[str] = []
+    tail_parts: list[str] = []
     if timing.get("extended"):
         tail_parts.append("the setup is extended")
     if timing.get("rsi_overheated"):
@@ -1020,14 +1017,14 @@ def _build_page_summary(
 
 def _build_institutional_action_box(
     *,
-    unified: Dict[str, Any],
-    pm_answer: Dict[str, Any],
+    unified: dict[str, Any],
+    pm_answer: dict[str, Any],
     regime: Any,
-    portfolio_fit: Dict[str, Any],
-    options_block: Dict[str, Any],
-    flow_intel: Optional[Dict[str, Any]],
-    catalysts: Dict[str, Any],
-) -> Dict[str, Any]:
+    portfolio_fit: dict[str, Any],
+    options_block: dict[str, Any],
+    flow_intel: dict[str, Any] | None,
+    catalysts: dict[str, Any],
+) -> dict[str, Any]:
     """PM action enum — explicit, not fake precision."""
     label = (unified.get("label") or "WATCH").upper()
     flow_top = (flow_intel or {}).get("top") or {}
@@ -1079,17 +1076,17 @@ def _build_institutional_action_box(
 
 
 def _pm_answer_layer(
-    unified: Dict[str, Any],
-    narrative: Dict[str, Any],
-    dossier: Dict[str, Any],
-    catalysts: Dict[str, Any],
+    unified: dict[str, Any],
+    narrative: dict[str, Any],
+    dossier: dict[str, Any],
+    catalysts: dict[str, Any],
     *,
-    action_box: Optional[Dict[str, Any]] = None,
-    portfolio_fit: Optional[Dict[str, Any]] = None,
-    timing: Optional[Dict[str, Any]] = None,
-    decision_stack: Optional[Dict[str, Any]] = None,
-    size_info: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    action_box: dict[str, Any] | None = None,
+    portfolio_fit: dict[str, Any] | None = None,
+    timing: dict[str, Any] | None = None,
+    decision_stack: dict[str, Any] | None = None,
+    size_info: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """PM answer layer — bull/bear/now/wait/avoid with 30-second card."""
     label = (unified.get("label") or "WATCH").upper()
     action_map = {
@@ -1107,7 +1104,7 @@ def _pm_answer_layer(
     elif tech.get("above_sma200") and tech.get("volume_ratio", 1) > 1.2:
         setup = "momentum_breakout"
 
-    confirms: List[str] = []
+    confirms: list[str] = []
     from src.utils.numeric_parse import coerce_float
 
     if coerce_float(unified.get("rr_ratio"), 0) >= 2.5:
@@ -1125,7 +1122,7 @@ def _pm_answer_layer(
 
     why_not_now = _build_why_not_now(action_now, unified, timing, exec_mode)
 
-    what_buyable: List[str] = []
+    what_buyable: list[str] = []
     if unified.get("entry_zone"):
         ez = unified["entry_zone"]
         what_buyable.append(
@@ -1138,8 +1135,8 @@ def _pm_answer_layer(
     if not what_buyable:
         what_buyable.append("Regime + structure align with defined trade plan")
 
-    watch_to_buy: List[str] = []
-    watch_to_avoid: List[str] = []
+    watch_to_buy: list[str] = []
+    watch_to_avoid: list[str] = []
     if label in ("WATCH", "TRADE"):
         if unified.get("entry_zone"):
             ez = unified["entry_zone"]
@@ -1228,10 +1225,10 @@ def _pm_answer_layer(
 
 
 def _build_decision_hierarchy(
-    unified: Dict[str, Any],
-    action_box: Dict[str, Any],
-    pm_answer: Dict[str, Any],
-) -> Dict[str, Any]:
+    unified: dict[str, Any],
+    action_box: dict[str, Any],
+    pm_answer: dict[str, Any],
+) -> dict[str, Any]:
     """Chained verdict → execution mode → current action (not parallel equals)."""
     verdict = (unified.get("label") or "WATCH").upper()
     execution_mode = (
@@ -1262,10 +1259,10 @@ def _build_decision_hierarchy(
 
 
 def _resolve_confidence_display(
-    unified: Dict[str, Any],
-    dossier: Dict[str, Any],
-    confluence: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    unified: dict[str, Any],
+    dossier: dict[str, Any],
+    confluence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Never surface 0% when confidence is unknown — map confluence when possible."""
     from src.utils.numeric_parse import parse_numeric
 
@@ -1316,12 +1313,13 @@ def _resolve_confidence_display(
 
 
 def _peer_context(
-    dossier: Dict[str, Any],
+    dossier: dict[str, Any],
     peers: Any,
-    conviction: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
+    conviction: dict[str, Any] | None,
+) -> dict[str, Any]:
     """Peer-relative context for institutional dossier."""
-    sect = dossier.get("sector") or dossier.get("signal", {}).get("sector") or {}
+    signal = dossier.get("signal") if isinstance(dossier.get("signal"), dict) else {}
+    sect = dossier.get("sector") or signal.get("sector") or {}
     rs_spy = None
     if conviction:
         rs_spy = conviction.get("relative_strength_vs_spy_pct")
@@ -1358,10 +1356,11 @@ def _peer_context(
     }
 
 
-def _identity_layer(dossier: Dict[str, Any], peers: Any) -> Dict[str, Any]:
+def _identity_layer(dossier: dict[str, Any], peers: Any) -> dict[str, Any]:
     """Identity + factor tags."""
-    sect = dossier.get("sector") or dossier.get("signal", {}).get("sector") or {}
-    factors: List[str] = []
+    signal = dossier.get("signal") if isinstance(dossier.get("signal"), dict) else {}
+    sect = dossier.get("sector") or signal.get("sector") or {}
+    factors: list[str] = []
     name = (dossier.get("company") or dossier.get("name") or "").lower()
     if any(x in name for x in ("nvidia", "amd", "semi")):
         factors.append("AI_beta")
@@ -1382,9 +1381,9 @@ def _identity_layer(dossier: Dict[str, Any], peers: Any) -> Dict[str, Any]:
 
 
 def _trade_plan_human(
-    trade_plan: Dict[str, Any],
-    unified: Dict[str, Any],
-) -> List[Dict[str, str]]:
+    trade_plan: dict[str, Any],
+    unified: dict[str, Any],
+) -> list[dict[str, str]]:
     """Human-readable trade plan rows for dossier UI."""
     from src.utils.numeric_parse import coerce_float
 
@@ -1430,8 +1429,8 @@ def _trade_plan_human(
 
 
 def _dossier_trade_plan_note_value(
-    trade_plan: Dict[str, Any],
-    unified: Dict[str, Any],
+    trade_plan: dict[str, Any],
+    unified: dict[str, Any],
 ) -> str:
     from src.services.fetch_surface_state import dossier_trade_plan_note
 
@@ -1453,8 +1452,8 @@ def _dossier_trade_plan_note_value(
 
 
 def _monitor_panel(
-    ticker: str, dossier: Dict[str, Any], positions: List[Dict[str, Any]]
-) -> Optional[Dict[str, Any]]:
+    ticker: str, dossier: dict[str, Any], positions: list[dict[str, Any]]
+) -> dict[str, Any] | None:
     pos = None
     for p in positions or []:
         sym = (p.get("ticker") or p.get("symbol") or "").upper()
@@ -1484,7 +1483,7 @@ def _monitor_panel(
     }
 
 
-async def _fetch_enrichments_parallel(request, ticker: str) -> Dict[str, Any]:
+async def _fetch_enrichments_parallel(request, ticker: str) -> dict[str, Any]:
     """Slow enrichment modules — each fails independently."""
     from src.api.routers.conviction import stock_conviction as _conviction_endpoint
     from src.api.routers.dossier import peer_comparison
@@ -1513,7 +1512,7 @@ async def _fetch_enrichments_parallel(request, ticker: str) -> Dict[str, Any]:
         return_exceptions=True,
     )
 
-    module_errors: Dict[str, str] = {}
+    module_errors: dict[str, str] = {}
     labels = (
         "conviction",
         "peers",
@@ -1556,19 +1555,19 @@ async def _fetch_enrichments_parallel(request, ticker: str) -> Dict[str, Any]:
 async def _build_intel_payload(
     request,
     ticker: str,
-    dossier: Dict[str, Any],
+    dossier: dict[str, Any],
     *,
     conviction: Any = None,
     peers: Any = None,
-    p9: Optional[Dict[str, Any]] = None,
+    p9: dict[str, Any] | None = None,
     options: Any = None,
     events: Any = None,
     edgar_insider: Any = None,
-    ibkr: Optional[Dict[str, Any]] = None,
-    module_errors: Optional[Dict[str, str]] = None,
+    ibkr: dict[str, Any] | None = None,
+    module_errors: dict[str, str] | None = None,
     load_phase: str = "full",
     include_flow: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Assemble stock-intel response from dossier core and enrichment modules."""
     from src.api.live_state import fetch_regime_state
     from src.services.confluence_engine import build_confluence
@@ -1599,7 +1598,7 @@ async def _build_intel_payload(
         edgar_insider if isinstance(edgar_insider, dict) else None,
     )
 
-    positions: List[Dict[str, Any]] = []
+    positions: list[dict[str, Any]] = []
     try:
         from src.api.routers.portfolio import _user_portfolio
 
@@ -1626,7 +1625,7 @@ async def _build_intel_payload(
             from src.services.flow_decision_surface import build_ticker_flow_intel
 
             flow_intel = await build_ticker_flow_intel(request, ticker)
-            if flow_intel.get("top"):
+            if isinstance(flow_intel, dict) and flow_intel.get("top"):
                 top = flow_intel["top"]
                 options_block = {
                     **options_block,
@@ -1991,7 +1990,7 @@ async def _build_intel_payload(
     )
 
 
-async def build_stock_intel_enrichments(request, ticker: str) -> Dict[str, Any]:
+async def build_stock_intel_enrichments(request, ticker: str) -> dict[str, Any]:
     """Enrichment-only payload for async second-phase dossier load."""
     ticker = ticker.strip().upper()
     if not ticker:
@@ -2020,7 +2019,7 @@ async def build_stock_intel(
     *,
     lite: bool = False,
     enrichments_only: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Single-call aggregate for Dossier UI (core, enrichments, or full)."""
     ticker = ticker.strip().upper()
     if not ticker:
@@ -2065,11 +2064,11 @@ async def build_stock_intel(
 
 
 def _fundamentals_block(
-    raw: Optional[Dict[str, Any]],
-    dossier: Dict[str, Any],
-) -> Dict[str, Any]:
+    raw: dict[str, Any] | None,
+    dossier: dict[str, Any],
+) -> dict[str, Any]:
     """Structured fundamental intelligence."""
-    flags: List[str] = []
+    flags: list[str] = []
     if raw:
         pe = raw.get("pe_ratio") or raw.get("trailingPE")
         from src.utils.numeric_parse import coerce_float
@@ -2095,7 +2094,7 @@ def _fundamentals_block(
     }
 
 
-def _peers_block(peers: Any) -> Dict[str, Any]:
+def _peers_block(peers: Any) -> dict[str, Any]:
     table = []
     if isinstance(peers, dict):
         table = peers.get("rankings") or peers.get("table") or peers.get("peers") or []
@@ -2111,11 +2110,11 @@ def _peers_block(peers: Any) -> Dict[str, Any]:
 
 
 def _options_block(
-    options: Optional[Dict[str, Any]],
+    options: dict[str, Any] | None,
     *,
-    unified: Optional[Dict[str, Any]] = None,
-    flow_intel: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    unified: dict[str, Any] | None = None,
+    flow_intel: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Options intelligence with feed state and thesis alignment."""
     if not options or not isinstance(options, dict):
         feed_state = "unavailable"
@@ -2216,7 +2215,7 @@ def _options_block(
     }
 
 
-async def _fetch_v9(mds, ticker: str, kind: str) -> Optional[Dict[str, Any]]:
+async def _fetch_v9(mds, ticker: str, kind: str) -> dict[str, Any] | None:
     try:
         if kind == "fundamentals":
             from src.engines.fundamental_data import get_fundamentals
@@ -2252,7 +2251,7 @@ async def _fetch_v9(mds, ticker: str, kind: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-async def _fetch_options(request, ticker: str) -> Optional[Dict[str, Any]]:
+async def _fetch_options(request, ticker: str) -> dict[str, Any] | None:
     try:
         from src.api.routers.live_brief_options import live_options
 
@@ -2262,7 +2261,7 @@ async def _fetch_options(request, ticker: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def _fetch_events(ticker: str) -> Dict[str, Any]:
+async def _fetch_events(ticker: str) -> dict[str, Any]:
     try:
         from src.services.event_data import get_event_data_service
 
@@ -2272,7 +2271,7 @@ async def _fetch_events(ticker: str) -> Dict[str, Any]:
         return {"upcoming_events": []}
 
 
-async def _fetch_edgar_insider(ticker: str) -> Optional[Dict[str, Any]]:
+async def _fetch_edgar_insider(ticker: str) -> dict[str, Any] | None:
     try:
         from src.ingestors.edgar import EdgarClient
 
@@ -2283,7 +2282,7 @@ async def _fetch_edgar_insider(ticker: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def _fetch_ibkr_status() -> Dict[str, Any]:
+async def _fetch_ibkr_status() -> dict[str, Any]:
     try:
         from src.services.ibkr_service import get_ibkr_service
 

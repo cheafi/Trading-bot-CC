@@ -21,7 +21,9 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-_YF_CACHE = os.environ.get("YFINANCE_CACHE_DIR") or "/tmp/yfinance-cache"
+from src.core.state_paths import yfinance_cache_dir
+
+_YF_CACHE = str(yfinance_cache_dir())
 
 
 def _configure_yfinance_cache() -> None:

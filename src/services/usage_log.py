@@ -87,6 +87,45 @@ def record_ai_call(
     return row
 
 
+def load_ai_usage_events(*, limit: int = 500) -> List[Dict[str, Any]]:
+    """Load LLM invocation rows from ai_usage.jsonl (CCX-132)."""
+    if not _AI_LOG_PATH.is_file():
+        return []
+    rows: List[Dict[str, Any]] = []
+    for line in _AI_LOG_PATH.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return rows[-limit:]
+
+
+def build_ai_usage_summary(*, limit: int = 500) -> Dict[str, Any]:
+    """Aggregate AI provider/task usage for Meta Intelligence."""
+    rows = load_ai_usage_events(limit=limit)
+    by_task: Dict[str, int] = {}
+    by_provider: Dict[str, int] = {}
+    failures = 0
+    for r in rows:
+        task = str(r.get("task") or "unknown")
+        provider = str(r.get("provider") or "unknown")
+        by_task[task] = by_task.get(task, 0) + 1
+        by_provider[provider] = by_provider.get(provider, 0) + 1
+        if not r.get("success", True):
+            failures += 1
+    return {
+        "as_of": _utcnow_iso(),
+        "authority": "research_only",
+        "total_calls": len(rows),
+        "failures": failures,
+        "by_task": by_task,
+        "by_provider": by_provider,
+        "recent": rows[-5:],
+    }
+
+
 def build_usage_summary(*, days: int = 90) -> Dict[str, Any]:
     rows = load_usage_events(limit=2000)
     counts: Dict[str, int] = {}
@@ -107,6 +146,7 @@ def build_usage_summary(*, days: int = 90) -> Dict[str, Any]:
         )
         if counts.get(s, 0) == 0
     ]
+    ai_usage = build_ai_usage_summary()
     return {
         "as_of": _utcnow_iso(),
         "authority": "research_only",
@@ -116,4 +156,5 @@ def build_usage_summary(*, days: int = 90) -> Dict[str, Any]:
         "dismiss_by_surface": dismiss,
         "deletion_candidates": zero_use_candidates,
         "recent": rows[-10:],
+        "ai_usage": ai_usage,
     }

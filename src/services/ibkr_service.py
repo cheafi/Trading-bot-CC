@@ -1216,7 +1216,37 @@ class IBKRService:
         tif: str = "DAY",
         exchange: str = "SMART",
         currency: str = "USD",
+        *,
+        dry_run: bool = True,
+        account: str = "",
     ) -> OrderResult:
+        from src.core.order_execution import (
+            assert_live_order_permitted,
+            record_dry_run_order,
+        )
+
+        if dry_run:
+            record_dry_run_order(
+                source="ibkr_service",
+                symbol=symbol,
+                side=action,
+                quantity=quantity,
+                order_type=order_type,
+                extra={"sec_type": sec_type},
+            )
+            return OrderResult(
+                order_id=0,
+                status="DryRun",
+                filled=0.0,
+                remaining=quantity,
+                error=None,
+            )
+
+        assert_live_order_permitted(
+            dry_run=False,
+            account=account or getattr(self._app, "account", ""),
+        )
+
         if not self.is_connected:
             return OrderResult(error="Not connected to IB Gateway")
         if not IBAPI_AVAILABLE:
@@ -1297,6 +1327,9 @@ class IBKRService:
         trail: bool = False,
         trail_amount: Optional[float] = None,  # absolute $ trail
         trail_percent: Optional[float] = None,  # percent trail (e.g., 5.0 = 5%)
+        *,
+        dry_run: bool = True,
+        account: str = "",
     ) -> dict:
         """
         Submits a 3-leg bracket: parent (entry) + child stop + child take-profit.
@@ -1305,6 +1338,37 @@ class IBKRService:
 
         Returns {parent_order_id, stop_order_id, target_order_id, oca_group, stop_kind, ...}.
         """
+        from src.core.order_execution import (
+            assert_live_order_permitted,
+            record_dry_run_order,
+        )
+
+        if dry_run:
+            record_dry_run_order(
+                source="ibkr_service.bracket",
+                symbol=symbol,
+                side=action,
+                quantity=quantity,
+                order_type="BRACKET",
+                extra={
+                    "stop_price": stop_price,
+                    "take_profit": take_profit,
+                },
+            )
+            return {
+                "parent_order_id": 0,
+                "stop_order_id": 0,
+                "target_order_id": 0,
+                "oca_group": "DRY_RUN",
+                "stop_kind": "STP",
+                "dry_run": True,
+            }
+
+        assert_live_order_permitted(
+            dry_run=False,
+            account=account or getattr(self._app, "account", ""),
+        )
+
         if not self.is_connected:
             return {"error": "Not connected to IB Gateway"}
         if not IBAPI_AVAILABLE:

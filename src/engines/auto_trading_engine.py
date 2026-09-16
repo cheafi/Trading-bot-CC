@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional, Set
 
 from src.algo.position_manager import PositionManager, RiskParameters
 from src.core.config import get_settings, get_trading_config
+from src.core.heartbeat_monitor import ping_heartbeat_url
+from src.core.state_paths import engine_heartbeat_path
 from src.core.errors import (
     BrokerError,
     ConfigError,
@@ -225,7 +227,7 @@ class AutoTradingEngine:
     def __init__(
         self,
         cycle_interval_seconds: float = 60.0,
-        dry_run: bool = False,
+        dry_run: bool = True,
     ):
         self.cycle_interval = cycle_interval_seconds
         self.dry_run = dry_run
@@ -463,14 +465,13 @@ class AutoTradingEngine:
             await asyncio.sleep(self.cycle_interval)
 
     def _touch_heartbeat(self):
-        """Write heartbeat file for Docker healthcheck."""
+        """Write heartbeat file for Docker healthcheck + optional external ping."""
         try:
-            import pathlib
-
-            hb = pathlib.Path("/tmp/engine_heartbeat")
+            hb = engine_heartbeat_path()
             hb.write_text(datetime.now(timezone.utc).isoformat())
         except OSError:
             pass
+        ping_heartbeat_url()
 
     async def stop(self):
         self._running = False
@@ -1108,31 +1109,38 @@ class AutoTradingEngine:
             return []
 
     async def _validate_signals(self, signals: List[Signal]) -> List[Signal]:
-        """Validate signals with GPT. Falls back to unvalidated on error."""
+        """
+        Research-only LLM annotations — one-way architecture.
+
+        GPT validation may annotate signals for journals and dossiers but must
+        never veto or filter broker execution eligibility.
+        """
         if not signals:
             return []
         try:
             from src.engines.gpt_validator import GPTSignalValidator
 
             validator = GPTSignalValidator()
-            # validate_batch returns list of dicts with 'validation_result' key
             results = await validator.validate_batch(
                 signals=signals,
                 news_by_ticker=self._context.get("news_by_ticker", {}),
                 sentiment_by_ticker=self._context.get("sentiment", {}),
+                research_only=True,
             )
-            approved = []
             for sig, res in zip(signals, results):
-                vr = res.get("validation_result", "PASS")
-                if vr in ("PASS", "STRONG_PASS"):
-                    approved.append(sig)
-            return approved
+                snap = dict(sig.feature_snapshot or {})
+                snap["gpt_research_annotation"] = {
+                    "validation_result": res.get("validation_result"),
+                    "approval_status": res.get("approval_status"),
+                    "authority": "research_only",
+                    "affects_execution": False,
+                }
+                sig.feature_snapshot = snap
         except ValidationError as e:
             logger.error("Signal validation failed: %s", e)
-            return signals  # Proceed without validation
         except Exception as e:
             logger.error("Unexpected validation error: %s", e)
-            return signals
+        return signals
 
     async def _execute_recommendation(
         self,
@@ -1179,6 +1187,7 @@ class AutoTradingEngine:
                 side=side,
                 quantity=qty,
                 order_type=OrderType.MARKET,
+                dry_run=self.dry_run,
             )
 
             if result.success:

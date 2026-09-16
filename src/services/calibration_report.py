@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from src.services.forward_outcomes import load_forward_outcomes
 from src.services.decision_journal import load_recent
+from src.services.forward_outcomes import load_forward_outcomes
 
 
 def _utcnow_iso() -> str:

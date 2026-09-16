@@ -2,6 +2,12 @@
 TradingAI Bot - GPT Signal Validator (v6 — Pro Desk)
 Strict risk-manager approach — GPT validates checklists, doesn't invent rationale.
 
+ONE-WAY ARCHITECTURE (P0 safety):
+  Research path  → GPT annotations, dossiers, committee debate (research_only)
+  Execution path → deterministic gates only (live_trading_gate, trade_gate, risk)
+
+LLM output must never veto broker eligibility or filter signals for execution.
+
 Upgrades v6:
   • 8-point mandatory check (math, event, crowding, liquidity, news, regime, technical, sizing)
   • approval_status: approved / conditional / rejected with per-flag breakdown
@@ -559,14 +565,17 @@ Respond ONLY in JSON:
         signals: List[Signal],
         news_by_ticker: Dict[str, List[str]],
         sentiment_by_ticker: Dict[str, str],
+        *,
+        research_only: bool = True,
     ) -> List[Dict[str, Any]]:
         """
-        Validate multiple signals in parallel.
+        Validate multiple signals in parallel (research_only — no execution veto).
 
         Args:
             signals: List of signals to validate
             news_by_ticker: Dict mapping ticker to news headlines
             sentiment_by_ticker: Dict mapping ticker to sentiment summary
+            research_only: When True, results are annotations only
 
         Returns:
             List of validation results
@@ -602,6 +611,12 @@ Respond ONLY in JSON:
                 )
             else:
                 processed_results.append(result)
+
+        if research_only:
+            for row in processed_results:
+                row["authority"] = "research_only"
+                row["affects_execution"] = False
+                row["broker_eligible"] = False
 
         return processed_results
 

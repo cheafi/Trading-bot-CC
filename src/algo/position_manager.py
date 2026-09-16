@@ -19,11 +19,14 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_POSITIONS_STATE_PATH = Path("data/positions_state.json")
 
 
 class PositionStatus(str, Enum):
@@ -48,7 +51,7 @@ class Position:
 
     # Entry
     entry_price: float = 0.0
-    entry_date: Optional[datetime] = None
+    entry_date: datetime | None = None
     entry_reason: str = ""
 
     # Size
@@ -82,7 +85,7 @@ class Position:
 
     # Exit
     exit_price: float = 0.0
-    exit_date: Optional[datetime] = None
+    exit_date: datetime | None = None
     exit_reason: str = ""
     realized_pnl: float = 0.0
     realized_pnl_pct: float = 0.0
@@ -181,12 +184,11 @@ class Position:
                 return
 
             new_trail_stop = current_price * (1 - effective_trail)
-            if new_trail_stop > self.trailing_stop_price:
-                self.trailing_stop_price = new_trail_stop
+            self.trailing_stop_price = max(self.trailing_stop_price, new_trail_stop)
 
     def check_exit_conditions(
         self, current_price: float, current_date: datetime
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         Check if position should be exited (full or partial).
 
@@ -211,8 +213,7 @@ class Position:
                 and not self.partial_exit_1r
             ):
                 self.partial_exit_1r = True
-                if self.entry_price < self.stop_loss_price:
-                    self.stop_loss_price = self.entry_price
+                self.stop_loss_price = min(self.stop_loss_price, self.entry_price)
                 return True, "partial_1r"
             if (
                 self.target_2r_price > 0
@@ -240,8 +241,7 @@ class Position:
                 and not self.partial_exit_1r
             ):
                 self.partial_exit_1r = True
-                if self.entry_price > self.stop_loss_price:
-                    self.stop_loss_price = self.entry_price
+                self.stop_loss_price = max(self.stop_loss_price, self.entry_price)
                 return True, "partial_1r"
             if (
                 self.target_2r_price > 0
@@ -340,14 +340,14 @@ class PositionManager:
     5. Track performance metrics
     """
 
-    def __init__(self, params: Optional[RiskParameters] = None):
+    def __init__(self, params: RiskParameters | None = None):
         """Initialize position manager."""
         self.params = params or RiskParameters()
-        self.positions: Dict[str, Position] = {}
-        self.closed_positions: List[Position] = []
+        self.positions: dict[str, Position] = {}
+        self.closed_positions: list[Position] = []
 
         # Performance tracking
-        self.daily_pnl: Dict[str, float] = {}
+        self.daily_pnl: dict[str, float] = {}
         self.consecutive_losses: int = 0
         self.peak_equity: float = self.params.account_size
         self.current_equity: float = self.params.account_size
@@ -361,9 +361,9 @@ class PositionManager:
         ticker: str,
         entry_price: float,
         stop_loss_price: float,
-        atr: Optional[float] = None,
+        atr: float | None = None,
         sector: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Calculate optimal position size based on risk.
 
@@ -466,7 +466,7 @@ class PositionManager:
     def get_correlated_count(
         self,
         candidate_ticker: str,
-        price_data: Optional[Dict[str, "pd.Series"]] = None,
+        price_data: dict[str, "pd.Series"] | None = None,
         threshold: float = 0.70,
     ) -> int:
         """Count how many open positions are highly correlated
@@ -505,10 +505,10 @@ class PositionManager:
     def check_correlation_guard(
         self,
         candidate_ticker: str,
-        price_data: Optional[Dict[str, "pd.Series"]] = None,
+        price_data: dict[str, "pd.Series"] | None = None,
         max_correlated: int = 3,
         threshold: float = 0.70,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """Return (allowed, reason).
 
         Blocks the trade if the candidate is highly correlated
@@ -534,7 +534,7 @@ class PositionManager:
         atr: float,
         atr_multiplier: float = 2.0,
         sector: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Calculate position size using ATR-based stops.
 
@@ -547,7 +547,7 @@ class PositionManager:
 
     # ========== Position Management ==========
 
-    def can_open_position(self, ticker: str, sector: str = "") -> Tuple[bool, str]:
+    def can_open_position(self, ticker: str, sector: str = "") -> tuple[bool, str]:
         """
         Check if we can open a new position.
 
@@ -655,7 +655,7 @@ class PositionManager:
 
     def close_position(
         self, ticker: str, exit_price: float, reason: str = "manual"
-    ) -> Optional[Position]:
+    ) -> Position | None:
         """
         Close an existing position.
 
@@ -671,8 +671,7 @@ class PositionManager:
 
         # Update equity
         self.current_equity += position.realized_pnl
-        if self.current_equity > self.peak_equity:
-            self.peak_equity = self.current_equity
+        self.peak_equity = max(self.peak_equity, self.current_equity)
 
         # --- FIX: update daily and weekly PnL ledgers ---
         today = datetime.now().strftime("%Y-%m-%d")
@@ -707,7 +706,7 @@ class PositionManager:
 
         return position
 
-    def update_all_positions(self, prices: Dict[str, float], current_date: datetime):
+    def update_all_positions(self, prices: dict[str, float], current_date: datetime):
         """
         Update all positions with current prices and check exit conditions.
 
@@ -823,8 +822,7 @@ class PositionManager:
 
         # Update equity
         self.current_equity += partial_pnl
-        if self.current_equity > self.peak_equity:
-            self.peak_equity = self.current_equity
+        self.peak_equity = max(self.peak_equity, self.current_equity)
 
         # Update daily/weekly PnL
         today = datetime.now().strftime("%Y-%m-%d")
@@ -845,7 +843,7 @@ class PositionManager:
         )
         return partial_pnl
 
-    def get_exposure_report(self) -> Dict[str, Any]:
+    def get_exposure_report(self) -> dict[str, Any]:
         """Get comprehensive exposure report."""
         total_exposure = self._get_total_exposure()
 
@@ -891,7 +889,7 @@ class PositionManager:
 
     # ========== Performance Tracking ==========
 
-    def get_performance_stats(self) -> Dict[str, Any]:
+    def get_performance_stats(self) -> dict[str, Any]:
         """Get performance statistics for closed positions."""
         if not self.closed_positions:
             return {
@@ -939,7 +937,7 @@ class PositionManager:
             "max_drawdown_pct": self._get_current_drawdown(),
         }
 
-    def get_open_positions_summary(self) -> List[Dict[str, Any]]:
+    def get_open_positions_summary(self) -> list[dict[str, Any]]:
         """Get summary of all open positions."""
         return [
             {
@@ -966,14 +964,16 @@ class PositionManager:
 
     # ========== State Persistence (Sprint 24) ==========
 
-    def save_state(self, path: str = "/tmp/positions_state.json"):
+    def save_state(self, path: str | None = None):
         """Serialize open positions + equity to JSON.
 
         Called after every position open/close so state survives
         engine restarts.
         """
         _logger = logging.getLogger(__name__)
+        target = Path(path) if path else DEFAULT_POSITIONS_STATE_PATH
         try:
+            target.parent.mkdir(parents=True, exist_ok=True)
             state = {
                 "current_equity": self.current_equity,
                 "peak_equity": self.peak_equity,
@@ -1006,28 +1006,29 @@ class PositionManager:
                     "current_price": p.current_price,
                     "status": p.status.value,
                 }
-            with open(path, "w") as f:
+            with open(target, "w") as f:
                 json.dump(state, f, indent=2)
             _logger.debug(
                 "Saved %d positions to %s",
                 len(self.positions),
-                path,
+                target,
             )
         except (OSError, TypeError, ValueError) as e:
             _logger.warning("Position state save failed: %s", e)
 
-    def load_state(self, path: str = "/tmp/positions_state.json"):
+    def load_state(self, path: str | None = None):
         """Reload positions from JSON, reconciling with broker.
 
         Called at engine boot to recover stop/target state
         after a restart.
         """
         _logger = logging.getLogger(__name__)
+        target = Path(path) if path else DEFAULT_POSITIONS_STATE_PATH
         try:
-            with open(path) as f:
+            with open(target) as f:
                 state = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            _logger.info("No saved position state at %s", path)
+            _logger.info("No saved position state at %s", target)
             return
         except OSError as e:
             _logger.warning("Position state load failed: %s", e)
@@ -1119,7 +1120,7 @@ class PositionManager:
             _logger.info(
                 "Loaded %d positions from %s",
                 loaded,
-                path,
+                target,
             )
 
 

@@ -59,13 +59,13 @@ format:
 
 # ── Clean ────────────────────────────────────────────────────────────
 clean:
-	bash cleanup.sh
+	bash scripts/cleanup.sh
 
 cleanup-inventory:
-	bash cleanup.sh inventory
+	bash scripts/cleanup.sh inventory
 
 cleanup-dry-run:
-	bash cleanup.sh dry-run
+	bash scripts/cleanup.sh dry-run
 
 git-maintenance:
 	git count-objects -vH

@@ -53,34 +53,40 @@ function cc() {
 			"today",
 		),
 		tabs: [
-			{ id: "today", icon: "☀", label: "TODAY · 今日" },
-			{ id: "signals", icon: "📋", label: "PLAYBOOK · 策略簿" },
-			{ id: "portfolio", icon: "💼", label: "PORTFOLIO · 持倉" },
-			{ id: "dossier", icon: "🗂", label: "WORKSPACE · 工作區" },
+			{ id: "today", icon: "☀", label: "今日" },
+			{ id: "signals", icon: "📋", label: "策略簿" },
+			{ id: "portfolio", icon: "💼", label: "持倉" },
+			{ id: "dossier", icon: "🗂", label: "工作區" },
 			{ id: "ibkr", icon: "⚡", label: "IBKR 券商" },
-			{ id: "ops", icon: "⚙️", label: "Ops 運維" },
+			{ id: "ops", icon: "⚙️", label: "運維" },
 		],
-		guideTab: { id: "guide", icon: "📖", label: "Guide 指南" },
-		settingsTab: { id: "settings", icon: "⚙", label: "Settings 設定" },
+		guideTab: { id: "guide", icon: "📖", label: "指南" },
+		settingsTab: { id: "settings", icon: "⚙", label: "設定" },
 		guideSection: "quickstart",
 		guideSections: [
-			{ id: "quickstart", label: "Quick Start 快速上手" },
-			{ id: "advanced", label: "Advanced 進階" },
-			{ id: "reference", label: "Reference 參考" },
+			{ id: "quickstart", label: "快速上手" },
+			{ id: "advanced", label: "進階" },
+			{ id: "reference", label: "參考" },
 		],
 		moreTabs: [
-			{ id: "scanners", icon: "🔬", label: "Discovery 探索 · research", mode: "Research-only", desc: "Route via Mission Control — not equal to deploy path" },
-			{ id: "agent", icon: "🤖", label: "Agent 盯盤 · monitor" },
-			{ id: "strategy-lab", icon: "🧪", label: "Strategy Lab 策略實驗室" },
-			{ id: "shadow", icon: "🧾", label: "Shadow 影子帳戶" },
-			{ id: "reports", icon: "📚", label: "Reports 報告庫" },
-			{ id: "funds", icon: "💼", label: "Funds 基金" },
-			{ id: "flow", icon: "💧", label: "Flow 資金流" },
-			{ id: "rs", icon: "📈", label: "RS 相對強度 · research" },
-			{ id: "command", icon: "🖥", label: "Command 指揮台 · advanced", hidden_from_primary_nav: true },
-			{ id: "notrade", icon: "🚫", label: "Rejections 否決" },
-			{ id: "btlab", icon: "🧪", label: "Backtest Lab 回測室" },
-			{ id: "leaders", icon: "📊", label: "Leaders 領袖" },
+			{
+				id: "scanners",
+				icon: "🔬",
+				label: "探索 · research",
+				mode: "Research-only",
+				desc: "Route via Mission Control — not equal to deploy path",
+			},
+			{ id: "agent", icon: "🤖", label: "Agent 盯盤" },
+			{ id: "strategy-lab", icon: "🧪", label: "策略實驗室" },
+			{ id: "shadow", icon: "🧾", label: "影子帳戶" },
+			{ id: "reports", icon: "📚", label: "報告庫" },
+			{ id: "funds", icon: "💼", label: "基金" },
+			{ id: "flow", icon: "💧", label: "資金流" },
+			{ id: "rs", icon: "📈", label: "RS 相對強度" },
+			{ id: "command", icon: "🖥", label: "指揮台", hidden_from_primary_nav: true },
+			{ id: "notrade", icon: "🚫", label: "否決" },
+			{ id: "btlab", icon: "🧪", label: "回測室" },
+			{ id: "leaders", icon: "📊", label: "領漲股" },
 		],
 
 		showMore: false,
@@ -116,6 +122,7 @@ function cc() {
 			error: "",
 			banner: "",
 		},
+		replayJournal: { loading: false, data: null, err: "" },
 		surfaceFetchHints: {},
 		live: false,
 		clock: "",
@@ -366,7 +373,7 @@ function cc() {
 			entries: [],
 		},
 		errorLog: { loading: false, error: "", entries: [], total: 0, filter: "all" },
-		identifiedErrorsPanel: { loading: false, error: "", items: [], lastRefresh: null },
+		identifiedErrorsPanel: { loading: false, error: "", items: [], lastRefresh: null, expandedDetails: {} },
 		providers: {
 			yfinance: false,
 			regime_router: false,
@@ -480,6 +487,7 @@ function cc() {
 		_attentionBudgetTab: "today",
 		_attentionBudgetSec: 0,
 		reviewPackLoading: false,
+		uiLayoutExportLoading: false,
 		stratHealth: { loading: false, data: null, window: 30, err: "" },
 		histVar: { loading: false, data: null, err: "", last_run: 0 },
 		freshness: null,
@@ -600,6 +608,14 @@ function cc() {
 			} catch (e) {}
 			this.dataContractDismissed = localStorage.getItem("cc_data_contract_dismissed") === "1"
 			this.initReplayFromStorage()
+			if (this.replay.active && this.replay.as_of) {
+				setTimeout(() => {
+					this.refreshReplaySurfaces()
+					if (this.tab === "dossier" && (this.dos.ticker || "").trim()) {
+						this.fetchReplayDossier()
+					}
+				}, 600)
+			}
 			if (typeof window !== "undefined") {
 				window.addEventListener("resize", () => {
 					this.pmStripChipMenuOpen = false
@@ -609,7 +625,7 @@ function cc() {
 					document.addEventListener("visibilitychange", () => {
 						this._pageVisible = !document.hidden
 						this._hiddenPollSkip = 0
-						if (this._pageVisible) {
+						if (this._pageVisible && !this.replay?.active) {
 							this.fetchDecisionBoardLight()
 							if (this.tab === "today") this.fetchToday7()
 						}
@@ -906,6 +922,7 @@ function cc() {
 			}
 		},
 		_ccPollSkip(secondaryOnly) {
+			if (this.replay?.active) return true
 			if (this._pageVisible) {
 				this._hiddenPollSkip = 0
 				return false
@@ -1201,6 +1218,133 @@ function cc() {
 		},
 		dossierConfirmOnlyOnce() {
 			return this.dossierResearchOnly() || this.dosShowsFetchBanner()
+		},
+		dossierExecutionHidden() {
+			return this.dossierConfirmOnlyOnce() || this.replay.active
+		},
+		dossierConfirmOnlyScreen() {
+			const opts = {
+				ticker: this.dos?.ticker || this.dos?.data?.symbol,
+				boardAuthority: this.dossierGateSnapshotLine() || "MONITOR ONLY",
+				source: this.dosTrustSource?.() || this.dos?.intel?.trust?.source || "instant-degraded",
+				asOf: (this.dos?.intel?.as_of || this.dosTrustAsOf?.() || "").slice(0, 19),
+				cachedEvidence: this.dosFetchBannerExistsLine() ? [this.dosFetchBannerExistsLine()] : [],
+				missing: (this.dos?.missing_modules || []).slice(0, 6),
+				hasMonitorData: this.dosHasCached?.() || !!this.dos?.data?.price,
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.dossierConfirmOnlyBlocks)
+				return CCHelpers.dossierConfirmOnlyBlocks(opts)
+			return {
+				headline: "CONFIRM ONLY · Structure unavailable",
+				known: [],
+				missing: [],
+				allowed: ["Retry live data"],
+				blocked: ["Trade plan", "Sizing", "Paper order", "IBKR handoff"],
+				next: ["Retry live core"],
+			}
+		},
+		scopedFreshnessPills() {
+			const fs = this.ccFreshnessState()
+			const brief = this.brief_status?.latest || {}
+			const briefAge = Number(brief.age_days) || 0
+			const briefTier = String(brief.tier || this.ccHeader?.pills?.brief || "FRESH").toUpperCase()
+			const ex = this.executionState()
+			const broker = this.ibkrUnifiedShort?.(this.today7?.execution_readiness) || "OFFLINE"
+			const runtime =
+				String(this.healthMode || this.healthData?.mode || "").toLowerCase() === "loading" ||
+				this.instantDegradedBannerVisible()
+					? "WARMING"
+					: "LIVE"
+			const da = this.decisionAuthority()
+			const authority = da?.allows_trade_labels
+				? "DEPLOY"
+				: String(da?.effective_action_max || "MONITOR ONLY").toUpperCase()
+			const fromApi = this.ccHeader?.scoped_freshness_pills
+			const opts = {
+				fromApi: fromApi,
+				market: fs.market || this.freshness?.worst_tier || "UNKNOWN",
+				board: fs.board || "UNKNOWN",
+				brief: briefTier,
+				briefAgeDays: briefTier !== "FRESH" ? briefAge : 0,
+				broker: broker,
+				runtime: runtime,
+				authority: authority,
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildScopedFreshnessPills)
+				return CCHelpers.buildScopedFreshnessPills(opts)
+			return []
+		},
+		warmupModuleChecklistItems() {
+			const opts = {
+				checklist: this.healthData?.warmup_module_checklist || this.ccHeader?.warmup_module_checklist,
+				healthMode: String(this.healthMode || this.healthData?.mode || "").toLowerCase(),
+				instantDegraded: !!this.instantDegradedBannerVisible(),
+				cachedBoardOk: !!(this.rankedOpps?.rows?.length || this.today7?.top_ranked?.length),
+				marketDataOk: !!(this.freshness?.worst_tier === "FRESH"),
+				dossierCoreOk: !!(this.dos?.intel && !this._dossierIntelDegraded(this.dos.intel)),
+				enrichmentsOk: this.dos?.status === "loaded" || this.dos?.status === "partial_loaded",
+				brokerOk: !!(this.cc_status?.ibkr_connected || this.ibkr?.readiness?.connected),
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.warmupModuleChecklistItems)
+				return CCHelpers.warmupModuleChecklistItems(opts)
+			return []
+		},
+		warmupModuleChecklistLine() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.warmupModuleChecklistLine)
+				return CCHelpers.warmupModuleChecklistLine({
+					checklist: this.warmupModuleChecklistItems(),
+					healthMode: this.healthMode,
+					instantDegraded: this.instantDegradedBannerVisible(),
+				})
+			return (this.warmupModuleChecklistItems() || [])
+				.map((m) => (m.ready ? "✓" : "○") + " " + m.label)
+				.join(" · ")
+		},
+		dosMissingDisplay(field) {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.missingDataDisplay)
+				return CCHelpers.missingDataDisplay(field)
+			return "Unavailable · live data required"
+		},
+		mockContextBoundaryLabel(degraded) {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.mockContextBoundaryLabel)
+				return CCHelpers.mockContextBoundaryLabel(!!degraded)
+			return degraded
+				? "CONTEXT ONLY · MOCK / LAGGED — Not evidence for today's decision"
+				: "CONTEXT ONLY · LAGGED — Not a trade trigger"
+		},
+		async repairDossierPrimary() {
+			const seq = ["Retry live core", "Refresh Playbook", "Load enrichments if partial"]
+			try {
+				await this.fetchDossier({ forceLive: true })
+			} catch (_) {}
+			try {
+				await this.fetchRankedOpps?.({ refresh: true })
+			} catch (_) {}
+			if (this.dos?.status === "partial_loaded" || this.dos?.partialNotice) {
+				try {
+					await this.fetchDossierEnrichments?.()
+				} catch (_) {}
+			}
+			return seq.join(" → ")
+		},
+		clearStaleAuthorityLocalStorage() {
+			;["cc_playbook_ranked_snapshot", "cc_today7_snapshot", "cc_scanner_hub_snapshot"].forEach((k) => {
+				try {
+					const raw = localStorage.getItem(k)
+					if (!raw) return
+					const obj = JSON.parse(raw)
+					if (obj?.instant_degraded || obj?.degraded || obj?.trust?.stale) localStorage.removeItem(k)
+				} catch (_) {
+					try {
+						localStorage.removeItem(k)
+					} catch (e2) {}
+				}
+			})
+			try {
+				sessionStorage.removeItem("cc_instant_degraded_dismissed")
+			} catch (_) {}
+			this.instantDegradedDismissed = false
+			this.instantDegradedBanner = ""
 		},
 		dosFetchBannerKind() {
 			if (this.dos.status === "failed" || (this.dos.error && !this.dosHasLoadedData())) return "error"
@@ -2339,6 +2483,8 @@ function cc() {
 			return 2
 		},
 		identifiedErrorsDedupKey(item) {
+			const H = window.CCHelpers || {}
+			if (H.identifiedErrorsIncidentKey) return H.identifiedErrorsIncidentKey(item)
 			return (
 				String(item.source || "") +
 				"|" +
@@ -2348,6 +2494,40 @@ function cc() {
 					.trim()
 					.slice(0, 120)
 			)
+		},
+		identifiedErrorsPrepareRow(item) {
+			const H = window.CCHelpers || {}
+			const detailRaw = String(item.detail || "")
+			const row = {
+				...item,
+				detail_full: detailRaw,
+				message: H.identifiedErrorsFormatMessage ? H.identifiedErrorsFormatMessage(item) : item.message,
+				detail: H.identifiedErrorsFormatDetail ? H.identifiedErrorsFormatDetail(item) : detailRaw,
+				severity: H.identifiedErrorsEffectiveSeverity
+					? H.identifiedErrorsEffectiveSeverity(item)
+					: item.severity || "info",
+			}
+			row.detail_truncated = !!detailRaw && !!row.detail && detailRaw.length > String(row.detail || "").length
+			return row
+		},
+		identifiedErrorsDetailExpanded(row) {
+			const id = String((row && row.id) || "")
+			return !!(this.identifiedErrorsPanel.expandedDetails || {})[id]
+		},
+		identifiedErrorsToggleDetail(row) {
+			const id = String((row && row.id) || "")
+			if (!id) return
+			const map = { ...(this.identifiedErrorsPanel.expandedDetails || {}) }
+			map[id] = !map[id]
+			this.identifiedErrorsPanel.expandedDetails = map
+		},
+		identifiedErrorsDetailLine(row) {
+			if (!row) return ""
+			if (this.identifiedErrorsDetailExpanded(row)) return String(row.detail_full || row.detail || "")
+			return String(row.detail || "")
+		},
+		identifiedErrorsShowDetailToggle(row) {
+			return !!(row && row.detail_truncated)
 		},
 		identifiedErrorsBlockerSeverity(text) {
 			const upper = String(text || "").toUpperCase()
@@ -2368,7 +2548,7 @@ function cc() {
 				const key = this.identifiedErrorsDedupKey(item)
 				if (seen.has(key)) return
 				seen.add(key)
-				items.push(item)
+				items.push(this.identifiedErrorsPrepareRow(item))
 			}
 			;(this.errorLog.entries || []).slice(0, 20).forEach((row, i) => {
 				push({
@@ -2452,18 +2632,23 @@ function cc() {
 				})
 			}
 			const syncStatus = String(this.ibkr.readiness?.portfolio_sync_status || "").toLowerCase()
-			if (syncStatus && !["ready", "ok", "synced"].includes(syncStatus)) {
+			const H = window.CCHelpers || {}
+			const ibkrOfflineKnown =
+				H.identifiedErrorsHasIbkrOfflineIncident && H.identifiedErrorsHasIbkrOfflineIncident(items)
+			if (syncStatus && !["ready", "ok", "synced"].includes(syncStatus) && !ibkrOfflineKnown) {
 				push({
 					id: "ibkr-portfolio-sync",
 					severity: syncStatus === "mismatch" ? "critical" : "warning",
 					source: "ibkr",
 					message: "Portfolio sync: " + syncStatus,
-					detail: String(this.ibkr.readiness?.portfolio_sync_reason || this.ibkr.portfolioCompare?.note || ""),
+					detail: String(
+						this.ibkr.readiness?.portfolio_sync_reason || this.ibkr.portfolioCompare?.note || "",
+					),
 					timestamp: null,
 					research_only: false,
 				})
 			}
-			if (this.opsConsole.data?.ibkr && !this.opsConsole.data.ibkr.connected) {
+			if (this.opsConsole.data?.ibkr && !this.opsConsole.data.ibkr.connected && !ibkrOfflineKnown) {
 				push({
 					id: "ibkr-session-inactive",
 					severity: "warning",
@@ -2474,7 +2659,7 @@ function cc() {
 					research_only: false,
 				})
 			}
-			if (this.portfolioHeaderBrokerSyncUnavailable()) {
+			if (this.portfolioHeaderBrokerSyncUnavailable() && !ibkrOfflineKnown) {
 				push({
 					id: "portfolio-broker-sync",
 					severity: "warning",
@@ -3556,6 +3741,9 @@ function cc() {
 				healthMode: mode,
 				briefFallback: !!(this.todayUsesBriefFallback() || this.pageAuthorityIsDegraded()),
 				nearMiss: !!(this.today7.near_miss || []).length,
+				checklist: this.warmupModuleChecklistItems(),
+				warmupModuleChecklist: this.warmupModuleChecklistItems(),
+				instantDegraded: !!(this.today7.instant_degraded || this.instantDegradedBannerVisible()),
 			}
 			if (typeof CCHelpers !== "undefined" && CCHelpers.warmupUpgradeQueue)
 				return CCHelpers.warmupUpgradeQueue(opts)
@@ -4163,7 +4351,13 @@ function cc() {
 				this.healthMode = String(h.mode || "full").toLowerCase()
 				this.captureInstantDegradedBanner(h)
 				this.applyWarmupBoardFromHealth(h)
-				if (this.healthMode === "loading" && !this.playbookBoardHasContent()) this.fetchWarmupBriefBoard()
+				if (this.healthMode === "full") {
+					this.clearStaleAuthorityLocalStorage()
+					this.fetchCcHeader?.()
+					if (this.dos?.ticker) this.fetchDossier({ forceLive: true })
+				} else if (this.healthMode === "loading" && !this.playbookBoardHasContent()) {
+					this.fetchWarmupBriefBoard()
+				}
 			} catch (e) {
 				this.healthMode = "loading"
 			}
@@ -4324,22 +4518,54 @@ function cc() {
 				console.warn("fetchSelfLearnStatus", e)
 			}
 		},
-		async fetchBeliefReview() {
-			if (this.tab !== "ops") return
-			this.beliefReview.loading = true
-			this.beliefReview.err = ""
+		async fetchFirmHealthPanel(url, panel, unavailableMsg) {
+			panel.loading = true
+			panel.err = ""
 			try {
-				const r = await this.ccFetch("/api/v7/belief-review/summary")
-				if (!r || !r.ok) {
-					this.beliefReview.err = "Belief review unavailable"
+				const r = await this.ccFetch(url, { retries: 2, backoff: 600, timeoutMs: 15000 })
+				if (!r) {
+					panel.err = unavailableMsg
 					return
 				}
-				this.beliefReview.data = await r.json()
+				let d = null
+				try {
+					d = await r.json()
+				} catch (_e) {
+					d = null
+				}
+				if (r.ok && d) {
+					panel.data = d
+					return
+				}
+				if (d && (d.authority === "research_only" || d.headline || d.items || d.entries || d.rituals)) {
+					panel.data = d
+					return
+				}
+				if (r.status === 503 || r.status === 502) {
+					panel.data = {
+						headline: "Warming — full API still loading",
+						authority: "research_only",
+						instant_degraded: true,
+						items: [],
+						entries: [],
+						rituals: [],
+					}
+					return
+				}
+				panel.err = unavailableMsg
 			} catch (e) {
-				this.beliefReview.err = e && e.message ? e.message : String(e)
+				panel.err = e && e.message ? e.message : unavailableMsg
 			} finally {
-				this.beliefReview.loading = false
+				panel.loading = false
 			}
+		},
+		async fetchBeliefReview() {
+			if (this.tab !== "ops") return
+			await this.fetchFirmHealthPanel(
+				"/api/v7/belief-review/summary",
+				this.beliefReview,
+				"Belief review unavailable",
+			)
 		},
 		async saveBeliefItem(item) {
 			if (!item || !item.id) return
@@ -4398,20 +4624,11 @@ function cc() {
 		},
 		async fetchFirmCadence() {
 			if (this.tab !== "ops" && this.tab !== "today") return
-			this.firmCadence.loading = true
-			this.firmCadence.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/firm-cadence/summary")
-				if (!r || !r.ok) {
-					this.firmCadence.err = "Firm cadence unavailable"
-					return
-				}
-				this.firmCadence.data = await r.json()
-			} catch (e) {
-				this.firmCadence.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.firmCadence.loading = false
-			}
+			await this.fetchFirmHealthPanel(
+				"/api/v7/firm-cadence/summary",
+				this.firmCadence,
+				"Firm cadence unavailable",
+			)
 		},
 		firmCadenceNextLine() {
 			const d = this.firmCadence.data
@@ -4487,11 +4704,7 @@ function cc() {
 				return
 			}
 			const mc = this.missionControl()
-			const sym = String(
-				ticker ||
-					(this.deployOpen() ? mc.best_trade || mc.best_monitor : mc.best_monitor) ||
-					""
-			)
+			const sym = String(ticker || (this.deployOpen() ? mc.best_trade || mc.best_monitor : mc.best_monitor) || "")
 				.trim()
 				.toUpperCase()
 			const did = String(decisionId || "").trim()
@@ -4524,89 +4737,91 @@ function cc() {
 			return `${d.ticker || "—"} · journal ${d.status} · ${missing} fields · link readiness + POST stub`
 		},
 		async fetchDecisionJournal() {
-			if (this.tab !== "ops") return
-			this.decisionJournal.loading = true
-			this.decisionJournal.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/decision-journal/recent?limit=10")
-				if (!r || !r.ok) {
-					this.decisionJournal.err = "Decision journal unavailable"
-					return
+			if (this.tab !== "ops" && !(this.replay?.active && this.tab === "today")) return
+			if (this.replay?.active && this.replay.as_of) {
+				await this.fetchReplayJournal()
+				if (this.replayJournal.data?.decision_journal) {
+					this.decisionJournal.data = this.replayJournal.data.decision_journal
 				}
-				this.decisionJournal.data = await r.json()
-			} catch (e) {
-				this.decisionJournal.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.decisionJournal.loading = false
+				return
 			}
+			await this.fetchFirmHealthPanel(
+				"/api/v7/decision-journal/recent?limit=10",
+				this.decisionJournal,
+				"Decision journal unavailable",
+			)
 		},
 		async fetchOverrideJournal() {
-			if (this.tab !== "ops") return
-			this.overrideJournal.loading = true
-			this.overrideJournal.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/override-journal/summary")
-				if (!r || !r.ok) {
-					this.overrideJournal.err = "Override journal unavailable"
-					return
+			if (this.tab !== "ops" && !(this.replay?.active && this.tab === "today")) return
+			if (this.replay?.active && this.replay.as_of) {
+				await this.fetchReplayJournal()
+				if (this.replayJournal.data?.override_journal) {
+					this.overrideJournal.data = this.replayJournal.data.override_journal
 				}
-				this.overrideJournal.data = await r.json()
-			} catch (e) {
-				this.overrideJournal.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.overrideJournal.loading = false
+				return
 			}
+			await this.fetchFirmHealthPanel(
+				"/api/v7/override-journal/summary",
+				this.overrideJournal,
+				"Override journal unavailable",
+			)
 		},
 		async fetchCalibrationReport() {
-			if (this.tab !== "ops") return
-			this.calibrationReport.loading = true
-			this.calibrationReport.err = ""
+			if (this.tab !== "ops" && !(this.replay?.active && this.tab === "today")) return
+			if (this.replay?.active && this.replay.as_of) {
+				await this.fetchReplayJournal()
+				if (this.replayJournal.data?.calibration) {
+					this.calibrationReport.data = this.replayJournal.data.calibration
+				}
+				return
+			}
+			await this.fetchFirmHealthPanel(
+				"/api/v7/calibration/report",
+				this.calibrationReport,
+				"Calibration report unavailable",
+			)
+		},
+		async fetchReplayJournal() {
+			if (!this.replay?.active || !this.replay.as_of) return
+			this.replayJournal.loading = true
+			this.replayJournal.err = ""
 			try {
-				const r = await this.ccFetch("/api/v7/calibration/report")
+				const r = await this.ccFetch("/api/v7/replay/journal?as_of=" + encodeURIComponent(this.replay.as_of), {
+					retries: 1,
+					backoff: 400,
+					timeoutMs: 15000,
+				})
 				if (!r || !r.ok) {
-					this.calibrationReport.err = "Calibration report unavailable"
+					this.replayJournal.err = "Replay journal unavailable"
 					return
 				}
-				this.calibrationReport.data = await r.json()
+				this.replayJournal.data = await r.json()
+				if (this.replayJournal.data?.decision_journal) {
+					this.decisionJournal.data = this.replayJournal.data.decision_journal
+				}
+				if (this.replayJournal.data?.override_journal) {
+					this.overrideJournal.data = this.replayJournal.data.override_journal
+				}
+				if (this.replayJournal.data?.calibration) {
+					this.calibrationReport.data = this.replayJournal.data.calibration
+				}
 			} catch (e) {
-				this.calibrationReport.err = e && e.message ? e.message : String(e)
+				this.replayJournal.err = e && e.message ? e.message : String(e)
 			} finally {
-				this.calibrationReport.loading = false
+				this.replayJournal.loading = false
 			}
 		},
 		async fetchWeeklyIcDigest() {
 			if (this.tab !== "ops") return
-			this.weeklyIcDigest.loading = true
-			this.weeklyIcDigest.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/weekly-ic/digest")
-				if (!r || !r.ok) {
-					this.weeklyIcDigest.err = "Weekly IC digest unavailable"
-					return
-				}
-				this.weeklyIcDigest.data = await r.json()
-			} catch (e) {
-				this.weeklyIcDigest.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.weeklyIcDigest.loading = false
-			}
+			await this.fetchFirmHealthPanel(
+				"/api/v7/weekly-ic/digest",
+				this.weeklyIcDigest,
+				"Weekly IC digest unavailable",
+			)
 		},
 		async fetchUsageLogSummary() {
 			if (this.tab !== "ops") return
-			this.usageLogSummary.loading = true
-			this.usageLogSummary.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/usage-log/summary")
-				if (!r || !r.ok) {
-					this.usageLogSummary.err = "Usage log unavailable"
-					return
-				}
-				this.usageLogSummary.data = await r.json()
-			} catch (e) {
-				this.usageLogSummary.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.usageLogSummary.loading = false
-			}
+			await this.fetchFirmHealthPanel("/api/v7/usage-log/summary", this.usageLogSummary, "Usage log unavailable")
 		},
 		async _fetchReviewPackEndpoint(url) {
 			try {
@@ -4651,7 +4866,10 @@ function cc() {
 				const fetched = await Promise.all(
 					endpoints.map(async (ep) => {
 						const result = await this._fetchReviewPackEndpoint(ep.url)
-						return { ...ep, data: result.ok ? result.data : { fetch_error: result.error, status: result.status } }
+						return {
+							...ep,
+							data: result.ok ? result.data : { fetch_error: result.error, status: result.status },
+						}
 					}),
 				)
 				const meta = {
@@ -4703,9 +4921,7 @@ function cc() {
 		},
 		async fetchDecisionReadiness(ticker) {
 			const sym = String(
-				ticker ||
-					(this.deployOpen() ? this.topDeployCandidate() : this.missionControl().best_monitor) ||
-					"",
+				ticker || (this.deployOpen() ? this.topDeployCandidate() : this.missionControl().best_monitor) || "",
 			)
 				.trim()
 				.toUpperCase()
@@ -4713,9 +4929,7 @@ function cc() {
 			this.decisionReadiness.loading = true
 			this.decisionReadiness.err = ""
 			try {
-				const r = await this.ccFetch(
-					"/api/v7/decision-readiness/checklist?ticker=" + encodeURIComponent(sym),
-				)
+				const r = await this.ccFetch("/api/v7/decision-readiness/checklist?ticker=" + encodeURIComponent(sym))
 				if (!r || !r.ok) {
 					this.decisionReadiness.err = "Decision readiness unavailable"
 					return
@@ -4736,20 +4950,7 @@ function cc() {
 			return `${d.ticker || "—"} · ${filled}/${req} fields · complete before deploy intent`
 		},
 		async fetchResearchQueue() {
-			this.researchQueue.loading = true
-			this.researchQueue.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/research-queue")
-				if (!r || !r.ok) {
-					this.researchQueue.err = "Research queue unavailable"
-					return
-				}
-				this.researchQueue.data = await r.json()
-			} catch (e) {
-				this.researchQueue.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.researchQueue.loading = false
-			}
+			await this.fetchFirmHealthPanel("/api/v7/research-queue", this.researchQueue, "Research queue unavailable")
 		},
 		researchQueueLine() {
 			const d = this.researchQueue.data
@@ -4761,10 +4962,7 @@ function cc() {
 		topDeployCandidate() {
 			const mc = this.missionControl()
 			const top = (this.today7.top_ranked || [])[0]
-			const sym =
-				(this.deployOpen() ? mc.best_trade : mc.best_monitor) ||
-				(top && top.ticker) ||
-				""
+			const sym = (this.deployOpen() ? mc.best_trade : mc.best_monitor) || (top && top.ticker) || ""
 			return String(sym || "")
 				.trim()
 				.toUpperCase()
@@ -4782,9 +4980,7 @@ function cc() {
 			this.preDecisionGate.loading = true
 			this.preDecisionGate.err = ""
 			try {
-				const r = await this.ccFetch(
-					"/api/v7/pre-decision/gate?ticker=" + encodeURIComponent(sym),
-				)
+				const r = await this.ccFetch("/api/v7/pre-decision/gate?ticker=" + encodeURIComponent(sym))
 				if (!r || !r.ok) {
 					this.preDecisionGate.err = "Pre-decision gate unavailable"
 					return
@@ -4888,27 +5084,18 @@ function cc() {
 		async fetchAttentionBudget() {
 			this._syncAttentionBudgetUsageFromStorage()
 			const u = this.attentionBudget.usage || {}
-			this.attentionBudget.loading = true
-			this.attentionBudget.err = ""
-			try {
-				const q =
-					"?research=" +
-					encodeURIComponent(u.research || 0) +
-					"&portfolio=" +
-					encodeURIComponent(u.portfolio || 0) +
-					"&market=" +
-					encodeURIComponent(u.market || 0)
-				const r = await this.ccFetch("/api/v7/attention-budget/summary" + q)
-				if (!r || !r.ok) {
-					this.attentionBudget.err = "Attention budget unavailable"
-					return
-				}
-				this.attentionBudget.data = await r.json()
-			} catch (e) {
-				this.attentionBudget.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.attentionBudget.loading = false
-			}
+			const q =
+				"?research=" +
+				encodeURIComponent(u.research || 0) +
+				"&portfolio=" +
+				encodeURIComponent(u.portfolio || 0) +
+				"&market=" +
+				encodeURIComponent(u.market || 0)
+			await this.fetchFirmHealthPanel(
+				"/api/v7/attention-budget/summary" + q,
+				this.attentionBudget,
+				"Attention budget unavailable",
+			)
 		},
 		attentionBudgetLine() {
 			const d = this.attentionBudget.data
@@ -4931,9 +5118,7 @@ function cc() {
 			this.priorLessons.err = ""
 			this.priorLessons.ticker = sym
 			try {
-				const r = await this.ccFetch(
-					"/api/v7/knowledge/lessons?ticker=" + encodeURIComponent(sym),
-				)
+				const r = await this.ccFetch("/api/v7/knowledge/lessons?ticker=" + encodeURIComponent(sym))
 				if (!r || !r.ok) {
 					this.priorLessons.err = "Prior lessons unavailable"
 					return
@@ -5201,7 +5386,7 @@ function cc() {
 				return "—"
 			}
 			const sh = this.dosSizeShares()
-			return sh > 0 ? sh + " sh" : "Size unavailable"
+			return sh > 0 ? sh + " sh" : this.dosMissingDisplay("size")
 		},
 		dosSizeExplanationVisible() {
 			const ex = this.dosSizeExplanation()
@@ -8106,6 +8291,9 @@ function cc() {
 				this.fetchMarginalRoc()
 				this.fetchDailyIc()
 			}
+			if (tSafe === "today" && this.replay?.active) {
+				this.fetchReplayJournal()
+			}
 			if (tSafe === "ops") {
 				this.fetchCcStatus()
 				this.fetchOpsRuntime()
@@ -8166,7 +8354,7 @@ function cc() {
 			return this.uiExpandAll ? "收合" : "一鍵展開"
 		},
 		uiExpandAllHeaderLabel() {
-			return this.uiExpandAll ? "收合 · Collapse all" : "一鍵展開 · Expand all"
+			return this.uiExpandAll ? "收合全部" : "一鍵展開"
 		},
 		ccDetailsOpen(fallback) {
 			return this.uiExpandAll || !!fallback
@@ -10636,6 +10824,9 @@ function cc() {
 				this.dos.loading = false
 				return
 			}
+			if (this.replay.active && this.replay.as_of && !opts.forceLive) {
+				return this.fetchReplayDossier()
+			}
 			if (opts.useCached) {
 				const cached = this.dosLoadCache(tk)
 				if (cached && cached.intel) {
@@ -12092,8 +12283,7 @@ function cc() {
 				if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) {
 					this.replay.as_of = stored
 					this.replay.active = true
-					this.replay.banner =
-						"Historical replay as of " + stored + " — LIVE AUTHORITY: NONE"
+					this.replay.banner = "Historical replay as of " + stored + " — LIVE AUTHORITY: NONE"
 				}
 			} catch (e) {}
 		},
@@ -12103,8 +12293,85 @@ function cc() {
 			if (refresh) u += "&refresh=true"
 			return u
 		},
+		replayDossierUrl(ticker, refresh) {
+			let u =
+				"/api/v7/replay/dossier/" +
+				encodeURIComponent((ticker || "").trim().toUpperCase()) +
+				"?as_of=" +
+				encodeURIComponent(this.replay.as_of || "")
+			if (refresh) u += "&refresh=true"
+			return u
+		},
+		applyReplayDossierPayload(d) {
+			if (!d || typeof d !== "object") return
+			const kt = d.known_then || {}
+			const hist = d.historical_decision || kt.action || "WATCH"
+			const intel = {
+				as_of: d.actual_trading_date || d.as_of,
+				replay_mode: true,
+				load_phase: "core",
+				partial: true,
+				decision_bar: d.decision_bar || {
+					verdict: hist,
+					next_action: "LIVE AUTHORITY: NONE — historical replay only",
+				},
+				page_summary:
+					d.banner ||
+					d.surface_authority?.label ||
+					"Historical dossier replay as of " +
+						(d.as_of || "") +
+						" — KNOWN THEN vs OUTCOME; LIVE AUTHORITY: NONE",
+				pm_answer: {
+					thirty_second: {
+						verdict: hist,
+						why_not_buy_now: "Replay mode — no live deploy or IBKR handoff",
+						what_makes_buyable: "Exit replay for live dossier research",
+						breaks_thesis: kt.regime || "—",
+						size_guidance: "—",
+					},
+				},
+				dossier: {
+					...(d.dossier_compat || {}),
+					symbol: d.ticker,
+					price: d.price || kt.entry_price,
+					trust: d.trust,
+					replay_mode: true,
+					known_then: kt,
+					outcome: d.outcome,
+				},
+			}
+			this._applyDossierIntel(intel)
+			this.dos.partialNotice = "Historical replay dossier — enrichments disabled; OUTCOME does not affect rank"
+			this.dos.status = "partial_loaded"
+		},
+		async fetchReplayDossier(refresh) {
+			const tk = (this.dos.ticker || "").trim().toUpperCase()
+			if (!tk || !this.replay.active || !this.replay.as_of) return
+			this.dos.loading = true
+			this.dos.error = ""
+			this.dos.status = "loading_core"
+			try {
+				const r = await this.ccFetch(this.replayDossierUrl(tk, refresh), {
+					retries: 1,
+					backoff: 400,
+					timeoutMs: 30000,
+				})
+				if (!r || !r.ok) throw new Error("HTTP " + (r ? r.status : "fail"))
+				const d = await r.json()
+				this.applyReplayDossierPayload(d)
+			} catch (e) {
+				console.warn("fetchReplayDossier failed", e)
+				this.dos.error = "Replay dossier failed — " + String(e.message || e)
+				this.dos.status = "failed"
+			} finally {
+				this.dos.loading = false
+				this._syncDossierFetchHints()
+			}
+		},
 		async enterReplayMode(asOf) {
-			const d = String(asOf || "").trim().slice(0, 10)
+			const d = String(asOf || "")
+				.trim()
+				.slice(0, 10)
 			if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
 				this.replay.error = "Invalid replay date — use YYYY-MM-DD"
 				return
@@ -12117,6 +12384,9 @@ function cc() {
 				localStorage.setItem("cc_replay_as_of", d)
 			} catch (e) {}
 			await this.refreshReplaySurfaces()
+			if (this.tab === "dossier" && (this.dos.ticker || "").trim()) {
+				await this.fetchReplayDossier()
+			}
 		},
 		exitReplayMode() {
 			this.replay.active = false
@@ -12132,6 +12402,9 @@ function cc() {
 			this.fetchToday7()
 			this.fetchRanked({ refresh: true })
 			this.fetchDecisionBoardLight()
+			if (this.tab === "dossier" && (this.dos.ticker || "").trim()) {
+				this.fetchDossier()
+			}
 		},
 		async refreshReplaySurfaces(refresh) {
 			if (!this.replay.active || !this.replay.as_of) return
@@ -12146,10 +12419,9 @@ function cc() {
 				if (!r || !r.ok) throw new Error("HTTP " + (r ? r.status : "fail"))
 				const d = await r.json()
 				this.replay.session_id = d.session_id || this.replay.session_id
-				this.replay.banner =
-					d.banner ||
-					"Historical replay as of " + d.as_of + " — LIVE AUTHORITY: NONE"
+				this.replay.banner = d.banner || "Historical replay as of " + d.as_of + " — LIVE AUTHORITY: NONE"
 				this.applyReplayDashboard(d)
+				await this.fetchReplayJournal()
 			} catch (e) {
 				console.warn("refreshReplaySurfaces failed", e)
 				this.replay.error = "Replay fetch failed — " + String(e.message || e)
@@ -12167,6 +12439,7 @@ function cc() {
 			this.today7.filter_funnel = d.filter_funnel || null
 			this.today7.surface_authority = d.surface_authority || null
 			this.today7.historical_opportunities = d.historical_opportunities || null
+			this.today7.journal_linkage = d.journal_linkage || null
 			this.today7.date = d.date || d.as_of
 			this.today7.replay_mode = true
 			this.ccHeader.page_authority_mode = "replay"

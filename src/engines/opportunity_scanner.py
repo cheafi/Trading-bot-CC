@@ -455,7 +455,9 @@ async def run_opportunity_scanner(
 
     import yfinance as yf
 
-    from src.core.stock_universe import OPPORTUNITY_COVERAGE_UNIVERSE, tiered_scan_universe
+    from src.core.stock_universe import (
+        tiered_scan_universe,
+    )
     from src.scanners.us_universe import US_UNIVERSE
 
     regime_upper = regime.upper()

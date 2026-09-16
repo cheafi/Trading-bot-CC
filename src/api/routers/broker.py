@@ -225,7 +225,17 @@ async def place_order(
                 status_code=400, detail=f"Invalid order type: {order_type}"
             )
 
+        from src.core.live_trading_gate import authorize_live_order
+
         manager = await get_broker_manager()
+        account = ""
+        try:
+            acct = await manager.get_account()
+            account = getattr(acct, "account_id", "") or ""
+        except Exception:
+            account = ""
+        dry_run = not authorize_live_order(account).live_allowed
+
         result = await manager.place_order(
             ticker=ticker.upper(),
             side=order_side,
@@ -233,6 +243,8 @@ async def place_order(
             order_type=order_type_enum,
             limit_price=limit_price,
             stop_price=stop_price,
+            dry_run=dry_run,
+            account=account,
         )
 
         return {

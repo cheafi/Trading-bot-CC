@@ -89,6 +89,11 @@ class PlaceBracketRequest(BaseModel):
     trail_percent: Optional[float] = Field(
         default=None, gt=0, le=50, description="% trail (0-50)"
     )
+    decision_id: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="Optional IDOS decision_id — triggers journal stub hook",
+    )
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -158,19 +163,6 @@ async def ibkr_connect(req: ConnectRequest, _=Depends(verify_api_key)):
     )
     if not result.get("ok"):
         err = result.get("error", "Connection failed")
-        try:
-            from src.services.platform_error_log import log_broker_event
-
-            log_broker_event(
-                event="IBKR connect failed",
-                detail=(
-                    f"Handshake to IB Gateway did not succeed ({err}). "
-                    "The IBKR tab will show disconnected until Gateway/TWS accepts the API session."
-                ),
-                severity="critical",
-            )
-        except Exception:
-            logger.debug("platform error log append failed", exc_info=True)
         raise HTTPException(status_code=503, detail=err)
     return result
 
@@ -369,6 +361,11 @@ async def ibkr_place_order(
         req.limit_price,
     )
 
+    from src.core.live_trading_gate import authorize_live_order
+
+    live_auth = authorize_live_order(svc._app.account if svc._app else "")
+    dry_run = mode != "live" or not live_auth.live_allowed
+
     result = await svc.place_order(
         symbol=req.symbol,
         sec_type=req.sec_type,
@@ -380,6 +377,8 @@ async def ibkr_place_order(
         tif=req.tif,
         exchange=req.exchange,
         currency=req.currency,
+        dry_run=dry_run,
+        account=getattr(svc._app, "account", ""),
     )
 
     if result.error and "may still be active" not in result.error:
@@ -437,6 +436,22 @@ async def ibkr_place_bracket(
         req.take_profit,
     )
 
+    if req.decision_id:
+        try:
+            from src.services.decision_journal import record_deploy_intent_stub
+
+            record_deploy_intent_stub(
+                ticker=str(req.symbol or "").upper(),
+                decision_id=str(req.decision_id),
+            )
+        except Exception as exc:
+            logger.debug("decision journal deploy intent hook skipped: %s", exc)
+
+    from src.core.live_trading_gate import authorize_live_order
+
+    live_auth = authorize_live_order(svc._app.account if svc._app else "")
+    dry_run = mode != "live" or not live_auth.live_allowed
+
     result = await svc.place_bracket_order(
         symbol=req.symbol,
         sec_type=req.sec_type,
@@ -450,6 +465,8 @@ async def ibkr_place_bracket(
         trail=req.trail,
         trail_amount=req.trail_amount,
         trail_percent=req.trail_percent,
+        dry_run=dry_run,
+        account=getattr(svc._app, "account", ""),
     )
 
     if result.get("error"):

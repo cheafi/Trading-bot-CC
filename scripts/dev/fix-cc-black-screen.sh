@@ -17,7 +17,7 @@ echo "==> Stop Docker API (if running)..."
 docker compose -f docker-compose.dev.yml stop api 2>/dev/null || true
 
 echo "==> Free port 8000 and stale instant lock..."
-rm -f /tmp/cc_instant.lock
+rm -f data/state/cc_instant.lock
 if lsof -ti :8000 >/dev/null 2>&1; then
   lsof -ti :8000 | xargs kill -9 2>/dev/null || true
   sleep 2

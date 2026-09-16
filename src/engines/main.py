@@ -12,6 +12,7 @@ Boot sequence:
   5. Graceful shutdown on SIGINT/SIGTERM
 """
 
+import argparse
 import asyncio
 import logging
 import os
@@ -24,7 +25,9 @@ sys.path.insert(
 )
 
 from src.core.config import get_settings
+from src.core.live_trading_gate import assert_live_gate_or_paper, evaluate_live_trading_gate
 from src.core.logging_config import setup_logging
+from src.core.trading_mode import resolve_execution_mode
 
 logger = logging.getLogger("tradingai.main")
 
@@ -53,11 +56,20 @@ def validate_config() -> bool:
     if not discord_token:
         warnings.append("No notification channel configured (DISCORD_BOT_TOKEN)")
 
-    # Optional: AI features
-    openai_key = os.environ.get("OPENAI_API_KEY", "")
-    azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
-    if not openai_key and not azure_endpoint:
-        warnings.append("No OpenAI key — GPT validation disabled")
+    # Optional: AI features (research_only — never grants deploy_open)
+    from src.core.ai_provider import (
+        openai_configured,
+        provider_status,
+        resolve_llm_provider,
+    )
+
+    ai = provider_status()
+    if resolve_llm_provider().value == "stub":
+        warnings.append(
+            "No LLM configured — narratives and GPT validation use research stubs"
+        )
+    elif not openai_configured() and ai.get("azure_openai"):
+        logger.info("Config: Azure OpenAI active (provider=%s)", ai.get("provider"))
 
     for w in warnings:
         logger.warning("Config: %s", w)
@@ -69,16 +81,37 @@ def validate_config() -> bool:
     return True
 
 
-async def run_engine():
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="TradingAI autonomous engine")
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Request live execution (also requires LIVE_TRADING=1 or TRADING_ENV=live)",
+    )
+    return parser.parse_args(argv)
+
+
+async def run_engine(*, live_cli: bool = False):
     """Boot and run the AutoTradingEngine."""
     from src.engines.auto_trading_engine import AutoTradingEngine
 
-    dry_run = os.environ.get("DRY_RUN", "false").lower() in (
-        "true",
-        "1",
-        "yes",
-    )
+    resolution = resolve_execution_mode(live_cli=live_cli)
+    if resolution.ambiguous:
+        raise SystemExit(1)
+
+    live_requested = live_cli or not resolution.dry_run
+    assert_live_gate_or_paper(live_requested=live_requested)
+    gate = evaluate_live_trading_gate()
+    dry_run = resolution.dry_run or gate.paper_by_construction
     cycle_interval = float(os.environ.get("CYCLE_INTERVAL", "60"))
+
+    mode_label = "PAPER" if dry_run else "LIVE"
+    logger.info(
+        "Execution mode: %s (trading_mode=%s, live_gate=%s)",
+        mode_label,
+        resolution.reason,
+        gate.reason,
+    )
 
     engine = AutoTradingEngine(
         cycle_interval_seconds=cycle_interval,
@@ -110,8 +143,10 @@ async def _shutdown(engine, sig):
     await engine.graceful_shutdown()
 
 
-def main():
+def main(argv: list[str] | None = None):
     """CLI entrypoint."""
+    args = _parse_args(argv)
+
     settings = get_settings()
     log_level = os.environ.get(
         "LOG_LEVEL",
@@ -134,9 +169,11 @@ def main():
         sys.exit(1)
 
     try:
-        asyncio.run(run_engine())
+        asyncio.run(run_engine(live_cli=args.live))
     except KeyboardInterrupt:
         logger.info("Engine stopped by keyboard interrupt")
+    except SystemExit:
+        raise
     except Exception as e:
         logger.critical("Engine fatal error: %s", e, exc_info=True)
         sys.exit(1)

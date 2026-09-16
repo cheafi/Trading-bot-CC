@@ -1695,7 +1695,11 @@ async def _refresh_today_authority(
     """Recompute deploy authority on cached scan body — never serve stale deploy_open."""
     from copy import deepcopy
 
-    from src.services.cc_state import attach_page_capability, attach_system_state, build_cc_state
+    from src.services.cc_state import (
+        attach_page_capability,
+        attach_system_state,
+        build_cc_state,
+    )
     from src.services.decision_board_service import attach_decision_board
     from src.services.decision_truth_model import build_decision_authority
 
@@ -3507,4 +3511,44 @@ async def usage_log_summary():
     from src.services.usage_log import build_usage_summary
 
     return sanitize_for_json(build_usage_summary())
+
+
+@router.get("/api/v7/strategy-fitness/matrix")
+async def strategy_fitness_matrix():
+    """Strategy fitness matrix — per-ticker OOS eligibility (research_only)."""
+    from src.engines.strategy_fitness import build_fitness_matrix_payload
+
+    payload = build_fitness_matrix_payload()
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat() + "Z"
+    return sanitize_for_json(payload)
+
+
+@router.get("/api/v7/meta-intelligence/summary")
+async def meta_intelligence_summary():
+    """Meta Intelligence — usage + outcomes + learning loop (research_only)."""
+    from src.services.autonomous_learning_loop import build_meta_intelligence_summary
+
+    return sanitize_for_json(build_meta_intelligence_summary())
+
+
+@router.post("/api/v7/learning-loop/run")
+async def learning_loop_run(body: Dict[str, Any] | None = None):
+    """
+    Autonomous learning cycle: observe → label → calibrate → propose.
+
+    Never grants deploy authority. Parameter apply is not performed here.
+    """
+    from src.services.autonomous_learning_loop import run_learning_cycle
+
+    payload = body or {}
+    phases = payload.get("phases")
+    if phases is not None and not isinstance(phases, list):
+        phases = None
+    result = await asyncio.to_thread(
+        run_learning_cycle,
+        phases=phases,
+        apply_changes=False,
+    )
+    result["ok"] = True
+    return sanitize_for_json(result)
 

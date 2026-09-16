@@ -64,7 +64,7 @@ class RuleAdjustment:
 class LearningState:
     """Current state of the self-learning system."""
 
-    enabled: bool = True
+    enabled: bool = False
     total_adjustments: int = 0
     adjustments_this_cycle: int = 0
     max_adjustments_per_cycle: int = 3
@@ -149,6 +149,13 @@ class SelfLearningEngine:
         self.state = LearningState()
         self._audit_path = AUDIT_DIR / "self_learning_audit.json"
         self._load_audit()
+        if os.environ.get("SELF_LEARNING_ENABLED", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
+            self.state.enabled = True
+            logger.info("Self-learning enabled via SELF_LEARNING_ENABLED")
 
     def analyze_and_recommend(
         self,
@@ -213,6 +220,10 @@ class SelfLearningEngine:
         self, adjustments: List[RuleAdjustment]
     ) -> List[RuleAdjustment]:
         """Apply approved adjustments, persist to config, and log them."""
+        if not self.state.enabled:
+            logger.info("Self-learning apply skipped — disabled (research≠deploy)")
+            return []
+
         from src.core.config import save_trading_config_override
 
         applied = []
@@ -254,11 +265,13 @@ class SelfLearningEngine:
     def disable(self):
         """Kill switch: disable all auto-tuning."""
         self.state.enabled = False
+        self._save_audit()
         logger.warning("Self-learning DISABLED by user")
 
     def enable(self):
         """Re-enable auto-tuning."""
         self.state.enabled = True
+        self._save_audit()
         logger.info("Self-learning re-enabled")
 
     # ── Analysis methods ──────────────────────────────────────────
@@ -471,9 +484,10 @@ class SelfLearningEngine:
         try:
             with open(self._audit_path, "r") as f:
                 data = json.load(f)
-            self.state.total_adjustments = data.get("state", {}).get(
-                "total_adjustments", 0
-            )
+            state_data = data.get("state", {})
+            self.state.total_adjustments = state_data.get("total_adjustments", 0)
+            if "enabled" in state_data:
+                self.state.enabled = bool(state_data["enabled"])
             self.state.audit_log = data.get("audit_log", [])
         except Exception as e:
             logger.debug("Self-learning audit load error: %s", e)

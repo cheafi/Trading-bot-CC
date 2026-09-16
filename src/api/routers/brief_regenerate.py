@@ -151,7 +151,9 @@ async def brief_regenerate(request: Request, dry_run: bool = False, _=optional_a
         cmd.append("--dry-run")
     logger.info("brief.regenerate: running %s", " ".join(cmd))
     env = os.environ.copy()
-    env.setdefault("YFINANCE_CACHE_DIR", "/tmp/yfinance-cache")
+    from src.core.state_paths import yfinance_cache_dir
+
+    env.setdefault("YFINANCE_CACHE_DIR", str(yfinance_cache_dir()))
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,

@@ -23,7 +23,6 @@ from typing import Any, Callable, Dict, List
 from fastapi import APIRouter, Depends, Query, Request
 
 from src.api.deps import verify_api_key
-
 from src.core.stock_universe import (
     OPPORTUNITY_COVERAGE_UNIVERSE,
     RS_UNIVERSE,

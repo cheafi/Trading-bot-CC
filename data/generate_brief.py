@@ -26,8 +26,10 @@ from typing import Any, Dict, List
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# Docker/read-only FS: yfinance cache must be writable
-_yf_cache = os.environ.get("YFINANCE_CACHE_DIR") or "/tmp/yfinance-cache"
+# Docker/read-only FS: yfinance cache must be writable (never /tmp)
+from src.core.state_paths import yfinance_cache_dir
+
+_yf_cache = os.environ.get("YFINANCE_CACHE_DIR") or str(yfinance_cache_dir())
 os.makedirs(_yf_cache, exist_ok=True)
 os.environ.setdefault("YFINANCE_CACHE_DIR", _yf_cache)
 

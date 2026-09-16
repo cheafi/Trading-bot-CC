@@ -1,13 +1,13 @@
 #!/bin/bash
 # Skip restart if :8000 already serves /health (avoids killing slow backend import).
-_lock=/tmp/cc_instant.lock
+_lock=data/state/cc_instant.lock
 if [ -f "$_lock" ]; then
   _pid=$(tr -d '[:space:]' < "$_lock" 2>/dev/null)
   if [ -n "$_pid" ] && kill -0 "$_pid" 2>/dev/null; then
     _http=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8000/health 2>/dev/null || echo "000")
     if [ "$_http" = "200" ]; then
       echo "Already healthy on :8000 (pid $_pid) — skip kill/restart"
-      curl -s http://127.0.0.1:8000/health
+      curl -s --max-time 5 http://127.0.0.1:8000/health
       echo ""
       exit 0
     fi
@@ -46,11 +46,16 @@ sleep 1
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _py="python3"
-if [ -x "./venv/bin/python3" ]; then
+if [ -x "./.venv/bin/python3" ]; then
+  _py="./.venv/bin/python3"
+elif [ -x "./.venv/bin/python" ]; then
+  _py="./.venv/bin/python"
+elif [ -x "./venv/bin/python3" ]; then
   _py="./venv/bin/python3"
 fi
-nohup "$_py" -u _cc_instant.py >> /tmp/cc_server.log 2>&1 &
+mkdir -p data/state
+nohup "$_py" -u _cc_instant.py >> data/state/cc_server.log 2>&1 &
 echo "PID=$!"
 sleep 5
-curl -s http://127.0.0.1:8000/health
+curl -s --max-time 5 http://127.0.0.1:8000/health
 echo ""

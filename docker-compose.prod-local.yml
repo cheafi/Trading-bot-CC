@@ -25,15 +25,16 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
-      - HOME=/tmp/tradingai
-      - XDG_CACHE_HOME=/tmp/tradingai/cache
-      - TASKS_DB_PATH=/tmp/tradingai/tasks.db
-      - EXECUTION_DB_PATH=/tmp/tradingai/execution_fills.db
-      - FUND_STATE_DB_PATH=/tmp/tradingai/fund_state.db
-      - BREAKOUT_STATE_PATH=/tmp/tradingai/breakout_monitor.json
-      - DECISION_JOURNAL_PATH=/tmp/tradingai/decision_journal.jsonl
-      - EXPERT_TRACK_RECORD_PATH=/tmp/tradingai/expert_track_record.json
-      - CLOSED_TRADES_PATH=/tmp/tradingai/closed_trades.jsonl
+      - STATE_DATA_DIR=/app/data/state
+      - HOME=/app/data/state
+      - XDG_CACHE_HOME=/app/data/state/cache
+      - TASKS_DB_PATH=/app/data/state/tasks.db
+      - EXECUTION_DB_PATH=/app/data/state/execution_fills.db
+      - FUND_STATE_DB_PATH=/app/data/state/fund_state.db
+      - BREAKOUT_STATE_PATH=/app/data/state/breakout_monitor.json
+      - DECISION_JOURNAL_PATH=/app/data/state/decision_journal.jsonl
+      - EXPERT_TRACK_RECORD_PATH=/app/data/state/expert_track_record.json
+      - CLOSED_TRADES_PATH=/app/data/state/closed_trades.jsonl
       - CC_ENV=production
       - LOG_LEVEL=INFO
       - API_SECRET_KEY=${API_SECRET_KEY:-dev-secret-local}

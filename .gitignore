@@ -120,7 +120,35 @@ Roo-Code/
 !.vscode/extensions.json
 !.vscode/mcp.json
 data/fund_state.db
+data/positions_state.json
 .git_corrupted_backup/
+
+# AI/session scratch scripts (repo root)
+/check*.py
+/check*.js
+/fix_*.py
+/patch_*.py
+/purge_*.py
+/ops_status_func.py
+/append_endpoint.py
+/consolidate_tabs.py
+/delete_tabs.py
+/audit_orphans.py
+/trigger_paper.py
+/get_*.py
+/update_*.py
+/vars_check*.py
+/test_*.py
+/import
+progress.txt
+tags.txt
+ops_tab.html
+ops_tab_part.txt
+cc_cursor_chatgpt_bridge.zip
+cc_cursor_chatgpt_bridge/
+backup_untracked/
+data/state/*.lock
+data/state/cc_server.log
 
 # Sprint 103+ model state (auto-generated, not for version control)
 models/thompson_arms.json

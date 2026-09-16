@@ -65,9 +65,9 @@ def _is_today(ts: Optional[str]) -> bool:
 
 def _read_engine_heartbeat() -> Optional[str]:
     try:
-        import pathlib
+        from src.core.state_paths import engine_heartbeat_path
 
-        hb = pathlib.Path("/tmp/engine_heartbeat")
+        hb = engine_heartbeat_path()
         if hb.exists():
             return hb.read_text(encoding="utf-8").strip() or None
     except OSError:

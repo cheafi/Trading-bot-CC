@@ -45,10 +45,10 @@ def test_primary_nav_order_portfolio_before_workspace():
 
 def test_primary_nav_professional_labels():
     js = _read(CC_APP)
-    assert "TODAY · 今日" in js
-    assert "PLAYBOOK · 策略簿" in js
-    assert "PORTFOLIO · 持倉" in js
-    assert "WORKSPACE · 工作區" in js
+    assert 'label: "今日"' in js
+    assert 'label: "策略簿"' in js
+    assert 'label: "持倉"' in js
+    assert 'label: "工作區"' in js
 
 
 def test_workflow_stage_hint_in_index():

@@ -243,8 +243,31 @@ class IBBroker(BaseBroker):
             logger.error(f"Get IB quote error for {ticker}: {e}")
             return None
 
-    async def place_order(self, order: OrderRequest) -> OrderResult:
+    async def place_order(self, order: OrderRequest, *, dry_run: bool = True) -> OrderResult:
         """Place a trading order."""
+        from src.core.order_execution import (
+            assert_live_order_permitted,
+            record_dry_run_order,
+        )
+
+        if dry_run:
+            record_dry_run_order(
+                source="ib_broker",
+                symbol=order.ticker,
+                side=order.side.value,
+                quantity=order.quantity,
+                order_type=order.order_type.value,
+            )
+            return OrderResult(
+                success=True,
+                order_id="dry-run",
+                status=OrderStatus.FILLED,
+                filled_qty=order.quantity,
+                message="Dry-run — IB placeOrder not called",
+            )
+
+        assert_live_order_permitted(dry_run=False, account=getattr(self, "account_id", ""))
+
         if not self.is_connected or not self._ib:
             raise BrokerError(
                 message="place_order called but IBBroker is not connected — "

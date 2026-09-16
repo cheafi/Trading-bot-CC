@@ -232,7 +232,7 @@ class BaseBroker(ABC):
         pass
 
     @abstractmethod
-    async def place_order(self, order: OrderRequest) -> OrderResult:
+    async def place_order(self, order: OrderRequest, *, dry_run: bool = True) -> OrderResult:
         """
         Place a trading order.
 
@@ -323,7 +323,7 @@ class BaseBroker(ABC):
             limit_price=limit_price,
             market=market,
         )
-        return await self.place_order(order)
+        return await self.place_order(order, dry_run=True)
 
     async def sell(
         self,
@@ -354,7 +354,7 @@ class BaseBroker(ABC):
             limit_price=limit_price,
             market=market,
         )
-        return await self.place_order(order)
+        return await self.place_order(order, dry_run=True)
 
     async def sell_short(
         self,
@@ -373,7 +373,7 @@ class BaseBroker(ABC):
             limit_price=limit_price,
             market=market,
         )
-        return await self.place_order(order)
+        return await self.place_order(order, dry_run=True)
 
     async def buy_to_cover(
         self,
@@ -392,7 +392,7 @@ class BaseBroker(ABC):
             limit_price=limit_price,
             market=market,
         )
-        return await self.place_order(order)
+        return await self.place_order(order, dry_run=True)
 
     async def close_position(
         self, ticker: str, market: Market = Market.US

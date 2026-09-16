@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+from src.core.deployment_manifest import audit_deploy_open_provenance
 
 _COMMITTEE_ROLES = (
     "Risk Officer",
@@ -17,7 +18,12 @@ _COMMITTEE_ROLES = (
 )
 
 
-def build_committee_review(*, ticker: str = "") -> Dict[str, Any]:
+def build_committee_review(
+    *,
+    ticker: str = "",
+    deploy_open: bool = False,
+    llm_vote: bool = False,
+) -> Dict[str, Any]:
     sym = str(ticker or "").upper().strip() or "GENERIC"
     members: List[Dict[str, Any]] = []
     for role in _COMMITTEE_ROLES:
@@ -27,8 +33,15 @@ def build_committee_review(*, ticker: str = "") -> Dict[str, Any]:
                 "stance": "stub",
                 "challenge": f"{role}: stub challenge for {sym}.",
                 "authority": "research_only",
+                "broker_eligible": False,
+                "llm_vote_affects_broker": False,
             }
         )
+    provenance = audit_deploy_open_provenance(
+        deploy_open=deploy_open,
+        source="decision_committee",
+        llm_vote=llm_vote,
+    )
     return {
         "status": "stub",
         "authority": "research_only",
@@ -42,5 +55,6 @@ def build_committee_review(*, ticker: str = "") -> Dict[str, Any]:
             "act": "Human PM decides; committee never authorizes deploy.",
         },
         "members": members,
+        "deploy_open_provenance": provenance,
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }

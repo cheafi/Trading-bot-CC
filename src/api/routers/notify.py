@@ -188,9 +188,9 @@ async def telegram_opportunities_now(
 ) -> Dict[str, Any]:
     """Force opportunity Telegram alerts from latest playbook ranked snapshot."""
     try:
+        from src.notifications.telegram import telegram_config_status
         from src.services.opportunity_telegram_alerts import notify_live_playbook_scan
         from src.services.playbook_board_fallback import load_playbook_snapshot
-        from src.notifications.telegram import telegram_config_status
 
         st = telegram_config_status()
         if not st.get("telegram_configured"):

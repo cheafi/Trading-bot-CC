@@ -62,10 +62,27 @@ src/
 
 ### Docker (recommended on macOS — avoids Gatekeeper pydantic scan)
 
+**CC dev dashboard** (live-reload API, paper by default):
+
 ```bash
-docker compose up --build
-# Dashboard → http://localhost:8001
+cp .env.example .env          # add OPENAI_API_KEY or enable Docker Model Runner
+docker compose -f docker-compose.dev.yml up --build
+# Dashboard → http://localhost:8000
 ```
+
+**Unattended trading stack** (IB gateway, postgres, reconciler, venue orchestrators):
+
+```bash
+cp .env.example .env          # POSTGRES_PASSWORD, TWS_USERID, TWS_PASSWORD
+cp docker-compose.override.yml.example docker-compose.override.yml
+docker compose up -d --build  # base: ib-gateway, postgres, reconciler
+# With orchestrators: services from override file start automatically
+# Live gate (fail-closed): LIVE_TRADING=1 + IB_MODE=live + IB_API_PORT=4003
+```
+
+Profiles: `--profile dev` (Jupyter/pgAdmin), `--profile research` (nightly stub), `--profile ops` (backup/Watchtower stubs), `--profile ai` (API LLM sidecar in override).
+
+See [docs/CC_X_DOCKER_AI.md](docs/CC_X_DOCKER_AI.md) for AI provider setup in containers.
 
 ### Native (Linux / CI)
 
@@ -87,19 +104,27 @@ See [docs/CC_X_PRODUCTION_READINESS.md](docs/CC_X_PRODUCTION_READINESS.md) for s
 
 ### Environment Variables
 
-| Variable                   | Default                                       | Description                              |
-| -------------------------- | --------------------------------------------- | ---------------------------------------- |
-| `API_KEY`                  | `""`                                          | Bearer token for protected endpoints     |
-| `DISCORD_BOT_TOKEN`        | `""`                                          | Discord bot token                        |
-| `DISCORD_CHANNEL_ID`       | `""`                                          | Channel for alerts                       |
-| `OPENAI_API_KEY`           | `""`                                          | GPT signal validation (optional)         |
-| `LOCAL_LLM_BASE_URL`       | `http://localhost:12434/engines/llama.cpp/v1` | Docker Model Runner endpoint             |
-| `LOCAL_LLM_ADVISOR_MODEL`  | `ai/gemma3`                                   | PM memo / expert-view model              |
-| `LOCAL_LLM_REVIEWER_MODEL` | `ai/qwen3-coder`                              | Trade review model                       |
-| `LOCAL_LLM_EMBED_MODEL`    | `ai/all-minilm-l6-v2-vllm`                    | Embedding model for similar-trade search |
-| `VIX_CRISIS`               | `35.0`                                        | VIX threshold → NO TRADE                 |
-| `RISK_MAX_POSITIONS`       | `10`                                          | Max concurrent open positions            |
-| `RISK_MAX_DRAWDOWN_PCT`    | `0.15`                                        | Portfolio drawdown circuit breaker       |
+| Variable                  | Default                    | Description                                      |
+| ------------------------- | -------------------------- | ------------------------------------------------ |
+| `API_SECRET_KEY`          | `dev-secret-local`         | Bearer token for protected endpoints             |
+| `DISCORD_BOT_TOKEN`       | `""`                       | Discord bot token                                |
+| `DISCORD_CHANNEL_ID`      | `""`                       | Channel for alerts                               |
+| `AI_DISABLED`             | `""`                       | Set `1` to disable all LLM calls                 |
+| `OPENAI_API_KEY`          | `""`                       | Cloud LLM fallback when Azure unset              |
+| `AZURE_OPENAI_ENDPOINT`   | `""`                       | Azure OpenAI endpoint (preferred path)           |
+| `AZURE_OPENAI_API_KEY`    | `""`                       | Azure key or use SP vars below                   |
+| `AZURE_OPENAI_DEPLOYMENT` | `""`                       | Azure deployment name                            |
+| `AZURE_OPENAI_ENABLED`    | auto                       | Set `false` to disable Azure even if creds exist |
+| `AZURE_SEARCH_*`          | `""`                       | Optional knowledge/lessons search hook           |
+| `LOCAL_LLM_ENABLED`       | `auto`                     | Docker Model Runner: auto/on/off                 |
+| `LOCAL_LLM_URL`           | auto (host/container)      | Docker Model Runner endpoint                     |
+| `LOCAL_MODEL_ADVISOR`     | `ai/gemma3`                | PM memo / narrative model                        |
+| `LOCAL_MODEL_REVIEWER`    | `ai/qwen3-coder`           | Trade review model                               |
+| `LOCAL_MODEL_EMBED`       | `ai/all-minilm-l6-v2-vllm` | Embedding model for similar-trade search         |
+| `TRADING_ENV` / `BROKER`  | `paper`                    | Paper mode default in Docker dev                 |
+| `VIX_CRISIS`              | `35.0`                     | VIX threshold → NO TRADE                         |
+| `RISK_MAX_POSITIONS`      | `10`                       | Max concurrent open positions                    |
+| `RISK_MAX_DRAWDOWN_PCT`   | `0.15`                     | Portfolio drawdown circuit breaker               |
 
 ---
 

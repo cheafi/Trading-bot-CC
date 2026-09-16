@@ -79,6 +79,8 @@
 		var o = opts || {}
 		var mode = String(o.healthMode || "").toLowerCase()
 		if (mode !== "loading" && !o.briefFallback) return ""
+		var checklist = warmupModuleChecklistLine(o)
+		if (checklist) return checklist
 		var parts = [
 			_opsBilingual("live ranked playbook", "live ranked playbook"),
 			_opsBilingual("today council reconciliation", "today council reconciliation"),
@@ -93,6 +95,119 @@
 			)
 		}
 		return _opsBilingual("下一步", "Next") + ": " + parts.join(" · ")
+	}
+
+	function warmupModuleChecklistLine(opts) {
+		var items = warmupModuleChecklistItems(opts)
+		if (!items.length) return ""
+		return items
+			.map(function (m) {
+				return (m.ready ? "✓ " : "○ ") + m.label
+			})
+			.join(" · ")
+	}
+
+	function warmupModuleChecklistItems(opts) {
+		var o = opts || {}
+		var fromApi = o.checklist || o.warmupModuleChecklist || []
+		if (fromApi.length) return fromApi
+		var mode = String(o.healthMode || "").toLowerCase()
+		var loading = mode === "loading" || o.instantDegraded
+		return [
+			{ key: "shell", label: "Shell", ready: true },
+			{ key: "cached_board", label: "Cached board", ready: !!o.cachedBoardOk },
+			{ key: "market_data", label: "Market data", ready: !!o.marketDataOk && !loading },
+			{ key: "dossier_core", label: "Dossier core", ready: !!o.dossierCoreOk && !loading },
+			{ key: "research_enrichments", label: "Research enrichments", ready: !!o.enrichmentsOk && !loading },
+			{ key: "broker", label: "Broker", ready: !!o.brokerOk && !loading },
+		]
+	}
+
+	function buildScopedFreshnessPills(opts) {
+		var o = opts || {}
+		if (typeof o.fromApi !== "undefined" && o.fromApi && o.fromApi.length) return o.fromApi
+		var market = String(o.market || "UNKNOWN").toUpperCase()
+		var board = String(o.board || "UNKNOWN").toUpperCase()
+		var briefAge = Number(o.briefAgeDays) || 0
+		var briefTier = String(o.brief || "FRESH").toUpperCase()
+		var briefLabel =
+			briefAge > 0 || briefTier === "STALE" || briefTier === "CRITICAL"
+				? "BRIEF · EXPIRED " + briefAge + "d — Excluded from deploy authority — Cached context only"
+				: "BRIEF · " + briefTier
+		var broker = String(o.broker || "UNKNOWN")
+			.toUpperCase()
+			.replace(/_/g, " ")
+		var runtime = String(o.runtime || "LIVE").toUpperCase()
+		var authority = String(o.authority || "MONITOR ONLY")
+			.toUpperCase()
+			.replace(/_/g, " ")
+		function cls(tier) {
+			var t = String(tier || "").toUpperCase()
+			if (t === "FRESH") return "pg"
+			if (t === "CRITICAL") return "pr"
+			return "pa"
+		}
+		return [
+			{ scope: "MARKET", label: "MARKET · " + market, class: cls(market) },
+			{ scope: "BOARD", label: "BOARD · " + board, class: cls(board) },
+			{ scope: "BRIEF", label: briefLabel, class: briefAge > 0 || briefTier !== "FRESH" ? "pa" : "pg" },
+			{
+				scope: "BROKER",
+				label: "BROKER · " + broker,
+				class: broker === "ONLINE" || broker === "CONNECTED" ? "pg" : "pa",
+			},
+			{
+				scope: "RUNTIME",
+				label: "RUNTIME · " + (runtime === "LOADING" || runtime === "WARMING" ? "WARMING" : runtime),
+				class: runtime === "LOADING" || runtime === "WARMING" ? "pa" : "pg",
+			},
+			{ scope: "AUTHORITY", label: "AUTHORITY · " + authority, class: authority === "DEPLOY" ? "pg" : "pa" },
+		]
+	}
+
+	function mockContextBoundaryLabel(degraded) {
+		if (degraded) return "CONTEXT ONLY · MOCK / LAGGED — Not evidence for today's decision"
+		return "CONTEXT ONLY · LAGGED — Not a trade trigger"
+	}
+
+	function dossierConfirmOnlyBlocks(opts) {
+		var o = opts || {}
+		var ticker = String(o.ticker || "—").toUpperCase()
+		var known = [
+			"Ticker · " + ticker,
+			"Board authority · " + (o.boardAuthority || "MONITOR ONLY"),
+			"Source · " + (o.source || "instant-degraded"),
+		]
+		if (o.asOf) known.push("As-of · " + o.asOf)
+		;(o.cachedEvidence || []).forEach(function (x) {
+			if (x && known.indexOf(x) < 0) known.push(String(x))
+		})
+		var missing =
+			o.missing && o.missing.length
+				? o.missing
+				: ["Live quote", "Technical structure", "Volume", "Execution levels", "Fresh research modules"]
+		var allowed = ["Retry live data", "Load core", "Load enrichments", "Historical replay"]
+		if (o.hasMonitorData) allowed.push("Monitor alert (if data exists)")
+		return {
+			headline: "CONFIRM ONLY · Structure unavailable",
+			known: known,
+			missing: missing,
+			allowed: allowed,
+			blocked: ["Trade plan", "Sizing", "Paper order", "IBKR handoff"],
+			next: ["Retry live core", "Refresh Playbook", "Wait for full backend"],
+		}
+	}
+
+	function missingDataDisplay(field, reason) {
+		var f = String(field || "").toLowerCase()
+		var r = String(reason || "").trim()
+		if (r) return r
+		if (f.indexOf("rr") >= 0 || f.indexOf("risk") >= 0) return "R:R unavailable · live structure required"
+		if (f.indexOf("size") >= 0) return "Sizing unavailable · confirm-only mode"
+		if (f.indexOf("quote") >= 0 || f.indexOf("price") >= 0) return "Quote unavailable · live market data required"
+		if (f.indexOf("entry") >= 0 || f.indexOf("stop") >= 0 || f.indexOf("target") >= 0)
+			return "Level unavailable · live structure required"
+		return "Unavailable · live data required"
 	}
 
 	/** Instant banner wins over warmup strip — avoids duplicate WARMING copy. */
@@ -362,7 +477,7 @@
 	function localizeOpsRuntimeText(text) {
 		var t = String(text || "").trim()
 		if (!t) return ""
-		if (t.indexOf(" · ") > 0 && /[\u4e00-\u9fff]/.test(t)) return t
+		if (t.indexOf(" · ") > 0 && /[\u4e00-\u9fff]/.test(t)) return _zhOnlyDisplay(t)
 		var exact = {
 			"Probe only — runtime unconfirmed": "僅探測 — 執行時未確認 · Probe only — runtime unconfirmed",
 			"Probe failed — no runtime path": "探測失敗 — 無執行路徑 · Probe failed — no runtime path",
@@ -1139,15 +1254,27 @@
 		return map[n] || n.replace(/_/g, " ")
 	}
 
+	/** Return Traditional Chinese only; English kept in source for tests / parity. */
 	function _opsBilingual(zh, en) {
-		return zh + " · " + en
+		return zh
+	}
+
+	/** Strip trailing English reference suffix from legacy bilingual strings. */
+	function _zhOnlyDisplay(t) {
+		var s = String(t || "")
+		if (!s || s.indexOf(" · ") < 0 || !/[\u4e00-\u9fff]/.test(s)) return s
+		var parts = s.split(" · ")
+		while (parts.length > 1 && !/[\u4e00-\u9fff]/.test(parts[parts.length - 1])) {
+			parts.pop()
+		}
+		return parts.join(" · ")
 	}
 
 	/** Dynamic Alpine / API copy — 繁中 · English (Dashboard, Playbook, Ops chrome). */
 	function localizeUiText(text) {
 		var t = String(text || "").trim()
 		if (!t) return ""
-		if (t.indexOf(" · ") > 0 && /[\u4e00-\u9fff]/.test(t)) return t
+		if (t.indexOf(" · ") > 0 && /[\u4e00-\u9fff]/.test(t)) return _zhOnlyDisplay(t)
 		var exact = {
 			Monitors: _opsBilingual("監控", "Monitors"),
 			"Fallback monitors": _opsBilingual("後備監控", "Fallback monitors"),
@@ -1566,7 +1693,7 @@
 			return _opsBilingual("Monitor — 時機／確認待定", t)
 		}
 		if (/^Current: /.test(t)) return _opsBilingual("現況：" + t.slice(9), t)
-		return localizeOpsRuntimeText(t)
+		return _zhOnlyDisplay(localizeOpsRuntimeText(t))
 	}
 
 	function localizeOpsAdvancedDiagnosticsCopy(text) {
@@ -1890,7 +2017,7 @@
 							return (r.ticker || "?") + (rs.length ? " · " + rs[0] : "")
 						})
 						.slice(0, 3)
-						.join(" | ")
+						.join(" | "),
 				)
 		}
 		return bits.join(" — ") || "Council fit vs scanner rank disagree on top names."
@@ -1960,20 +2087,14 @@
 			}
 		}
 		var doubt = doubtParts.join(" · ").slice(0, 160)
-		var therefore =
-			(ba && ba.stance_one_liner) ||
-			mc.what_to_do ||
-			((mc.next_actions || [])[0] || "") ||
-			"—"
+		var therefore = (ba && ba.stance_one_liner) || mc.what_to_do || (mc.next_actions || [])[0] || "" || "—"
 		if (o.deployOpen === false && /deploy/i.test(String(therefore))) {
-			therefore =
-				mc.what_to_do ||
-				_opsBilingual("等待 — 監控最佳候選", "Wait — monitor top candidate")
+			therefore = mc.what_to_do || _opsBilingual("等待 — 監控最佳候選", "Wait — monitor top candidate")
 		}
 		if (sr.active && o.deployOpen !== true) {
 			therefore = _opsBilingual(
 				"勿以排名定倉 — 先核 quality · EV · gate",
-				"Do not size on rank alone — verify quality, EV, and gate first"
+				"Do not size on rank alone — verify quality, EV, and gate first",
 			)
 		}
 		therefore = String(therefore).slice(0, 140)
@@ -2019,9 +2140,10 @@
 			if (typeof value === "string" && REVIEW_PACK_SECRET_KEYS.test(value.trim())) return "[redacted]"
 			return value
 		}
-		if (Array.isArray(value)) return value.map(function (item) {
-			return stripReviewPackSecrets(item, d + 1)
-		})
+		if (Array.isArray(value))
+			return value.map(function (item) {
+				return stripReviewPackSecrets(item, d + 1)
+			})
 		var out = {}
 		Object.keys(value).forEach(function (key) {
 			if (REVIEW_PACK_SECRET_KEYS.test(String(key).replace(/[-]/g, "_"))) {
@@ -2053,16 +2175,11 @@
 
 	function reviewPackPlaybookSummaryHtml(playbookPayload) {
 		var rows = reviewPackPlaybookRows(playbookPayload)
-		if (!rows.length) return "<p class=\"rp-muted\">No ranked opportunities returned.</p>"
+		if (!rows.length) return '<p class="rp-muted">No ranked opportunities returned.</p>'
 		var lines = rows.map(function (row, idx) {
 			var ticker = escapeReviewPackHtml(row.ticker || row.symbol || "—")
 			var tier = escapeReviewPackHtml((row.quality && row.quality.tier) || row.quality_tier || "—")
-			var score =
-				row.composite_score != null
-					? row.composite_score
-					: row.score != null
-						? row.score
-						: "—"
+			var score = row.composite_score != null ? row.composite_score : row.score != null ? row.score : "—"
 			var auth = escapeReviewPackHtml(row.authority_label || row.tradeability || "MONITOR ONLY")
 			return (
 				"<tr><td>" +
@@ -2143,7 +2260,7 @@
 			})
 			.join("")
 		return (
-			"<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\" /><title>CC X Review Pack</title>" +
+			'<!doctype html><html lang="en"><head><meta charset="UTF-8" /><title>CC X Review Pack</title>' +
 			"<style>" +
 			"@page{margin:18mm 14mm;}*{box-sizing:border-box;}" +
 			"body{font-family:Inter,system-ui,sans-serif;color:#111;line-height:1.45;margin:0;padding:24px;font-size:11px;}" +
@@ -2178,6 +2295,196 @@
 			sectionHtml +
 			"</body></html>"
 		)
+	}
+
+	var UI_EXPORT_CHROME_SELECTORS = [".page-gate-strip", ".workflow-hint-strip", ".research-banner", "#pm-strip"]
+
+	function uiExportIsVisible(el) {
+		if (!el) return false
+		try {
+			var st = window.getComputedStyle(el)
+			if (st.display === "none" || st.visibility === "hidden" || st.opacity === "0") return false
+			var r = el.getBoundingClientRect()
+			return r.width > 0 && r.height > 0
+		} catch (_e) {
+			return false
+		}
+	}
+
+	function uiExportFindTabRoot(tabId) {
+		var id = String(tabId || "")
+		var nodes = document.querySelectorAll("main[x-show], div[x-show]")
+		for (var i = 0; i < nodes.length; i++) {
+			var xs = nodes[i].getAttribute("x-show") || ""
+			if (xs.indexOf("tab==='" + id + "'") >= 0 || xs.indexOf('tab==="' + id + '"') >= 0) {
+				return nodes[i]
+			}
+		}
+		return null
+	}
+
+	function uiExportSanitizeClone(node) {
+		if (!node) return null
+		var clone = node.cloneNode(true)
+		clone.querySelectorAll("script").forEach(function (s) {
+			s.remove()
+		})
+		clone.querySelectorAll("*").forEach(function (el) {
+			Array.from(el.attributes || []).forEach(function (attr) {
+				var n = attr.name
+				if (n.indexOf("x-") === 0 || n.indexOf("@") === 0 || n.indexOf(":") === 0 || n === "x-cloak") {
+					el.removeAttribute(n)
+				}
+			})
+		})
+		return clone
+	}
+
+	function uiExportCaptureChromeHtml() {
+		var parts = []
+		UI_EXPORT_CHROME_SELECTORS.forEach(function (sel) {
+			var el = document.querySelector(sel)
+			if (!uiExportIsVisible(el)) return
+			var c = uiExportSanitizeClone(el)
+			if (c) parts.push(c.outerHTML)
+		})
+		return parts.join("")
+	}
+
+	function uiExportBuildTabBarHtml(activeTabId, tabDefs) {
+		var buttons = (tabDefs || [])
+			.map(function (t) {
+				var on = t.id === activeTabId ? " on" : ""
+				return (
+					'<span class="tab-btn' +
+					on +
+					'">' +
+					escapeReviewPackHtml((t.icon || "") + " " + (t.label || t.id)) +
+					"</span>"
+				)
+			})
+			.join("")
+		return '<div class="tab-bar ui-export-tab-bar">' + buttons + "</div>"
+	}
+
+	function captureTabLayoutHtml(tabId, tabLabel, tabDefs) {
+		var root = uiExportFindTabRoot(tabId)
+		if (!root) {
+			return (
+				'<div class="ui-export-empty">Surface not found for ' +
+				escapeReviewPackHtml(tabLabel || tabId) +
+				"</div>"
+			)
+		}
+		var tabBar = uiExportBuildTabBarHtml(tabId, tabDefs)
+		var chrome = uiExportCaptureChromeHtml()
+		var body = uiExportSanitizeClone(root)
+		return tabBar + chrome + (body ? body.outerHTML : "")
+	}
+
+	function extractDashboardInlineStyles() {
+		var styles = []
+		try {
+			document.querySelectorAll("head style").forEach(function (s) {
+				if (s.textContent) styles.push(s.textContent)
+			})
+		} catch (_e) {}
+		return styles.join("\n")
+	}
+
+	function buildUiLayoutExportDocument(opts) {
+		var o = opts || {}
+		var meta = o.meta || {}
+		var pages = o.pages || []
+		var generatedAt = escapeReviewPackHtml(meta.generated_at || new Date().toISOString())
+		var uiMode = escapeReviewPackHtml(meta.ui_mode || "operator")
+		var inlineStyles = o.inlineStyles || extractDashboardInlineStyles()
+		var toc = pages
+			.map(function (p) {
+				return (
+					'<a class="ui-export-toc-link" href="#ui-page-' +
+					escapeReviewPackHtml(p.id) +
+					'">' +
+					escapeReviewPackHtml(p.label || p.id) +
+					"</a>"
+				)
+			})
+			.join("")
+		var pageHtml = pages
+			.map(function (p) {
+				return (
+					'<section id="ui-page-' +
+					escapeReviewPackHtml(p.id) +
+					'" class="ui-export-page">' +
+					'<div class="ui-export-page-hdr"><span class="ui-export-page-tag">Page · 分頁</span> ' +
+					escapeReviewPackHtml(p.label || p.id) +
+					"</div>" +
+					(p.html || "") +
+					"</section>"
+				)
+			})
+			.join("")
+		return (
+			'<!doctype html><html lang="zh-Hant"><head><meta charset="UTF-8" />' +
+			'<meta name="viewport" content="width=device-width,initial-scale=1.0" />' +
+			"<title>CC X UI Layout Export · 介面佈局匯出</title>" +
+			'<script src="https://cdn.tailwindcss.com"><\/script>' +
+			'<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />' +
+			'<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />' +
+			"<style>" +
+			inlineStyles +
+			"</style>" +
+			"<style>" +
+			".ui-export-cover{padding:24px 16px 32px;border-bottom:2px solid var(--bd);margin-bottom:16px;}" +
+			".ui-export-cover h1{font-size:20px;margin:0 0 8px;}.ui-export-meta{font-size:10px;color:var(--t2);margin:4px 0;}" +
+			".ui-export-badge{display:inline-block;padding:2px 8px;border:1px solid var(--bd2);border-radius:4px;font-size:9px;font-weight:700;margin-right:6px;}" +
+			".ui-export-toc{display:flex;flex-wrap:wrap;gap:6px;padding:12px 16px;border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--bg);z-index:10;}" +
+			".ui-export-toc-link{font-size:10px;padding:4px 8px;border:1px solid var(--bd);border-radius:6px;color:var(--t2);text-decoration:none;}" +
+			".ui-export-toc-link:hover{border-color:var(--blue);color:var(--blue);}" +
+			".ui-export-page{padding:16px 0 32px;border-bottom:1px dashed var(--bd);scroll-margin-top:48px;}" +
+			".ui-export-page-hdr{font-size:11px;font-weight:700;color:var(--t3);margin:0 16px 12px;text-transform:uppercase;letter-spacing:.5px;}" +
+			".ui-export-page-tag{font-family:monospace;font-size:9px;color:var(--t3);}" +
+			".ui-export-tab-bar{pointer-events:none;opacity:.95;}" +
+			".ui-export-empty{padding:24px;color:var(--t3);font-style:italic;}" +
+			"@media print{.ui-export-toc{display:none;}.ui-export-page{page-break-before:always;}}" +
+			'</style></head><body style="background:var(--bg);color:var(--t1)">' +
+			'<header class="ui-export-cover">' +
+			'<div class="ui-export-badge">UI LAYOUT ONLY</div><div class="ui-export-badge">OFFLINE SNAPSHOT</div>' +
+			"<h1>CC X UI Layout Export · 介面佈局匯出</h1>" +
+			'<p class="ui-export-meta">Generated · 產生時間: ' +
+			generatedAt +
+			"</p>" +
+			'<p class="ui-export-meta">UI mode · 介面模式: ' +
+			uiMode +
+			"</p>" +
+			'<p class="ui-export-meta">Static layout snapshot — no live API, no secrets, no deploy authority · 靜態版面快照 — 不含即時 API、機密或部署權限。</p>' +
+			"</header>" +
+			'<nav class="ui-export-toc">' +
+			toc +
+			"</nav>" +
+			pageHtml +
+			"</body></html>"
+		)
+	}
+
+	function downloadTextFile(filename, content, mimeType) {
+		try {
+			var blob = new Blob([content], { type: mimeType || "text/html;charset=utf-8" })
+			var url = URL.createObjectURL(blob)
+			var a = document.createElement("a")
+			a.href = url
+			a.download = filename
+			a.style.display = "none"
+			document.body.appendChild(a)
+			a.click()
+			setTimeout(function () {
+				URL.revokeObjectURL(url)
+				a.remove()
+			}, 200)
+			return true
+		} catch (_e) {
+			return false
+		}
 	}
 
 	function resolveWorkflowStage(opts) {
@@ -2295,6 +2602,70 @@
 		} catch (_e) {}
 	}
 
+	function identifiedErrorsTruncateText(text, maxLen) {
+		var limit = maxLen || 220
+		var s = String(text || "")
+			.replace(/\s+/g, " ")
+			.trim()
+		if (!s) return ""
+		if (s.length <= limit) return s
+		return s.slice(0, Math.max(0, limit - 1)) + "…"
+	}
+
+	function identifiedErrorsIncidentKey(item) {
+		var msg = String((item && item.message) || "").toLowerCase()
+		var detail = String((item && item.detail) || "").toLowerCase()
+		var src = String((item && item.source) || "")
+		var combined = msg + " " + detail
+		if (
+			/api\s*503.*\/api\/ibkr\/connect|ibkr connect failed|cannot complete ib api handshake|handshake to ib gateway|cc_skip_ib_insync/i.test(
+				combined,
+			)
+		) {
+			return "incident:ibkr_connect_offline"
+		}
+		if (/ibkr session inactive|portfolio sync unavailable|broker sync unavailable|portfolio sync:/i.test(msg)) {
+			return "incident:ibkr_sync_offline"
+		}
+		return src + "|" + msg.replace(/\s+/g, " ").trim().slice(0, 120)
+	}
+
+	function identifiedErrorsEffectiveSeverity(item) {
+		var sev = String((item && item.severity) || "info").toLowerCase()
+		var msg = String((item && item.message) || "").toLowerCase()
+		var detail = String((item && item.detail) || "").toLowerCase()
+		var combined = msg + " " + detail
+		if (
+			/api\s*503.*\/api\/ibkr\/connect|ibkr connect failed|cannot complete ib api handshake|ibkr session inactive|broker sync unavailable|portfolio sync unavailable|portfolio sync:|cc_skip_ib_insync/i.test(
+				combined,
+			)
+		) {
+			if (sev === "critical") return "warning"
+		}
+		return sev
+	}
+
+	function identifiedErrorsFormatMessage(item) {
+		var msg = String((item && item.message) || "").trim()
+		if (/^api\s*503\s+on\s+\/api\/ibkr\/connect$/i.test(msg) || /^ibkr connect failed$/i.test(msg)) {
+			return "IBKR connect failed — Gateway/TWS unreachable from API host"
+		}
+		return identifiedErrorsTruncateText(msg, 200)
+	}
+
+	function identifiedErrorsFormatDetail(item) {
+		var detail = String((item && item.detail) || "")
+		if (!detail) return ""
+		var limit = /handshake|clientid|7497|7496|4001|host\.docker|ib gateway|tws/i.test(detail) ? 220 : 400
+		return identifiedErrorsTruncateText(detail, limit)
+	}
+
+	function identifiedErrorsHasIbkrOfflineIncident(items) {
+		return (items || []).some(function (row) {
+			return identifiedErrorsIncidentKey(row).indexOf("ibkr_") === 9
+		})
+	}
+
 	function preDecisionAckStorageKey(ticker) {
 		var sym = String(ticker || "").toUpperCase()
 		var day = new Date().toISOString().slice(0, 10)
@@ -2359,7 +2730,9 @@
 			{
 				key: "capital",
 				label: "Capital",
-				line: (c.headline || "—") + (c.cash_hurdle_bps != null ? " · cash hurdle " + c.cash_hurdle_bps + "bps" : ""),
+				line:
+					(c.headline || "—") +
+					(c.cash_hurdle_bps != null ? " · cash hurdle " + c.cash_hurdle_bps + "bps" : ""),
 			},
 			{
 				key: "one_belief",
@@ -2461,8 +2834,7 @@
 		var nearMiss = o.near_miss || []
 		var deployOpen = !!o.deployOpen
 		var trade = (ba.best_trade_now || td.best_trade || {}).ticker || "None"
-		var watch =
-			(ba.best_watch_upgrade || td.best_watch || nearMiss[0] || {}).ticker || "—"
+		var watch = (ba.best_watch_upgrade || td.best_watch || nearMiss[0] || {}).ticker || "—"
 		var active = sleeve.active_today || sleeve.fund_manager || {}
 		var gate = active.gate_status || "—"
 		var stance = ba.stance_one_liner || td.stance_one_liner || ""
@@ -2645,7 +3017,7 @@
 		var src = p.source || r.source || r.quote_source || "unknown"
 		var asOf = p.as_of || r.as_of || r.quote_as_of || "—"
 		var mode = p.mode || r.mode || r.data_mode || r.quote_mode || "—"
-		var stale = !!(r.data_stale || r.stale || r.quote_stale || p.stale || (Number(p.lag_days) > 1))
+		var stale = !!(r.data_stale || r.stale || r.quote_stale || p.stale || Number(p.lag_days) > 1)
 		return {
 			src: src,
 			asOf: asOf,
@@ -2899,6 +3271,12 @@
 		surfaceWarmupLoadingLine: surfaceWarmupLoadingLine,
 		warmupStatusLine: warmupStatusLine,
 		warmupUpgradeQueue: warmupUpgradeQueue,
+		warmupModuleChecklistLine: warmupModuleChecklistLine,
+		warmupModuleChecklistItems: warmupModuleChecklistItems,
+		buildScopedFreshnessPills: buildScopedFreshnessPills,
+		mockContextBoundaryLabel: mockContextBoundaryLabel,
+		dossierConfirmOnlyBlocks: dossierConfirmOnlyBlocks,
+		missingDataDisplay: missingDataDisplay,
 		warmupContextStripVisible: warmupContextStripVisible,
 		loadingSessionRecoveryLine: loadingSessionRecoveryLine,
 		instantDegradedBannerHint: instantDegradedBannerHint,
@@ -3046,6 +3424,16 @@
 		escapeReviewPackHtml: escapeReviewPackHtml,
 		stripReviewPackSecrets: stripReviewPackSecrets,
 		buildReviewPackDocument: buildReviewPackDocument,
+		captureTabLayoutHtml: captureTabLayoutHtml,
+		buildUiLayoutExportDocument: buildUiLayoutExportDocument,
+		downloadTextFile: downloadTextFile,
+		extractDashboardInlineStyles: extractDashboardInlineStyles,
+		identifiedErrorsTruncateText: identifiedErrorsTruncateText,
+		identifiedErrorsIncidentKey: identifiedErrorsIncidentKey,
+		identifiedErrorsEffectiveSeverity: identifiedErrorsEffectiveSeverity,
+		identifiedErrorsFormatMessage: identifiedErrorsFormatMessage,
+		identifiedErrorsFormatDetail: identifiedErrorsFormatDetail,
+		identifiedErrorsHasIbkrOfflineIncident: identifiedErrorsHasIbkrOfflineIncident,
 	}
 })(typeof window !== "undefined" ? window : globalThis)
 
@@ -3105,34 +3493,40 @@ function cc() {
 			"today",
 		),
 		tabs: [
-			{ id: "today", icon: "☀", label: "TODAY · 今日" },
-			{ id: "signals", icon: "📋", label: "PLAYBOOK · 策略簿" },
-			{ id: "portfolio", icon: "💼", label: "PORTFOLIO · 持倉" },
-			{ id: "dossier", icon: "🗂", label: "WORKSPACE · 工作區" },
+			{ id: "today", icon: "☀", label: "今日" },
+			{ id: "signals", icon: "📋", label: "策略簿" },
+			{ id: "portfolio", icon: "💼", label: "持倉" },
+			{ id: "dossier", icon: "🗂", label: "工作區" },
 			{ id: "ibkr", icon: "⚡", label: "IBKR 券商" },
-			{ id: "ops", icon: "⚙️", label: "Ops 運維" },
+			{ id: "ops", icon: "⚙️", label: "運維" },
 		],
-		guideTab: { id: "guide", icon: "📖", label: "Guide 指南" },
-		settingsTab: { id: "settings", icon: "⚙", label: "Settings 設定" },
+		guideTab: { id: "guide", icon: "📖", label: "指南" },
+		settingsTab: { id: "settings", icon: "⚙", label: "設定" },
 		guideSection: "quickstart",
 		guideSections: [
-			{ id: "quickstart", label: "Quick Start 快速上手" },
-			{ id: "advanced", label: "Advanced 進階" },
-			{ id: "reference", label: "Reference 參考" },
+			{ id: "quickstart", label: "快速上手" },
+			{ id: "advanced", label: "進階" },
+			{ id: "reference", label: "參考" },
 		],
 		moreTabs: [
-			{ id: "scanners", icon: "🔬", label: "Discovery 探索 · research", mode: "Research-only", desc: "Route via Mission Control — not equal to deploy path" },
-			{ id: "agent", icon: "🤖", label: "Agent 盯盤 · monitor" },
-			{ id: "strategy-lab", icon: "🧪", label: "Strategy Lab 策略實驗室" },
-			{ id: "shadow", icon: "🧾", label: "Shadow 影子帳戶" },
-			{ id: "reports", icon: "📚", label: "Reports 報告庫" },
-			{ id: "funds", icon: "💼", label: "Funds 基金" },
-			{ id: "flow", icon: "💧", label: "Flow 資金流" },
-			{ id: "rs", icon: "📈", label: "RS 相對強度 · research" },
-			{ id: "command", icon: "🖥", label: "Command 指揮台 · advanced", hidden_from_primary_nav: true },
-			{ id: "notrade", icon: "🚫", label: "Rejections 否決" },
-			{ id: "btlab", icon: "🧪", label: "Backtest Lab 回測室" },
-			{ id: "leaders", icon: "📊", label: "Leaders 領袖" },
+			{
+				id: "scanners",
+				icon: "🔬",
+				label: "探索 · research",
+				mode: "Research-only",
+				desc: "Route via Mission Control — not equal to deploy path",
+			},
+			{ id: "agent", icon: "🤖", label: "Agent 盯盤" },
+			{ id: "strategy-lab", icon: "🧪", label: "策略實驗室" },
+			{ id: "shadow", icon: "🧾", label: "影子帳戶" },
+			{ id: "reports", icon: "📚", label: "報告庫" },
+			{ id: "funds", icon: "💼", label: "基金" },
+			{ id: "flow", icon: "💧", label: "資金流" },
+			{ id: "rs", icon: "📈", label: "RS 相對強度" },
+			{ id: "command", icon: "🖥", label: "指揮台", hidden_from_primary_nav: true },
+			{ id: "notrade", icon: "🚫", label: "否決" },
+			{ id: "btlab", icon: "🧪", label: "回測室" },
+			{ id: "leaders", icon: "📊", label: "領漲股" },
 		],
 
 		showMore: false,
@@ -3168,6 +3562,7 @@ function cc() {
 			error: "",
 			banner: "",
 		},
+		replayJournal: { loading: false, data: null, err: "" },
 		surfaceFetchHints: {},
 		live: false,
 		clock: "",
@@ -3418,7 +3813,7 @@ function cc() {
 			entries: [],
 		},
 		errorLog: { loading: false, error: "", entries: [], total: 0, filter: "all" },
-		identifiedErrorsPanel: { loading: false, error: "", items: [], lastRefresh: null },
+		identifiedErrorsPanel: { loading: false, error: "", items: [], lastRefresh: null, expandedDetails: {} },
 		providers: {
 			yfinance: false,
 			regime_router: false,
@@ -3652,6 +4047,14 @@ function cc() {
 			} catch (e) {}
 			this.dataContractDismissed = localStorage.getItem("cc_data_contract_dismissed") === "1"
 			this.initReplayFromStorage()
+			if (this.replay.active && this.replay.as_of) {
+				setTimeout(() => {
+					this.refreshReplaySurfaces()
+					if (this.tab === "dossier" && (this.dos.ticker || "").trim()) {
+						this.fetchReplayDossier()
+					}
+				}, 600)
+			}
 			if (typeof window !== "undefined") {
 				window.addEventListener("resize", () => {
 					this.pmStripChipMenuOpen = false
@@ -3661,7 +4064,7 @@ function cc() {
 					document.addEventListener("visibilitychange", () => {
 						this._pageVisible = !document.hidden
 						this._hiddenPollSkip = 0
-						if (this._pageVisible) {
+						if (this._pageVisible && !this.replay?.active) {
 							this.fetchDecisionBoardLight()
 							if (this.tab === "today") this.fetchToday7()
 						}
@@ -3958,6 +4361,7 @@ function cc() {
 			}
 		},
 		_ccPollSkip(secondaryOnly) {
+			if (this.replay?.active) return true
 			if (this._pageVisible) {
 				this._hiddenPollSkip = 0
 				return false
@@ -4253,6 +4657,133 @@ function cc() {
 		},
 		dossierConfirmOnlyOnce() {
 			return this.dossierResearchOnly() || this.dosShowsFetchBanner()
+		},
+		dossierExecutionHidden() {
+			return this.dossierConfirmOnlyOnce() || this.replay.active
+		},
+		dossierConfirmOnlyScreen() {
+			const opts = {
+				ticker: this.dos?.ticker || this.dos?.data?.symbol,
+				boardAuthority: this.dossierGateSnapshotLine() || "MONITOR ONLY",
+				source: this.dosTrustSource?.() || this.dos?.intel?.trust?.source || "instant-degraded",
+				asOf: (this.dos?.intel?.as_of || this.dosTrustAsOf?.() || "").slice(0, 19),
+				cachedEvidence: this.dosFetchBannerExistsLine() ? [this.dosFetchBannerExistsLine()] : [],
+				missing: (this.dos?.missing_modules || []).slice(0, 6),
+				hasMonitorData: this.dosHasCached?.() || !!this.dos?.data?.price,
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.dossierConfirmOnlyBlocks)
+				return CCHelpers.dossierConfirmOnlyBlocks(opts)
+			return {
+				headline: "CONFIRM ONLY · Structure unavailable",
+				known: [],
+				missing: [],
+				allowed: ["Retry live data"],
+				blocked: ["Trade plan", "Sizing", "Paper order", "IBKR handoff"],
+				next: ["Retry live core"],
+			}
+		},
+		scopedFreshnessPills() {
+			const fs = this.ccFreshnessState()
+			const brief = this.brief_status?.latest || {}
+			const briefAge = Number(brief.age_days) || 0
+			const briefTier = String(brief.tier || this.ccHeader?.pills?.brief || "FRESH").toUpperCase()
+			const ex = this.executionState()
+			const broker = this.ibkrUnifiedShort?.(this.today7?.execution_readiness) || "OFFLINE"
+			const runtime =
+				String(this.healthMode || this.healthData?.mode || "").toLowerCase() === "loading" ||
+				this.instantDegradedBannerVisible()
+					? "WARMING"
+					: "LIVE"
+			const da = this.decisionAuthority()
+			const authority = da?.allows_trade_labels
+				? "DEPLOY"
+				: String(da?.effective_action_max || "MONITOR ONLY").toUpperCase()
+			const fromApi = this.ccHeader?.scoped_freshness_pills
+			const opts = {
+				fromApi: fromApi,
+				market: fs.market || this.freshness?.worst_tier || "UNKNOWN",
+				board: fs.board || "UNKNOWN",
+				brief: briefTier,
+				briefAgeDays: briefTier !== "FRESH" ? briefAge : 0,
+				broker: broker,
+				runtime: runtime,
+				authority: authority,
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.buildScopedFreshnessPills)
+				return CCHelpers.buildScopedFreshnessPills(opts)
+			return []
+		},
+		warmupModuleChecklistItems() {
+			const opts = {
+				checklist: this.healthData?.warmup_module_checklist || this.ccHeader?.warmup_module_checklist,
+				healthMode: String(this.healthMode || this.healthData?.mode || "").toLowerCase(),
+				instantDegraded: !!this.instantDegradedBannerVisible(),
+				cachedBoardOk: !!(this.rankedOpps?.rows?.length || this.today7?.top_ranked?.length),
+				marketDataOk: !!(this.freshness?.worst_tier === "FRESH"),
+				dossierCoreOk: !!(this.dos?.intel && !this._dossierIntelDegraded(this.dos.intel)),
+				enrichmentsOk: this.dos?.status === "loaded" || this.dos?.status === "partial_loaded",
+				brokerOk: !!(this.cc_status?.ibkr_connected || this.ibkr?.readiness?.connected),
+			}
+			if (typeof CCHelpers !== "undefined" && CCHelpers.warmupModuleChecklistItems)
+				return CCHelpers.warmupModuleChecklistItems(opts)
+			return []
+		},
+		warmupModuleChecklistLine() {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.warmupModuleChecklistLine)
+				return CCHelpers.warmupModuleChecklistLine({
+					checklist: this.warmupModuleChecklistItems(),
+					healthMode: this.healthMode,
+					instantDegraded: this.instantDegradedBannerVisible(),
+				})
+			return (this.warmupModuleChecklistItems() || [])
+				.map((m) => (m.ready ? "✓" : "○") + " " + m.label)
+				.join(" · ")
+		},
+		dosMissingDisplay(field) {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.missingDataDisplay)
+				return CCHelpers.missingDataDisplay(field)
+			return "Unavailable · live data required"
+		},
+		mockContextBoundaryLabel(degraded) {
+			if (typeof CCHelpers !== "undefined" && CCHelpers.mockContextBoundaryLabel)
+				return CCHelpers.mockContextBoundaryLabel(!!degraded)
+			return degraded
+				? "CONTEXT ONLY · MOCK / LAGGED — Not evidence for today's decision"
+				: "CONTEXT ONLY · LAGGED — Not a trade trigger"
+		},
+		async repairDossierPrimary() {
+			const seq = ["Retry live core", "Refresh Playbook", "Load enrichments if partial"]
+			try {
+				await this.fetchDossier({ forceLive: true })
+			} catch (_) {}
+			try {
+				await this.fetchRankedOpps?.({ refresh: true })
+			} catch (_) {}
+			if (this.dos?.status === "partial_loaded" || this.dos?.partialNotice) {
+				try {
+					await this.fetchDossierEnrichments?.()
+				} catch (_) {}
+			}
+			return seq.join(" → ")
+		},
+		clearStaleAuthorityLocalStorage() {
+			;["cc_playbook_ranked_snapshot", "cc_today7_snapshot", "cc_scanner_hub_snapshot"].forEach((k) => {
+				try {
+					const raw = localStorage.getItem(k)
+					if (!raw) return
+					const obj = JSON.parse(raw)
+					if (obj?.instant_degraded || obj?.degraded || obj?.trust?.stale) localStorage.removeItem(k)
+				} catch (_) {
+					try {
+						localStorage.removeItem(k)
+					} catch (e2) {}
+				}
+			})
+			try {
+				sessionStorage.removeItem("cc_instant_degraded_dismissed")
+			} catch (_) {}
+			this.instantDegradedDismissed = false
+			this.instantDegradedBanner = ""
 		},
 		dosFetchBannerKind() {
 			if (this.dos.status === "failed" || (this.dos.error && !this.dosHasLoadedData())) return "error"
@@ -5391,6 +5922,8 @@ function cc() {
 			return 2
 		},
 		identifiedErrorsDedupKey(item) {
+			const H = window.CCHelpers || {}
+			if (H.identifiedErrorsIncidentKey) return H.identifiedErrorsIncidentKey(item)
 			return (
 				String(item.source || "") +
 				"|" +
@@ -5400,6 +5933,40 @@ function cc() {
 					.trim()
 					.slice(0, 120)
 			)
+		},
+		identifiedErrorsPrepareRow(item) {
+			const H = window.CCHelpers || {}
+			const detailRaw = String(item.detail || "")
+			const row = {
+				...item,
+				detail_full: detailRaw,
+				message: H.identifiedErrorsFormatMessage ? H.identifiedErrorsFormatMessage(item) : item.message,
+				detail: H.identifiedErrorsFormatDetail ? H.identifiedErrorsFormatDetail(item) : detailRaw,
+				severity: H.identifiedErrorsEffectiveSeverity
+					? H.identifiedErrorsEffectiveSeverity(item)
+					: item.severity || "info",
+			}
+			row.detail_truncated = !!detailRaw && !!row.detail && detailRaw.length > String(row.detail || "").length
+			return row
+		},
+		identifiedErrorsDetailExpanded(row) {
+			const id = String((row && row.id) || "")
+			return !!(this.identifiedErrorsPanel.expandedDetails || {})[id]
+		},
+		identifiedErrorsToggleDetail(row) {
+			const id = String((row && row.id) || "")
+			if (!id) return
+			const map = { ...(this.identifiedErrorsPanel.expandedDetails || {}) }
+			map[id] = !map[id]
+			this.identifiedErrorsPanel.expandedDetails = map
+		},
+		identifiedErrorsDetailLine(row) {
+			if (!row) return ""
+			if (this.identifiedErrorsDetailExpanded(row)) return String(row.detail_full || row.detail || "")
+			return String(row.detail || "")
+		},
+		identifiedErrorsShowDetailToggle(row) {
+			return !!(row && row.detail_truncated)
 		},
 		identifiedErrorsBlockerSeverity(text) {
 			const upper = String(text || "").toUpperCase()
@@ -5420,7 +5987,7 @@ function cc() {
 				const key = this.identifiedErrorsDedupKey(item)
 				if (seen.has(key)) return
 				seen.add(key)
-				items.push(item)
+				items.push(this.identifiedErrorsPrepareRow(item))
 			}
 			;(this.errorLog.entries || []).slice(0, 20).forEach((row, i) => {
 				push({
@@ -5504,18 +6071,23 @@ function cc() {
 				})
 			}
 			const syncStatus = String(this.ibkr.readiness?.portfolio_sync_status || "").toLowerCase()
-			if (syncStatus && !["ready", "ok", "synced"].includes(syncStatus)) {
+			const H = window.CCHelpers || {}
+			const ibkrOfflineKnown =
+				H.identifiedErrorsHasIbkrOfflineIncident && H.identifiedErrorsHasIbkrOfflineIncident(items)
+			if (syncStatus && !["ready", "ok", "synced"].includes(syncStatus) && !ibkrOfflineKnown) {
 				push({
 					id: "ibkr-portfolio-sync",
 					severity: syncStatus === "mismatch" ? "critical" : "warning",
 					source: "ibkr",
 					message: "Portfolio sync: " + syncStatus,
-					detail: String(this.ibkr.readiness?.portfolio_sync_reason || this.ibkr.portfolioCompare?.note || ""),
+					detail: String(
+						this.ibkr.readiness?.portfolio_sync_reason || this.ibkr.portfolioCompare?.note || "",
+					),
 					timestamp: null,
 					research_only: false,
 				})
 			}
-			if (this.opsConsole.data?.ibkr && !this.opsConsole.data.ibkr.connected) {
+			if (this.opsConsole.data?.ibkr && !this.opsConsole.data.ibkr.connected && !ibkrOfflineKnown) {
 				push({
 					id: "ibkr-session-inactive",
 					severity: "warning",
@@ -5526,7 +6098,7 @@ function cc() {
 					research_only: false,
 				})
 			}
-			if (this.portfolioHeaderBrokerSyncUnavailable()) {
+			if (this.portfolioHeaderBrokerSyncUnavailable() && !ibkrOfflineKnown) {
 				push({
 					id: "portfolio-broker-sync",
 					severity: "warning",
@@ -6608,6 +7180,9 @@ function cc() {
 				healthMode: mode,
 				briefFallback: !!(this.todayUsesBriefFallback() || this.pageAuthorityIsDegraded()),
 				nearMiss: !!(this.today7.near_miss || []).length,
+				checklist: this.warmupModuleChecklistItems(),
+				warmupModuleChecklist: this.warmupModuleChecklistItems(),
+				instantDegraded: !!(this.today7.instant_degraded || this.instantDegradedBannerVisible()),
 			}
 			if (typeof CCHelpers !== "undefined" && CCHelpers.warmupUpgradeQueue)
 				return CCHelpers.warmupUpgradeQueue(opts)
@@ -7215,7 +7790,13 @@ function cc() {
 				this.healthMode = String(h.mode || "full").toLowerCase()
 				this.captureInstantDegradedBanner(h)
 				this.applyWarmupBoardFromHealth(h)
-				if (this.healthMode === "loading" && !this.playbookBoardHasContent()) this.fetchWarmupBriefBoard()
+				if (this.healthMode === "full") {
+					this.clearStaleAuthorityLocalStorage()
+					this.fetchCcHeader?.()
+					if (this.dos?.ticker) this.fetchDossier({ forceLive: true })
+				} else if (this.healthMode === "loading" && !this.playbookBoardHasContent()) {
+					this.fetchWarmupBriefBoard()
+				}
 			} catch (e) {
 				this.healthMode = "loading"
 			}
@@ -7376,22 +7957,54 @@ function cc() {
 				console.warn("fetchSelfLearnStatus", e)
 			}
 		},
-		async fetchBeliefReview() {
-			if (this.tab !== "ops") return
-			this.beliefReview.loading = true
-			this.beliefReview.err = ""
+		async fetchFirmHealthPanel(url, panel, unavailableMsg) {
+			panel.loading = true
+			panel.err = ""
 			try {
-				const r = await this.ccFetch("/api/v7/belief-review/summary")
-				if (!r || !r.ok) {
-					this.beliefReview.err = "Belief review unavailable"
+				const r = await this.ccFetch(url, { retries: 2, backoff: 600, timeoutMs: 15000 })
+				if (!r) {
+					panel.err = unavailableMsg
 					return
 				}
-				this.beliefReview.data = await r.json()
+				let d = null
+				try {
+					d = await r.json()
+				} catch (_e) {
+					d = null
+				}
+				if (r.ok && d) {
+					panel.data = d
+					return
+				}
+				if (d && (d.authority === "research_only" || d.headline || d.items || d.entries || d.rituals)) {
+					panel.data = d
+					return
+				}
+				if (r.status === 503 || r.status === 502) {
+					panel.data = {
+						headline: "Warming — full API still loading",
+						authority: "research_only",
+						instant_degraded: true,
+						items: [],
+						entries: [],
+						rituals: [],
+					}
+					return
+				}
+				panel.err = unavailableMsg
 			} catch (e) {
-				this.beliefReview.err = e && e.message ? e.message : String(e)
+				panel.err = e && e.message ? e.message : unavailableMsg
 			} finally {
-				this.beliefReview.loading = false
+				panel.loading = false
 			}
+		},
+		async fetchBeliefReview() {
+			if (this.tab !== "ops") return
+			await this.fetchFirmHealthPanel(
+				"/api/v7/belief-review/summary",
+				this.beliefReview,
+				"Belief review unavailable",
+			)
 		},
 		async saveBeliefItem(item) {
 			if (!item || !item.id) return
@@ -7450,20 +8063,11 @@ function cc() {
 		},
 		async fetchFirmCadence() {
 			if (this.tab !== "ops" && this.tab !== "today") return
-			this.firmCadence.loading = true
-			this.firmCadence.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/firm-cadence/summary")
-				if (!r || !r.ok) {
-					this.firmCadence.err = "Firm cadence unavailable"
-					return
-				}
-				this.firmCadence.data = await r.json()
-			} catch (e) {
-				this.firmCadence.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.firmCadence.loading = false
-			}
+			await this.fetchFirmHealthPanel(
+				"/api/v7/firm-cadence/summary",
+				this.firmCadence,
+				"Firm cadence unavailable",
+			)
 		},
 		firmCadenceNextLine() {
 			const d = this.firmCadence.data
@@ -7539,11 +8143,7 @@ function cc() {
 				return
 			}
 			const mc = this.missionControl()
-			const sym = String(
-				ticker ||
-					(this.deployOpen() ? mc.best_trade || mc.best_monitor : mc.best_monitor) ||
-					""
-			)
+			const sym = String(ticker || (this.deployOpen() ? mc.best_trade || mc.best_monitor : mc.best_monitor) || "")
 				.trim()
 				.toUpperCase()
 			const did = String(decisionId || "").trim()
@@ -7576,89 +8176,91 @@ function cc() {
 			return `${d.ticker || "—"} · journal ${d.status} · ${missing} fields · link readiness + POST stub`
 		},
 		async fetchDecisionJournal() {
-			if (this.tab !== "ops") return
-			this.decisionJournal.loading = true
-			this.decisionJournal.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/decision-journal/recent?limit=10")
-				if (!r || !r.ok) {
-					this.decisionJournal.err = "Decision journal unavailable"
-					return
+			if (this.tab !== "ops" && !(this.replay?.active && this.tab === "today")) return
+			if (this.replay?.active && this.replay.as_of) {
+				await this.fetchReplayJournal()
+				if (this.replayJournal.data?.decision_journal) {
+					this.decisionJournal.data = this.replayJournal.data.decision_journal
 				}
-				this.decisionJournal.data = await r.json()
-			} catch (e) {
-				this.decisionJournal.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.decisionJournal.loading = false
+				return
 			}
+			await this.fetchFirmHealthPanel(
+				"/api/v7/decision-journal/recent?limit=10",
+				this.decisionJournal,
+				"Decision journal unavailable",
+			)
 		},
 		async fetchOverrideJournal() {
-			if (this.tab !== "ops") return
-			this.overrideJournal.loading = true
-			this.overrideJournal.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/override-journal/summary")
-				if (!r || !r.ok) {
-					this.overrideJournal.err = "Override journal unavailable"
-					return
+			if (this.tab !== "ops" && !(this.replay?.active && this.tab === "today")) return
+			if (this.replay?.active && this.replay.as_of) {
+				await this.fetchReplayJournal()
+				if (this.replayJournal.data?.override_journal) {
+					this.overrideJournal.data = this.replayJournal.data.override_journal
 				}
-				this.overrideJournal.data = await r.json()
-			} catch (e) {
-				this.overrideJournal.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.overrideJournal.loading = false
+				return
 			}
+			await this.fetchFirmHealthPanel(
+				"/api/v7/override-journal/summary",
+				this.overrideJournal,
+				"Override journal unavailable",
+			)
 		},
 		async fetchCalibrationReport() {
-			if (this.tab !== "ops") return
-			this.calibrationReport.loading = true
-			this.calibrationReport.err = ""
+			if (this.tab !== "ops" && !(this.replay?.active && this.tab === "today")) return
+			if (this.replay?.active && this.replay.as_of) {
+				await this.fetchReplayJournal()
+				if (this.replayJournal.data?.calibration) {
+					this.calibrationReport.data = this.replayJournal.data.calibration
+				}
+				return
+			}
+			await this.fetchFirmHealthPanel(
+				"/api/v7/calibration/report",
+				this.calibrationReport,
+				"Calibration report unavailable",
+			)
+		},
+		async fetchReplayJournal() {
+			if (!this.replay?.active || !this.replay.as_of) return
+			this.replayJournal.loading = true
+			this.replayJournal.err = ""
 			try {
-				const r = await this.ccFetch("/api/v7/calibration/report")
+				const r = await this.ccFetch("/api/v7/replay/journal?as_of=" + encodeURIComponent(this.replay.as_of), {
+					retries: 1,
+					backoff: 400,
+					timeoutMs: 15000,
+				})
 				if (!r || !r.ok) {
-					this.calibrationReport.err = "Calibration report unavailable"
+					this.replayJournal.err = "Replay journal unavailable"
 					return
 				}
-				this.calibrationReport.data = await r.json()
+				this.replayJournal.data = await r.json()
+				if (this.replayJournal.data?.decision_journal) {
+					this.decisionJournal.data = this.replayJournal.data.decision_journal
+				}
+				if (this.replayJournal.data?.override_journal) {
+					this.overrideJournal.data = this.replayJournal.data.override_journal
+				}
+				if (this.replayJournal.data?.calibration) {
+					this.calibrationReport.data = this.replayJournal.data.calibration
+				}
 			} catch (e) {
-				this.calibrationReport.err = e && e.message ? e.message : String(e)
+				this.replayJournal.err = e && e.message ? e.message : String(e)
 			} finally {
-				this.calibrationReport.loading = false
+				this.replayJournal.loading = false
 			}
 		},
 		async fetchWeeklyIcDigest() {
 			if (this.tab !== "ops") return
-			this.weeklyIcDigest.loading = true
-			this.weeklyIcDigest.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/weekly-ic/digest")
-				if (!r || !r.ok) {
-					this.weeklyIcDigest.err = "Weekly IC digest unavailable"
-					return
-				}
-				this.weeklyIcDigest.data = await r.json()
-			} catch (e) {
-				this.weeklyIcDigest.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.weeklyIcDigest.loading = false
-			}
+			await this.fetchFirmHealthPanel(
+				"/api/v7/weekly-ic/digest",
+				this.weeklyIcDigest,
+				"Weekly IC digest unavailable",
+			)
 		},
 		async fetchUsageLogSummary() {
 			if (this.tab !== "ops") return
-			this.usageLogSummary.loading = true
-			this.usageLogSummary.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/usage-log/summary")
-				if (!r || !r.ok) {
-					this.usageLogSummary.err = "Usage log unavailable"
-					return
-				}
-				this.usageLogSummary.data = await r.json()
-			} catch (e) {
-				this.usageLogSummary.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.usageLogSummary.loading = false
-			}
+			await this.fetchFirmHealthPanel("/api/v7/usage-log/summary", this.usageLogSummary, "Usage log unavailable")
 		},
 		async _fetchReviewPackEndpoint(url) {
 			try {
@@ -7703,7 +8305,10 @@ function cc() {
 				const fetched = await Promise.all(
 					endpoints.map(async (ep) => {
 						const result = await this._fetchReviewPackEndpoint(ep.url)
-						return { ...ep, data: result.ok ? result.data : { fetch_error: result.error, status: result.status } }
+						return {
+							...ep,
+							data: result.ok ? result.data : { fetch_error: result.error, status: result.status },
+						}
 					}),
 				)
 				const meta = {
@@ -7755,9 +8360,7 @@ function cc() {
 		},
 		async fetchDecisionReadiness(ticker) {
 			const sym = String(
-				ticker ||
-					(this.deployOpen() ? this.topDeployCandidate() : this.missionControl().best_monitor) ||
-					"",
+				ticker || (this.deployOpen() ? this.topDeployCandidate() : this.missionControl().best_monitor) || "",
 			)
 				.trim()
 				.toUpperCase()
@@ -7765,9 +8368,7 @@ function cc() {
 			this.decisionReadiness.loading = true
 			this.decisionReadiness.err = ""
 			try {
-				const r = await this.ccFetch(
-					"/api/v7/decision-readiness/checklist?ticker=" + encodeURIComponent(sym),
-				)
+				const r = await this.ccFetch("/api/v7/decision-readiness/checklist?ticker=" + encodeURIComponent(sym))
 				if (!r || !r.ok) {
 					this.decisionReadiness.err = "Decision readiness unavailable"
 					return
@@ -7788,20 +8389,7 @@ function cc() {
 			return `${d.ticker || "—"} · ${filled}/${req} fields · complete before deploy intent`
 		},
 		async fetchResearchQueue() {
-			this.researchQueue.loading = true
-			this.researchQueue.err = ""
-			try {
-				const r = await this.ccFetch("/api/v7/research-queue")
-				if (!r || !r.ok) {
-					this.researchQueue.err = "Research queue unavailable"
-					return
-				}
-				this.researchQueue.data = await r.json()
-			} catch (e) {
-				this.researchQueue.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.researchQueue.loading = false
-			}
+			await this.fetchFirmHealthPanel("/api/v7/research-queue", this.researchQueue, "Research queue unavailable")
 		},
 		researchQueueLine() {
 			const d = this.researchQueue.data
@@ -7813,10 +8401,7 @@ function cc() {
 		topDeployCandidate() {
 			const mc = this.missionControl()
 			const top = (this.today7.top_ranked || [])[0]
-			const sym =
-				(this.deployOpen() ? mc.best_trade : mc.best_monitor) ||
-				(top && top.ticker) ||
-				""
+			const sym = (this.deployOpen() ? mc.best_trade : mc.best_monitor) || (top && top.ticker) || ""
 			return String(sym || "")
 				.trim()
 				.toUpperCase()
@@ -7834,9 +8419,7 @@ function cc() {
 			this.preDecisionGate.loading = true
 			this.preDecisionGate.err = ""
 			try {
-				const r = await this.ccFetch(
-					"/api/v7/pre-decision/gate?ticker=" + encodeURIComponent(sym),
-				)
+				const r = await this.ccFetch("/api/v7/pre-decision/gate?ticker=" + encodeURIComponent(sym))
 				if (!r || !r.ok) {
 					this.preDecisionGate.err = "Pre-decision gate unavailable"
 					return
@@ -7940,27 +8523,18 @@ function cc() {
 		async fetchAttentionBudget() {
 			this._syncAttentionBudgetUsageFromStorage()
 			const u = this.attentionBudget.usage || {}
-			this.attentionBudget.loading = true
-			this.attentionBudget.err = ""
-			try {
-				const q =
-					"?research=" +
-					encodeURIComponent(u.research || 0) +
-					"&portfolio=" +
-					encodeURIComponent(u.portfolio || 0) +
-					"&market=" +
-					encodeURIComponent(u.market || 0)
-				const r = await this.ccFetch("/api/v7/attention-budget/summary" + q)
-				if (!r || !r.ok) {
-					this.attentionBudget.err = "Attention budget unavailable"
-					return
-				}
-				this.attentionBudget.data = await r.json()
-			} catch (e) {
-				this.attentionBudget.err = e && e.message ? e.message : String(e)
-			} finally {
-				this.attentionBudget.loading = false
-			}
+			const q =
+				"?research=" +
+				encodeURIComponent(u.research || 0) +
+				"&portfolio=" +
+				encodeURIComponent(u.portfolio || 0) +
+				"&market=" +
+				encodeURIComponent(u.market || 0)
+			await this.fetchFirmHealthPanel(
+				"/api/v7/attention-budget/summary" + q,
+				this.attentionBudget,
+				"Attention budget unavailable",
+			)
 		},
 		attentionBudgetLine() {
 			const d = this.attentionBudget.data
@@ -7983,9 +8557,7 @@ function cc() {
 			this.priorLessons.err = ""
 			this.priorLessons.ticker = sym
 			try {
-				const r = await this.ccFetch(
-					"/api/v7/knowledge/lessons?ticker=" + encodeURIComponent(sym),
-				)
+				const r = await this.ccFetch("/api/v7/knowledge/lessons?ticker=" + encodeURIComponent(sym))
 				if (!r || !r.ok) {
 					this.priorLessons.err = "Prior lessons unavailable"
 					return
@@ -8253,7 +8825,7 @@ function cc() {
 				return "—"
 			}
 			const sh = this.dosSizeShares()
-			return sh > 0 ? sh + " sh" : "Size unavailable"
+			return sh > 0 ? sh + " sh" : this.dosMissingDisplay("size")
 		},
 		dosSizeExplanationVisible() {
 			const ex = this.dosSizeExplanation()
@@ -11158,6 +11730,9 @@ function cc() {
 				this.fetchMarginalRoc()
 				this.fetchDailyIc()
 			}
+			if (tSafe === "today" && this.replay?.active) {
+				this.fetchReplayJournal()
+			}
 			if (tSafe === "ops") {
 				this.fetchCcStatus()
 				this.fetchOpsRuntime()
@@ -11218,7 +11793,7 @@ function cc() {
 			return this.uiExpandAll ? "收合" : "一鍵展開"
 		},
 		uiExpandAllHeaderLabel() {
-			return this.uiExpandAll ? "收合 · Collapse all" : "一鍵展開 · Expand all"
+			return this.uiExpandAll ? "收合全部" : "一鍵展開"
 		},
 		ccDetailsOpen(fallback) {
 			return this.uiExpandAll || !!fallback
@@ -13688,6 +14263,9 @@ function cc() {
 				this.dos.loading = false
 				return
 			}
+			if (this.replay.active && this.replay.as_of && !opts.forceLive) {
+				return this.fetchReplayDossier()
+			}
 			if (opts.useCached) {
 				const cached = this.dosLoadCache(tk)
 				if (cached && cached.intel) {
@@ -15144,8 +15722,7 @@ function cc() {
 				if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) {
 					this.replay.as_of = stored
 					this.replay.active = true
-					this.replay.banner =
-						"Historical replay as of " + stored + " — LIVE AUTHORITY: NONE"
+					this.replay.banner = "Historical replay as of " + stored + " — LIVE AUTHORITY: NONE"
 				}
 			} catch (e) {}
 		},
@@ -15155,8 +15732,85 @@ function cc() {
 			if (refresh) u += "&refresh=true"
 			return u
 		},
+		replayDossierUrl(ticker, refresh) {
+			let u =
+				"/api/v7/replay/dossier/" +
+				encodeURIComponent((ticker || "").trim().toUpperCase()) +
+				"?as_of=" +
+				encodeURIComponent(this.replay.as_of || "")
+			if (refresh) u += "&refresh=true"
+			return u
+		},
+		applyReplayDossierPayload(d) {
+			if (!d || typeof d !== "object") return
+			const kt = d.known_then || {}
+			const hist = d.historical_decision || kt.action || "WATCH"
+			const intel = {
+				as_of: d.actual_trading_date || d.as_of,
+				replay_mode: true,
+				load_phase: "core",
+				partial: true,
+				decision_bar: d.decision_bar || {
+					verdict: hist,
+					next_action: "LIVE AUTHORITY: NONE — historical replay only",
+				},
+				page_summary:
+					d.banner ||
+					d.surface_authority?.label ||
+					"Historical dossier replay as of " +
+						(d.as_of || "") +
+						" — KNOWN THEN vs OUTCOME; LIVE AUTHORITY: NONE",
+				pm_answer: {
+					thirty_second: {
+						verdict: hist,
+						why_not_buy_now: "Replay mode — no live deploy or IBKR handoff",
+						what_makes_buyable: "Exit replay for live dossier research",
+						breaks_thesis: kt.regime || "—",
+						size_guidance: "—",
+					},
+				},
+				dossier: {
+					...(d.dossier_compat || {}),
+					symbol: d.ticker,
+					price: d.price || kt.entry_price,
+					trust: d.trust,
+					replay_mode: true,
+					known_then: kt,
+					outcome: d.outcome,
+				},
+			}
+			this._applyDossierIntel(intel)
+			this.dos.partialNotice = "Historical replay dossier — enrichments disabled; OUTCOME does not affect rank"
+			this.dos.status = "partial_loaded"
+		},
+		async fetchReplayDossier(refresh) {
+			const tk = (this.dos.ticker || "").trim().toUpperCase()
+			if (!tk || !this.replay.active || !this.replay.as_of) return
+			this.dos.loading = true
+			this.dos.error = ""
+			this.dos.status = "loading_core"
+			try {
+				const r = await this.ccFetch(this.replayDossierUrl(tk, refresh), {
+					retries: 1,
+					backoff: 400,
+					timeoutMs: 30000,
+				})
+				if (!r || !r.ok) throw new Error("HTTP " + (r ? r.status : "fail"))
+				const d = await r.json()
+				this.applyReplayDossierPayload(d)
+			} catch (e) {
+				console.warn("fetchReplayDossier failed", e)
+				this.dos.error = "Replay dossier failed — " + String(e.message || e)
+				this.dos.status = "failed"
+			} finally {
+				this.dos.loading = false
+				this._syncDossierFetchHints()
+			}
+		},
 		async enterReplayMode(asOf) {
-			const d = String(asOf || "").trim().slice(0, 10)
+			const d = String(asOf || "")
+				.trim()
+				.slice(0, 10)
 			if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) {
 				this.replay.error = "Invalid replay date — use YYYY-MM-DD"
 				return
@@ -15169,6 +15823,9 @@ function cc() {
 				localStorage.setItem("cc_replay_as_of", d)
 			} catch (e) {}
 			await this.refreshReplaySurfaces()
+			if (this.tab === "dossier" && (this.dos.ticker || "").trim()) {
+				await this.fetchReplayDossier()
+			}
 		},
 		exitReplayMode() {
 			this.replay.active = false
@@ -15184,6 +15841,9 @@ function cc() {
 			this.fetchToday7()
 			this.fetchRanked({ refresh: true })
 			this.fetchDecisionBoardLight()
+			if (this.tab === "dossier" && (this.dos.ticker || "").trim()) {
+				this.fetchDossier()
+			}
 		},
 		async refreshReplaySurfaces(refresh) {
 			if (!this.replay.active || !this.replay.as_of) return
@@ -15198,10 +15858,9 @@ function cc() {
 				if (!r || !r.ok) throw new Error("HTTP " + (r ? r.status : "fail"))
 				const d = await r.json()
 				this.replay.session_id = d.session_id || this.replay.session_id
-				this.replay.banner =
-					d.banner ||
-					"Historical replay as of " + d.as_of + " — LIVE AUTHORITY: NONE"
+				this.replay.banner = d.banner || "Historical replay as of " + d.as_of + " — LIVE AUTHORITY: NONE"
 				this.applyReplayDashboard(d)
+				await this.fetchReplayJournal()
 			} catch (e) {
 				console.warn("refreshReplaySurfaces failed", e)
 				this.replay.error = "Replay fetch failed — " + String(e.message || e)
@@ -15219,6 +15878,7 @@ function cc() {
 			this.today7.filter_funnel = d.filter_funnel || null
 			this.today7.surface_authority = d.surface_authority || null
 			this.today7.historical_opportunities = d.historical_opportunities || null
+			this.today7.journal_linkage = d.journal_linkage || null
 			this.today7.date = d.date || d.as_of
 			this.today7.replay_mode = true
 			this.ccHeader.page_authority_mode = "replay"

@@ -1,8 +1,13 @@
 # ── CC Dev Compose ─────────────────────────────────────────────────────────
 # Requires: Docker Desktop Business (BuildKit cache mounts, resource controls)
 # Usage:    docker compose -f docker-compose.dev.yml up --build
+#           docker compose -f docker-compose.dev.yml -f docker-compose.tunnel.yml --profile tunnel up
 # Rebuild:  docker compose -f docker-compose.dev.yml build (uses pip cache)
 # Dashboard: http://localhost:8000
+#
+# Unattended trading stack (IB gateway, postgres, orchestrators) lives in:
+#   docker-compose.yml + docker-compose.override.yml.example
+# Profile dev (Jupyter/pgAdmin): docker compose --profile dev up
 
 x-build-args: &build-args
   DOCKER_BUILDKIT: "1"

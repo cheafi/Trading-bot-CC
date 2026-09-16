@@ -142,8 +142,8 @@ def finalize_opportunity_pipeline(
 
     try:
         from src.services.opportunity_quality import (
-            attach_quality_to_rows,
             attach_opportunity_verdict_to_payload,
+            attach_quality_to_rows,
             resolve_brief_stale_context,
         )
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _CLOSED_TRADES = _DATA_DIR / "closed_trades.jsonl"

@@ -1,0 +1,36 @@
+# Futu OpenD gateway — binary is NOT redistributable.
+#
+# Mount the official Linux OpenD bundle from the host:
+#   docker compose run --rm -v /path/to/OpenD:/opt/futu-opend:ro futu-opend
+#
+# Or build with FUTU_OPEND_TARBALL copied locally (never commit the tarball):
+#   docker build --build-arg FUTU_OPEND_TARBALL=./vendor/OpenD.tar.gz -f docker/Dockerfile.futu-opend .
+#
+# See docker/futu-opend/README.md
+
+FROM debian:bookworm-slim
+
+ARG FUTU_OPEND_TARBALL=
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl tini && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/futu-opend
+
+# Optional: bake tarball at build time (operator-supplied, not in repo)
+COPY ${FUTU_OPEND_TARBALL:-docker/futu-opend/.keep} /tmp/futu-opend-input
+
+RUN if [ -f /tmp/futu-opend-input ] && [ "$(basename /tmp/futu-opend-input)" != ".keep" ]; then \
+      tar -xzf /tmp/futu-opend-input -C /opt/futu-opend; \
+    else \
+      echo "Futu OpenD not bundled — mount host OpenD dir to /opt/futu-opend"; \
+    fi
+
+COPY docker/futu-opend/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 11111
+
+# Bind localhost only when published via compose ports: "127.0.0.1:11111:11111"
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

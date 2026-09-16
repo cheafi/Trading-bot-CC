@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-
 REQUIRED_PROVENANCE_KEYS = ("source", "as_of", "mode")
 
 

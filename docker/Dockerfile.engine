@@ -1,0 +1,44 @@
+# Trading orchestrator — one container per venue (US / HK / futures)
+# syntax=docker/dockerfile:1.7
+
+FROM python:3.11-slim-bookworm AS deps
+
+WORKDIR /deps
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip setuptools wheel
+
+COPY requirements/ requirements/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --prefix=/install -r requirements/engine.txt
+
+FROM python:3.11-slim-bookworm AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=deps /install /usr/local
+
+WORKDIR /app
+
+RUN groupadd -r trading && useradd -r -g trading -d /app trading
+
+COPY --chown=trading:trading src/ src/
+COPY --chown=trading:trading config/ config/
+COPY --chown=trading:trading scripts/reconciler_loop.py scripts/reconciler_loop.py
+COPY --chown=trading:trading scripts/research_nightly_stub.py scripts/research_nightly_stub.py
+
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    STATE_DATA_DIR=/app/data/state \
+    DRY_RUN=true
+
+RUN mkdir -p /app/data/state /app/logs /app/models && \
+    chown -R trading:trading /app/data /app/logs /app/models
+
+USER trading
+
+HEALTHCHECK --interval=60s --timeout=10s --start-period=90s --retries=3 \
+    CMD python -c "import os,time; from pathlib import Path; p=Path(os.environ.get('STATE_DATA_DIR','/app/data/state'))/'engine_heartbeat'; assert p.exists() and time.time()-p.stat().st_mtime<180" || exit 1
+
+CMD ["python", "-m", "src.engines.main"]

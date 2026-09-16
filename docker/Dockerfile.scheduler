@@ -1,0 +1,38 @@
+# APScheduler jobs — separate from venue orchestrators for crash isolation
+# syntax=docker/dockerfile:1.7
+
+FROM python:3.11-slim-bookworm AS deps
+
+WORKDIR /deps
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip setuptools wheel
+
+COPY requirements/ requirements/
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --prefix=/install -r requirements/scheduler.txt
+
+FROM python:3.11-slim-bookworm AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=deps /install /usr/local
+
+WORKDIR /app
+
+RUN groupadd -r trading && useradd -r -g trading -d /app trading
+
+COPY --chown=trading:trading src/ src/
+COPY --chown=trading:trading config/ config/
+
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    STATE_DATA_DIR=/app/data/state
+
+RUN mkdir -p /app/data/state /app/logs /app/reports && \
+    chown -R trading:trading /app/data /app/logs /app/reports
+
+USER trading
+
+CMD ["python", "-m", "src.scheduler.main"]
