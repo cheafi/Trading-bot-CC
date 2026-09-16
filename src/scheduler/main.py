@@ -441,16 +441,23 @@ class TradingScheduler:
             logger.warning("Forward outcome marks failed (non-fatal): %s", exc)
 
     async def _job_autonomous_learning_loop(self):
-        """Observe → calibrate → propose belief updates (research_only, no apply)."""
-        logger.info("Starting autonomous learning loop")
+        """Observe → label → calibrate → propose (research_only, env-gated)."""
         try:
             from src.services.autonomous_learning_loop import (
+                is_autonomous_learning_enabled,
                 run_learning_cycle,  # noqa: PLC0415
             )
 
+            if not is_autonomous_learning_enabled():
+                logger.info(
+                    "Autonomous learning loop skipped — AUTONOMOUS_LEARNING not enabled"
+                )
+                return
+
+            logger.info("Starting autonomous learning loop")
             result = await asyncio.to_thread(
                 run_learning_cycle,
-                phases=["observe", "calibrate", "propose"],
+                phases=["observe", "label", "calibrate", "propose"],
                 apply_changes=False,
             )
             logger.info(

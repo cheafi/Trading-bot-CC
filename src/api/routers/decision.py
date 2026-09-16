@@ -3537,8 +3537,23 @@ async def learning_loop_run(body: Dict[str, Any] | None = None):
     Autonomous learning cycle: observe → label → calibrate → propose.
 
     Never grants deploy authority. Parameter apply is not performed here.
+    Requires AUTONOMOUS_LEARNING=1 (default off in production).
     """
-    from src.services.autonomous_learning_loop import run_learning_cycle
+    from src.services.autonomous_learning_loop import (
+        is_autonomous_learning_enabled,
+        run_learning_cycle,
+    )
+
+    if not is_autonomous_learning_enabled():
+        return sanitize_for_json(
+            {
+                "ok": False,
+                "skipped": True,
+                "reason": "AUTONOMOUS_LEARNING not enabled",
+                "authority": "research_only",
+                "may_authorize_deploy": False,
+            }
+        )
 
     payload = body or {}
     phases = payload.get("phases")

@@ -8,11 +8,24 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# Production default: OFF — set AUTONOMOUS_LEARNING=1 to enable scheduler/API runs.
+_AUTONOMOUS_LEARNING_ENV = "AUTONOMOUS_LEARNING"
+
+
+def is_autonomous_learning_enabled() -> bool:
+    """Return True when autonomous learning loop is explicitly enabled."""
+    return os.environ.get(_AUTONOMOUS_LEARNING_ENV, "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _STATE_PATH = _DATA_DIR / "autonomous_learning_loop_state.json"

@@ -572,3 +572,27 @@ def build_page_capability(
         "operator_sentence": sentence,
         "research_only_once": can_research and not can_deploy,
     }
+
+
+def build_warmup_module_checklist(
+    *,
+    shell_ok: bool = False,
+    cached_board_ok: bool = False,
+    market_data_ok: bool = False,
+    dossier_core_ok: bool = False,
+    enrichments_ok: bool = False,
+    broker_ok: bool = False,
+) -> List[Dict[str, Any]]:
+    """Warmup checklist for instant shell /health (mirrors cc-helpers.js fallback)."""
+    return [
+        {"key": "shell", "label": "Shell", "ready": bool(shell_ok)},
+        {"key": "cached_board", "label": "Cached board", "ready": bool(cached_board_ok)},
+        {"key": "market_data", "label": "Market data", "ready": bool(market_data_ok)},
+        {"key": "dossier_core", "label": "Dossier core", "ready": bool(dossier_core_ok)},
+        {
+            "key": "research_enrichments",
+            "label": "Research enrichments",
+            "ready": bool(enrichments_ok),
+        },
+        {"key": "broker", "label": "Broker", "ready": bool(broker_ok)},
+    ]

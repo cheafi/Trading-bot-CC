@@ -1,8 +1,8 @@
 # CC X — Meta Intelligence Engine (v15)
 
 **Product:** CC X · `TradingAI_Bot`  
-**Last updated:** 2026-08-25 (Phase A `59db29f` · Phase B stubs · ADR-022 IDOS)  
-**Status:** Design + Phase 1 partial (forward outcomes done; belief stub; MIE telemetry todo)  
+**Last updated:** 2026-09-16 (Autonomous learning loop P0 · ADR-022 IDOS)  
+**Status:** Phase 1 partial — autonomous learning loop shipped (research_only, env-gated)  
 **Architecture:** [`CC_X_ARCHITECTURE.md`](./CC_X_ARCHITECTURE.md)  
 **Backlog:** [`CC_X_ENGINEERING_BACKLOG.md`](./CC_X_ENGINEERING_BACKLOG.md)  
 **Governance:** [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md)
@@ -21,12 +21,12 @@
 
 ## Constitutional constraints (non-negotiable)
 
-| Rule | Implication for MIE |
-|------|---------------------|
-| Research ≠ deploy | MIE outputs cannot set `deploy_open` |
-| Page Gate > Card Rank | Evolution suggestions must not bypass Decision Engine |
-| Fail closed | Missing data → WAIT posture in any surfaced summary |
-| Human authority permanent | MIE recommends; operator decides |
+| Rule                      | Implication for MIE                                   |
+| ------------------------- | ----------------------------------------------------- |
+| Research ≠ deploy         | MIE outputs cannot set `deploy_open`                  |
+| Page Gate > Card Rank     | Evolution suggestions must not bypass Decision Engine |
+| Fail closed               | Missing data → WAIT posture in any surfaced summary   |
+| Human authority permanent | MIE recommends; operator decides                      |
 
 ---
 
@@ -57,18 +57,23 @@ flowchart TB
 ```
 
 ### Trust Engine
+
 Tracks calibration drift (Brier, ECE), operator override rates, and surface-level trust decay. Feeds Belief Review and monthly CIO packet.
 
 ### Curiosity Engine
+
 Surfaces **unexplored** monitor candidates, regime gaps, and scanner blind spots. Never promotes to deploy — only expands research queue.
 
 ### Silence Engine
+
 Detects alert fatigue, redundant polls, duplicate banners, and low-signal UI noise. Proposes **removals** and default-collapsed panels (e.g. WAIT-day rank hero demotion).
 
 ### Attention Cost Engine
+
 Scores operator time spent per surface vs decision value produced. Inputs: usage/ignore logging (Phase 1), session dwell proxies (Phase 2).
 
 ### System Evolution Review (monthly)
+
 Aggregates the four engines + v14 compounding loops into one CIO-readable report scored by **question lift** (not engine lift):
 
 - Which surfaces made **Q1 Know** easier? (provenance, freshness, facts)
@@ -102,24 +107,48 @@ Therefore ...
 
 Score each candidate change:
 
-| Surface / change | Q1 | Q2 | Q3 | Q4 | Verdict |
-|------------------|----|----|----|----|---------|
-| Mission Brief bilingual | ↑ | — | ↑ | ↑ | Keep |
-| Shared opportunity pipeline | ↑ | ↑ | — | ↑ | Keep |
-| Rank hero on WAIT days | — | ↓ | — | ↓ | Delete |
-| Belief Review stub | — | ↑ | ↑ | — | Extend |
+| Surface / change            | Q1  | Q2  | Q3  | Q4  | Verdict |
+| --------------------------- | --- | --- | --- | --- | ------- |
+| Mission Brief bilingual     | ↑   | —   | ↑   | ↑   | Keep    |
+| Shared opportunity pipeline | ↑   | ↑   | —   | ↑   | Keep    |
+| Rank hero on WAIT days      | —   | ↓   | —   | ↓   | Delete  |
+| Belief Review stub          | —   | ↑   | ↑   | —   | Extend  |
+
+---
+
+## Autonomous learning loop (P0 — research_only)
+
+**Cycle:** observe → label → calibrate → propose. Never sets `deploy_open` or writes deployment manifest.
+
+| Layer             | Module                        | Authority                                                   |
+| ----------------- | ----------------------------- | ----------------------------------------------------------- |
+| Observe / propose | `autonomous_learning_loop.py` | `research_only` — belief queue + A/B proposals only         |
+| Label / calibrate | `self_learning.py`            | Brier, Thompson, Feature IC, A/B shadow (feedback only)     |
+| Fitness gates     | `strategy_fitness.py`         | DSR + eligibility gates for bandit context (no deploy)      |
+| Parameter apply   | `SelfLearningEngine`          | Separate kill switch: `SELF_LEARNING_ENABLED` (default off) |
+
+**Enable (scheduler 4:50 PM ET Mon–Fri + `POST /api/v7/learning-loop/run`):**
+
+```bash
+export AUTONOMOUS_LEARNING=1   # default 0 — off in production
+```
+
+**Disable:** unset or `AUTONOMOUS_LEARNING=0`. State persists to `data/autonomous_learning_loop_state.json`; weekly IC cache to `data/weekly_ic_digest_latest.json`.
+
+**Tests:** `pytest tests/test_idos_mechanical_separation.py tests/test_roadmap_p0.py -q`
 
 ---
 
 ## v14 Alpha Compounding loops (feeds MIE)
 
-| Loop | Cadence | Artifact |
-|------|---------|----------|
-| Trade close → forward outcomes | T+0 on close; T+1/5/20 scheduler | `forward_outcomes.jsonl` |
-| Belief Review | Monthly | `/api/v7/belief-review/summary` (stub) |
-| Weekly CIO Review | Weekly | Ops digest (todo) |
-| Monthly Evolution Report | Monthly | Evolution Dashboard (stub) |
-| Learning loop attribution | Per close | `learning_loop.py` → JSONL |
+| Loop                           | Cadence                                   | Artifact                               |
+| ------------------------------ | ----------------------------------------- | -------------------------------------- |
+| Trade close → forward outcomes | T+0 on close; T+1/5/20 scheduler          | `forward_outcomes.jsonl`               |
+| Autonomous learning loop       | 4:50 PM ET (when `AUTONOMOUS_LEARNING=1`) | `autonomous_learning_loop_state.json`  |
+| Belief Review                  | Monthly                                   | `/api/v7/belief-review/summary` (stub) |
+| Weekly CIO Review              | Weekly                                    | `weekly_ic_digest_latest.json`         |
+| Monthly Evolution Report       | Monthly                                   | Evolution Dashboard (stub)             |
+| Learning loop attribution      | Per close                                 | `learning_loop.py` → JSONL             |
 
 ---
 
@@ -127,17 +156,17 @@ Score each candidate change:
 
 ### Phase 1 — Telemetry + stubs (current sprint)
 
-| Item | Backlog | Module | Status |
-|------|---------|--------|--------|
-| Usage/ignore logging contract | CCX-132 | _todo_ | todo |
-| Trust feedback hook on dismiss/override | CCX-133 | _todo_ | todo |
-| Evolution Dashboard stub (Ops) | CCX-134 | Ops panel | todo |
-| Belief Review API + Ops panel | CCX-131 | `decision.py`, `cc-app.js` | **stub done** |
-| Forward outcomes scheduler | CCX-041 | `forward_outcomes.py`, `scheduler/main.py` | **done** |
-| Shared opportunity pipeline | CCX-001b | `opportunity_pipeline.py` | **done** |
-| Deploy SSOT UI (`deploy_open` only) | CCX-001 | `cc-app.js` `deployOpen()` | **done** |
-| WAIT-day Today layout collapse | CCX-UX-07 | `index.html`, `todayContextExpanded` | **done** |
-| IO/Alpha resilient enrich | — | `cost_adjusted_ranker.py` try/except | **done** |
+| Item                                    | Backlog   | Module                                     | Status        |
+| --------------------------------------- | --------- | ------------------------------------------ | ------------- |
+| Usage/ignore logging contract           | CCX-132   | _todo_                                     | todo          |
+| Trust feedback hook on dismiss/override | CCX-133   | _todo_                                     | todo          |
+| Evolution Dashboard stub (Ops)          | CCX-134   | Ops panel                                  | todo          |
+| Belief Review API + Ops panel           | CCX-131   | `decision.py`, `cc-app.js`                 | **stub done** |
+| Forward outcomes scheduler              | CCX-041   | `forward_outcomes.py`, `scheduler/main.py` | **done**      |
+| Shared opportunity pipeline             | CCX-001b  | `opportunity_pipeline.py`                  | **done**      |
+| Deploy SSOT UI (`deploy_open` only)     | CCX-001   | `cc-app.js` `deployOpen()`                 | **done**      |
+| WAIT-day Today layout collapse          | CCX-UX-07 | `index.html`, `todayContextExpanded`       | **done**      |
+| IO/Alpha resilient enrich               | —         | `cost_adjusted_ranker.py` try/except       | **done**      |
 
 ### Phase 2 — Calibration + review UI
 
@@ -182,13 +211,13 @@ Score each candidate change:
 
 ## Features to delete or combine (initial candidates)
 
-| Candidate | Rationale |
-|-----------|-----------|
-| Dual deploy signal (`can_deploy_today` in UI) | Authority drift — **removed** (ADR-015) |
-| Duplicate Mission / PM strips | Attention cost — CCX-UX-04 todo |
-| Rank hero on WAIT days | Silence Engine — **collapsed by default** (CCX-UX-07) |
-| Multiple near-miss sources | Consolidate to single contract |
-| Research surfaces with deploy-ish copy | Guide + research banner only |
+| Candidate                                     | Rationale                                             |
+| --------------------------------------------- | ----------------------------------------------------- |
+| Dual deploy signal (`can_deploy_today` in UI) | Authority drift — **removed** (ADR-015)               |
+| Duplicate Mission / PM strips                 | Attention cost — CCX-UX-04 todo                       |
+| Rank hero on WAIT days                        | Silence Engine — **collapsed by default** (CCX-UX-07) |
+| Multiple near-miss sources                    | Consolidate to single contract                        |
+| Research surfaces with deploy-ish copy        | Guide + research banner only                          |
 
 ---
 
@@ -204,10 +233,10 @@ Authority regression: no `can_deploy_today` in `cc-app.js` deploy paths; `deploy
 
 ## Related documents
 
-| Doc | Role |
-|-----|------|
-| [`CC_X_ARCHITECTURE.md`](./CC_X_ARCHITECTURE.md) | Deploy path + service index |
-| [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md) | IDOS philosophy + Four Questions + PR gate |
-| [`CC_X_ENGINEERING_BACKLOG.md`](./CC_X_ENGINEERING_BACKLOG.md) | CCX-132–140 backlog rows |
-| [`CC_X_DECISION_LOG.md`](./CC_X_DECISION_LOG.md) | ADR-015–019 authority + MIE adoption · ADR-022 IDOS |
-| [`CC_X_INVESTMENT_FIRM.md`](./CC_X_INVESTMENT_FIRM.md) | v16 firm cadences + governance overlay |
+| Doc                                                                                    | Role                                                |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| [`CC_X_ARCHITECTURE.md`](./CC_X_ARCHITECTURE.md)                                       | Deploy path + service index                         |
+| [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md) | IDOS philosophy + Four Questions + PR gate          |
+| [`CC_X_ENGINEERING_BACKLOG.md`](./CC_X_ENGINEERING_BACKLOG.md)                         | CCX-132–140 backlog rows                            |
+| [`CC_X_DECISION_LOG.md`](./CC_X_DECISION_LOG.md)                                       | ADR-015–019 authority + MIE adoption · ADR-022 IDOS |
+| [`CC_X_INVESTMENT_FIRM.md`](./CC_X_INVESTMENT_FIRM.md)                                 | v16 firm cadences + governance overlay              |

@@ -8,7 +8,10 @@ from src.core.deployment_manifest import (
     load_deployment_manifest,
     write_deployment_manifest,
 )
-from src.services.autonomous_learning_loop import run_learning_cycle
+from src.services.autonomous_learning_loop import (
+    is_autonomous_learning_enabled,
+    run_learning_cycle,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +81,43 @@ def test_high_score_learning_cycle_leaves_deploy_closed(
     assert before["deploy_open"] is False
     assert after["deploy_open"] is False
     assert result.get("deployment_manifest_unchanged") is True
+
+
+def test_autonomous_learning_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AUTONOMOUS_LEARNING", raising=False)
+    assert is_autonomous_learning_enabled() is False
+
+
+def test_autonomous_learning_enabled_when_env_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AUTONOMOUS_LEARNING", "1")
+    assert is_autonomous_learning_enabled() is True
+
+
+def test_learning_cycle_persists_state_without_deploy_write(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    _isolate_manifest,
+) -> None:
+    state_path = tmp_path / "autonomous_learning_loop_state.json"
+    monkeypatch.setattr(
+        "src.services.autonomous_learning_loop._observe",
+        lambda: {"closed_trades": 0, "forward_marks_with_r": 0},
+    )
+    monkeypatch.setattr(
+        "src.services.autonomous_learning_loop._calibrate",
+        lambda: {"drift_alert": False},
+    )
+    monkeypatch.setattr(
+        "src.services.autonomous_learning_loop._propose",
+        lambda trades: {"may_authorize_deploy": False},
+    )
+
+    result = run_learning_cycle(phases=["observe", "calibrate", "propose"])
+    assert state_path.is_file()
+    assert result["authority"] == "research_only"
+    assert load_deployment_manifest()["deploy_open"] is False
 
 
 def test_decision_committee_deploy_open_provenance() -> None:
