@@ -576,14 +576,14 @@ def build_page_capability(
 
 def build_warmup_module_checklist(
     *,
-    shell_ok: bool = False,
+    shell_ok: bool = True,
     cached_board_ok: bool = False,
     market_data_ok: bool = False,
     dossier_core_ok: bool = False,
     enrichments_ok: bool = False,
     broker_ok: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Warmup checklist for instant shell /health (mirrors cc-helpers.js fallback)."""
+    """Warmup checklist for /health while full API imports (cc_instant + Ops strip)."""
     return [
         {"key": "shell", "label": "Shell", "ready": bool(shell_ok)},
         {"key": "cached_board", "label": "Cached board", "ready": bool(cached_board_ok)},

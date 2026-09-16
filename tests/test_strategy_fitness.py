@@ -19,8 +19,9 @@ from src.engines.strategy_fitness import (
 
 
 def test_dsr_increases_with_better_sharpe():
-    low = compute_deflated_sharpe(0.5, num_trials=10, num_observations=80)
-    high = compute_deflated_sharpe(1.5, num_trials=10, num_observations=80)
+    # Moderate Sharpe avoids CDF saturation at 1.0 for both arms.
+    low = compute_deflated_sharpe(0.1, num_trials=10, num_observations=80)
+    high = compute_deflated_sharpe(0.2, num_trials=10, num_observations=80)
     assert 0.0 <= low <= 1.0
     assert 0.0 <= high <= 1.0
     assert high > low
@@ -28,11 +29,10 @@ def test_dsr_increases_with_better_sharpe():
 
 def test_dsr_penalizes_many_trials():
     """More trials → higher selection-bias bar → lower DSR for same Sharpe."""
-    # Moderate Sharpe so CDF does not saturate at 1.0 for both arms.
-    few = compute_deflated_sharpe(0.55, num_trials=2, num_observations=100)
-    many = compute_deflated_sharpe(0.55, num_trials=50, num_observations=100)
+    few = compute_deflated_sharpe(0.15, num_trials=2, num_observations=100)
+    many = compute_deflated_sharpe(0.15, num_trials=50, num_observations=100)
     assert few >= many
-    assert many < few or many < 0.99
+    assert many < few
 
 
 def test_dsr_zero_on_insufficient_observations():

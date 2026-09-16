@@ -48,7 +48,7 @@ async def test_broker_manager_zero_live_calls_when_dry_run(
     paper_broker.place_order.assert_called_once()
     ledger = (tmp_path / "simulation_ledger.jsonl").read_text(encoding="utf-8")
     assert "AAPL" in ledger
-    assert '"mode": "dry_run"' in ledger.replace(" ", "")
+    assert '"mode":"dry_run"' in ledger.replace(" ", "")
 
 
 @pytest.mark.asyncio

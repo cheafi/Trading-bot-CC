@@ -52,7 +52,6 @@ def evaluate_live_trading_gate(
     port_ok = os.environ.get("IB_API_PORT", "") == LIVE_IB_API_PORT
     allowed_accounts = _parse_allowed_accounts()
     acct = str(account or "").strip().upper()
-    account_allowed = bool(acct and acct in allowed_accounts)
 
     missing: list[str] = []
     if not live_trading:

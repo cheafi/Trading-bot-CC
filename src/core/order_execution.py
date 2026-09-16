@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from src.core.live_trading_gate import authorize_live_order

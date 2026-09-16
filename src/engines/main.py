@@ -25,7 +25,10 @@ sys.path.insert(
 )
 
 from src.core.config import get_settings
-from src.core.live_trading_gate import assert_live_gate_or_paper, evaluate_live_trading_gate
+from src.core.live_trading_gate import (
+    assert_live_gate_or_paper,
+    evaluate_live_trading_gate,
+)
 from src.core.logging_config import setup_logging
 from src.core.trading_mode import resolve_execution_mode
 

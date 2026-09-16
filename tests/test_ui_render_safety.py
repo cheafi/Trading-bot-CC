@@ -16,6 +16,7 @@ from src.utils.ui_render_safety import (
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
+CC_HELPERS_JS = ROOT / "src" / "api" / "static" / "cc-helpers.js"
 DEPLOY_PARTIAL = (
     ROOT / "src" / "api" / "templates" / "cc" / "partials" / "deploy_surfaces.html"
 )
@@ -55,13 +56,11 @@ def test_index_html_has_no_autoschedule_leak_substrings():
     tail = raw[close + len("</html>") :].strip()
     assert tail == "", f"post-</html> leak: {tail[:80]!r}"
     assert "await this.fetchABStatus();" not in tail
-    # Handler tail must stay inside the main cc() script block, never after </html>
-    script_end = raw.lower().rfind("</script>")
-    html_end = raw.lower().rfind("</html>")
-    pos = raw.find("async autoScheduleExperiments()")
-    assert pos >= 0, "autoScheduleExperiments handler missing from template"
-    assert pos < script_end, "autoSchedule handler leaked outside script block"
-    assert script_end < html_end
+    # Handler lives in cc-helpers.js (not inline in index.html) — must not leak after </html>
+    helpers = CC_HELPERS_JS.read_text(encoding="utf-8")
+    pos = helpers.find("async autoScheduleExperiments()")
+    assert pos >= 0, "autoScheduleExperiments handler missing from cc-helpers.js"
+    assert "_handleAutoScheduleError" in helpers
 
 
 def test_index_html_autoschedule_handler_not_visible_fragment():
@@ -98,8 +97,10 @@ def test_index_html_today_regime_uses_canonical_line():
 
 def test_index_html_error_log_unavailable_copy():
     raw = INDEX_HTML.read_text(encoding="utf-8")
+    helpers = CC_HELPERS_JS.read_text(encoding="utf-8")
     assert "Error log fetch failed:" not in raw
-    assert "Unable to confirm whether errors were logged this session" in raw
+    assert "Unable to confirm whether errors were logged this session" in helpers
+    assert "opsErrorLogUnavailableDetail()" in raw
     assert "!errorLog.loading && !errorLog.entries.length && !errorLog.error" in raw
 
 

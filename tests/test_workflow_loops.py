@@ -261,7 +261,9 @@ def test_pre_decision_gate_panel():
 def test_attention_budget_api_contract():
     from src.api.routers import decision as decision_router
 
-    payload = asyncio.run(decision_router.attention_budget_summary())
+    payload = asyncio.run(
+        decision_router.attention_budget_summary(research=0, portfolio=0, market=0)
+    )
     assert payload["authority"] == "research_only"
     assert payload["default_budgets"]["research"] == 60
     assert payload["default_budgets"]["portfolio"] == 30

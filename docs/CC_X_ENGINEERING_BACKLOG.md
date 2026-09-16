@@ -1,7 +1,7 @@
 # CC X — Engineering Backlog (Living SSOT)
 
 **Product:** CC X · `TradingAI_Bot`  
-**Last updated:** 2026-09-16 (Repo hygiene cleanup + P0 safety verification)  
+**Last updated:** 2026-09-16 (External review P0 safety verified + test fixes)  
 **Architecture:** [`CC_X_ARCHITECTURE.md`](./CC_X_ARCHITECTURE.md)  
 **MIE design:** [`CC_X_META_INTELLIGENCE.md`](./CC_X_META_INTELLIGENCE.md)  
 **Governance / PR gate:** [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md) — **binding**; P0 below matches APPROVED portfolio only  
@@ -26,31 +26,39 @@ P0 items include **Questions** served (Q1–Q4). A feature that serves none shou
 
 ## P0 — Investment Committee APPROVED (execution order)
 
-Reordered per [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md) §4. Only these items are sprint-eligible at P0 until next quarterly IC review.
+Reordered per [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md) §4. Only **active** rows below are sprint-eligible at P0 until next quarterly IC review.
 
-| Order | ID                    | Item                                             | Questions  | Portfolio | Status                                         |
-| ----: | --------------------- | ------------------------------------------------ | ---------- | --------- | ---------------------------------------------- |
-|     0 | CCX-156               | **Decision Journal Phase 1** (JSONL + API + Ops) | Q2, Q3, Q4 | P-021     | **APPROVED / Phase 2 checklist**               |
-|    0a | CCX-162               | Pre-Decision Checklist (Phase 1 stub)            | Q2, Q3, Q4 | P-028     | **done**                                       |
-|    0b | CCX-170               | Decision Cooling stub                            | Q3, Q4     | P-029     | **done**                                       |
-|    0c | CCX-171               | Research Queue stub                              | Q3, Q4     | P-030     | **done**                                       |
-|     1 | CCX-131 / CCX-135     | Belief Review ritual (Phase 2 thesis/kill)       | Q2, Q3     | P-001     | in-progress                                    |
-|     2 | CCX-041               | Forward outcomes T+20 → belief grades            | Q1, Q2     | P-010     | done (extend wiring)                           |
-|     3 | CCX-053               | Marginal ROC daily panel (stub API + strip)      | Q1, Q4     | P-002     | **in-progress** (live wire portfolio+playbook) |
-|     4 | _Portfolio SSOT_      | Server holdings truth (no localStorage split)    | Q1         | P-004     | **done** (v7 endpoint + fallback banner)       |
-|     5 | CCX-UX-07 + deletions | WAIT-day silence / deletion batch 1              | Q3, Q4     | P-003     | done (hero hidden)                             |
-|     6 | CCX-005               | Attribution root ref on all board rows           | Q1, Q4     | P-017     | **done**                                       |
-|     7 | CCX-006 / CCX-UX-06   | Mandatory provenance on all prices               | Q1         | P-018     | **done**                                       |
-|     8 | CCX-007               | CI blocks authority regressions                  | Q4         | P-019     | **done**                                       |
-|     9 | CCX-008               | Hide mock factor on deploy surfaces              | Q1, Q3     | P-008 adj | **done**                                       |
-|    10 | CCX-UX-04             | Today PM strip parity (best action SSOT)         | Q3, Q4     | P-020     | **done**                                       |
-|    11 | CCX-073               | Knowledge retrieval on ticker open               | Q1, Q2     | P-005     | **done**                                       |
-|    12 | CCX-045 / CCX-135     | Calibration quarterly report                     | Q2, Q3     | P-006     | **done**                                       |
-|    13 | CCX-044 / CCX-133     | Override journal + cooldown                      | Q1, Q3     | P-007     | **done**                                       |
-|    14 | CCX-108               | Trust-weighted CIIO (speak less)                 | Q3         | P-008     | in-progress                                    |
-|    15 | CCX-136               | Weekly IC digest                                 | Q1–Q4      | P-009     | **done**                                       |
-|    16 | CCX-132               | Meta Intelligence Phase 1 — usage log only       | Q3         | P-012     | **done**                                       |
-|    17 | _Discovery demotion_  | Non-equal nav; route via Mission Control         | Q4         | P-011     | **done**                                       |
+### Active P0
+
+| Order | ID                | Item                                             | Questions  | Portfolio | Status                                            |
+| ----: | ----------------- | ------------------------------------------------ | ---------- | --------- | ------------------------------------------------- |
+|     0 | CCX-156           | **Decision Journal Phase 1** (JSONL + API + Ops) | Q2, Q3, Q4 | P-021     | **in-progress** (Phase 2 deploy-intent checklist) |
+|     1 | CCX-131 / CCX-135 | Belief Review ritual (Phase 2 thesis/kill)       | Q2, Q3     | P-001     | **in-progress**                                   |
+|     2 | CCX-053           | Marginal ROC daily panel (stub API + strip)      | Q1, Q4     | P-002     | **in-progress** (live wire portfolio+playbook)    |
+|     3 | CCX-108           | Trust-weighted CIIO (speak less)                 | Q3         | P-008     | **in-progress**                                   |
+
+### P0 — Completed (IC APPROVED, shipped)
+
+| ID                    | Item                                              | Evidence                                                  |
+| --------------------- | ------------------------------------------------- | --------------------------------------------------------- |
+| CCX-162               | Pre-Decision Checklist (Phase 1 stub)             | `decision_readiness.py`                                   |
+| CCX-170               | Decision Cooling stub                             | `decision_cooling.py`                                     |
+| CCX-171               | Research Queue stub                               | `research_queue.py`                                       |
+| CCX-041               | Forward outcomes T+20 → belief grades             | `forward_outcomes.py`, scheduler                          |
+| _Portfolio SSOT_      | Server holdings truth (no localStorage split)     | v7 endpoint + fallback banner                             |
+| CCX-UX-07 + deletions | WAIT-day silence / deletion batch 1               | hero hidden                                               |
+| CCX-005               | Attribution root ref on all board rows            | `opportunity_pipeline.py`                                 |
+| CCX-006 / CCX-UX-06   | Mandatory provenance on all prices                | `provenance_contract.py`                                  |
+| CCX-007               | CI blocks authority regressions                   | `.github/workflows/ci.yml`                                |
+| CCX-008               | Hide mock factor on deploy surfaces               | `cc-app.js` `hideMockSurfacesOnDeploy()`                  |
+| CCX-UX-04             | Today PM strip parity (best action SSOT)          | `buildPmStripBoardLine`, `deploy_surfaces.html`           |
+| CCX-073               | Knowledge retrieval on ticker open                | `knowledge_retrieval.py`                                  |
+| CCX-045               | Calibration quarterly report                      | `calibration_report.py`, `GET /api/v7/calibration/report` |
+| CCX-044 / CCX-133     | Override journal + cooldown                       | override journal + cooldown shipped                       |
+| CCX-136               | Weekly IC digest                                  | `weekly_ic_digest.py`, scheduler                          |
+| CCX-132               | Meta Intelligence Phase 1 — usage log only        | `usage_log.py`                                            |
+| _Discovery demotion_  | Non-equal nav; route via Mission Control          | Mission Control routing                                   |
+| CCX-180               | Strategy Fitness Matrix + DSR (Expectancy Week 1) | `strategy_fitness.py`, `test_strategy_fitness.py`         |
 
 **DEFERRED from P0:** CCX-090 Playwright E2E · CCX-134 Evolution Dashboard · CCX-126 IO migration · CCX-070 Knowledge Graph · CCX-025 Research Workspace
 
@@ -58,18 +66,18 @@ Reordered per [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMM
 
 ---
 
-## In-flight UX (current sprint)
+## UX — Sprint 115–116 (**complete**)
 
-| ID        | Item                                                        | Priority | Questions | Status      | Owner   | Sprint | Acceptance criteria                                                                           | Evidence/PR                                                              |
-| --------- | ----------------------------------------------------------- | -------- | --------- | ----------- | ------- | ------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| CCX-UX-01 | Mission Brief panel — bilingual NOW/BLOCKER/NEXT            | P1       | Q3, Q4    | done        | CC Core | 115    | `[data-cc="today-mission-panel"]`; title "TODAY · Mission Brief · 今日任務"; WAIT copy honest | `4905a4e`, `cc-helpers.js`                                               |
-| CCX-UX-02 | Opportunity quality on decision board regime block          | P1       | Q2, Q4    | done        | CC Core | 115    | `opportunity_quality` in board regime; Hostile macro consistency                              | `bf94f8e`, `decision_board_service.py`                                   |
-| CCX-UX-03 | Opportunity quality chips on Playbook monitor cards         | P1       | Q2        | done        | CC Core | 115    | Quality tier visible; never implies deploy                                                    | `bf94f8e`, `opportunity_quality.py`, `tests/test_opportunity_quality.py` |
-| CCX-UX-04 | Today PM strip — best action, near-miss, sleeve gate_status | P1       | Q3, Q4    | in-progress | CC Core | 115    | 5-second deploy/wait/monitor answers; board SSOT via `buildPmStripBoardLine`                  | `cc-app.js`, `cc-helpers.js`, `deploy_surfaces.html`                     |
-| CCX-UX-05 | Guide tab as Help — suspended decision language             | P1       | Q4        | done        | CC Core | 115    | Guide shows reference-only; no deploy chips                                                   | `4905a4e`, `surface_authority.py`                                        |
-| CCX-UX-06 | Provenance strip on price fields                            | P0       | Q1        | **done**    | CC Core | 116    | source/as_of/mode on prices; STALE hides deploy CTAs                                          | `cc-helpers.js`, `deploy_surfaces.html`, `opportunity_pipeline.py`       |
-| CCX-UX-07 | Today WAIT-day context collapse — Expand context            | P0       | Q3, Q4    | done        | CC Core | 115    | Mission Brief + Attention queue always visible; secondary strips behind expand on WAIT        | `deploy_surfaces.html`, `cc-app.js` `todayContextExpanded`               |
-| CCX-UX-08 | Dashboard historical replay / decision demo (Phase 1)       | P1       | Q1, Q2    | **done**    | CC Core | —      | Extends time-travel; `GET /api/v7/replay/dashboard`; LIVE AUTHORITY: NONE                     | [`CC_HISTORICAL_DECISION_REPLAY.md`](./CC_HISTORICAL_DECISION_REPLAY.md) |
+| ID        | Item                                                        | Priority | Questions | Status   | Owner   | Sprint | Acceptance criteria                                                                           | Evidence/PR                                                              |
+| --------- | ----------------------------------------------------------- | -------- | --------- | -------- | ------- | ------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| CCX-UX-01 | Mission Brief panel — bilingual NOW/BLOCKER/NEXT            | P1       | Q3, Q4    | **done** | CC Core | 115    | `[data-cc="today-mission-panel"]`; title "TODAY · Mission Brief · 今日任務"; WAIT copy honest | `4905a4e`, `cc-helpers.js`                                               |
+| CCX-UX-02 | Opportunity quality on decision board regime block          | P1       | Q2, Q4    | **done** | CC Core | 115    | `opportunity_quality` in board regime; Hostile macro consistency                              | `bf94f8e`, `decision_board_service.py`                                   |
+| CCX-UX-03 | Opportunity quality chips on Playbook monitor cards         | P1       | Q2        | **done** | CC Core | 115    | Quality tier visible; never implies deploy                                                    | `bf94f8e`, `opportunity_quality.py`, `tests/test_opportunity_quality.py` |
+| CCX-UX-04 | Today PM strip — best action, near-miss, sleeve gate_status | P1       | Q3, Q4    | **done** | CC Core | 115    | 5-second deploy/wait/monitor answers; board SSOT via `buildPmStripBoardLine`                  | `cc-app.js`, `cc-helpers.js`, `deploy_surfaces.html`                     |
+| CCX-UX-05 | Guide tab as Help — suspended decision language             | P1       | Q4        | **done** | CC Core | 115    | Guide shows reference-only; no deploy chips                                                   | `4905a4e`, `surface_authority.py`                                        |
+| CCX-UX-06 | Provenance strip on price fields                            | P0       | Q1        | **done** | CC Core | 116    | source/as_of/mode on prices; STALE hides deploy CTAs                                          | `cc-helpers.js`, `deploy_surfaces.html`, `opportunity_pipeline.py`       |
+| CCX-UX-07 | Today WAIT-day context collapse — Expand context            | P0       | Q3, Q4    | **done** | CC Core | 115    | Mission Brief + Attention queue always visible; secondary strips behind expand on WAIT        | `deploy_surfaces.html`, `cc-app.js` `todayContextExpanded`               |
+| CCX-UX-08 | Dashboard historical replay / decision demo (Phase 1)       | P1       | Q1, Q2    | **done** | CC Core | —      | Extends time-travel; `GET /api/v7/replay/dashboard`; LIVE AUTHORITY: NONE                     | [`CC_HISTORICAL_DECISION_REPLAY.md`](./CC_HISTORICAL_DECISION_REPLAY.md) |
 
 ---
 
@@ -115,17 +123,17 @@ Reordered per [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMM
 
 ## Learning & measured alpha
 
-| ID      | Item                              | Priority | Status | Owner   | Sprint | Acceptance criteria                                                      | Evidence/PR                                                                 |
-| ------- | --------------------------------- | -------- | ------ | ------- | ------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| CCX-040 | IBKR → closed_trades.jsonl ≥95%   | P1       | todo   | CC Core | 118    | Nightly capture job                                                      | Sprint 118                                                                  |
-| CCX-041 | Forward outcomes T+1/T+5/T+20     | P1       | done   | CC Core | 118    | `run_forward_outcome_marks`; scheduler 4:45 PM ET weekdays; T+0 on close | `forward_outcomes.py`, `scheduler/main.py`, `test_forward_outcomes_hook.py` |
-| CCX-042 | Real-Time Alpha Monitor (6 KPIs)  | P1       | todo   | CC Core | 118    | Produced/Lost/Preserved in Ops                                           | Sprint 118                                                                  |
-| CCX-043 | Thompson/ML hidden n<5 / n<30     | P1       | todo   | CC Core | 118    | Insufficient sample not shown as precision                               | Sprint 118                                                                  |
-| CCX-044 | Merge decision journal SSOT       | P2       | todo   | CC Core | 118    | Single journal path                                                      | Sprint 118                                                                  |
-| CCX-045 | Ops Alpha QA panel                | P2       | todo   | CC Core | 118    | IC decay, Brier visible                                                  | Sprint 118                                                                  |
-| CCX-046 | Self-learning audit log UI        | P3       | todo   | CC Core | 118    | Apply rate visible; default 0                                            | Sprint 118                                                                  |
-| CCX-047 | Regime params versioned changelog | P3       | todo   | CC Core | 118    | Threshold changes human-reviewed                                         | Sprint 118                                                                  |
-| CCX-048 | Council outcome tracking          | P2       | todo   | CC Core | 118    | Council vs outcome calibration                                           | Sprint 118                                                                  |
+| ID      | Item                              | Priority | Status   | Owner   | Sprint | Acceptance criteria                                                      | Evidence/PR                                                                 |
+| ------- | --------------------------------- | -------- | -------- | ------- | ------ | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| CCX-040 | IBKR → closed_trades.jsonl ≥95%   | P1       | todo     | CC Core | 118    | Nightly capture job                                                      | Sprint 118                                                                  |
+| CCX-041 | Forward outcomes T+1/T+5/T+20     | P1       | done     | CC Core | 118    | `run_forward_outcome_marks`; scheduler 4:45 PM ET weekdays; T+0 on close | `forward_outcomes.py`, `scheduler/main.py`, `test_forward_outcomes_hook.py` |
+| CCX-042 | Real-Time Alpha Monitor (6 KPIs)  | P1       | todo     | CC Core | 118    | Produced/Lost/Preserved in Ops                                           | Sprint 118                                                                  |
+| CCX-043 | Thompson/ML hidden n<5 / n<30     | P1       | todo     | CC Core | 118    | Insufficient sample not shown as precision                               | Sprint 118                                                                  |
+| CCX-044 | Merge decision journal SSOT       | P2       | todo     | CC Core | 118    | Single journal path                                                      | Sprint 118                                                                  |
+| CCX-045 | Calibration quarterly report      | P2       | **done** | CC Core | 118    | `GET /api/v7/calibration/report`; Brier/ECE from forward outcomes        | `calibration_report.py`                                                     |
+| CCX-046 | Self-learning audit log UI        | P3       | todo     | CC Core | 118    | Apply rate visible; default 0                                            | Sprint 118                                                                  |
+| CCX-047 | Regime params versioned changelog | P3       | todo     | CC Core | 118    | Threshold changes human-reviewed                                         | Sprint 118                                                                  |
+| CCX-048 | Council outcome tracking          | P2       | todo     | CC Core | 118    | Council vs outcome calibration                                           | Sprint 118                                                                  |
 
 ---
 
@@ -150,17 +158,17 @@ Reordered per [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMM
 
 ## Knowledge & intelligence
 
-| ID      | Item                                 | Priority | Status | Owner   | Sprint | Acceptance criteria                  | Evidence/PR |
-| ------- | ------------------------------------ | -------- | ------ | ------- | ------ | ------------------------------------ | ----------- |
-| CCX-070 | Knowledge Graph MVP                  | P1       | todo   | CC Core | 121    | `knowledge_graph.py`; neighbor API   | Sprint 121  |
-| CCX-071 | Analog engine                        | P1       | todo   | CC Core | 121    | n≥5 or confidence low; research_only | Sprint 121  |
-| CCX-072 | AlphaObject lifecycle close          | P2       | todo   | CC Core | 125    | CLOSED → ARCHIVED with lessons       | Sprint 125  |
-| CCX-073 | Research Memory index                | P2       | todo   | CC Core | 125    | alpha_id → decision → outcome        | Sprint 125  |
-| CCX-074 | Intelligence Engine daily report     | P2       | todo   | CC Core | 126    | Seven quality scores; research_only  | Sprint 126  |
-| CCX-075 | Historical analog pattern library    | P2       | todo   | CC Core | 123    | Knowledge tab only                   | Sprint 123  |
-| CCX-076 | failure_mode on AlphaObject lessons  | P3       | todo   | CC Core | 123    | Post-mortem fields                   | Sprint 123  |
-| CCX-077 | Hidden thematic concentration tagger | P2       | todo   | CC Core | 121    | AI overlap detection                 | Sprint 121  |
-| CCX-078 | Graph neighbor API                   | P2       | todo   | CC Core | 121    | `/api/v7/graph/neighbors/{ticker}`   | Sprint 121  |
+| ID      | Item                                 | Priority | Status   | Owner   | Sprint | Acceptance criteria                   | Evidence/PR              |
+| ------- | ------------------------------------ | -------- | -------- | ------- | ------ | ------------------------------------- | ------------------------ |
+| CCX-070 | Knowledge Graph MVP                  | P1       | todo     | CC Core | 121    | `knowledge_graph.py`; neighbor API    | Sprint 121               |
+| CCX-071 | Analog engine                        | P1       | todo     | CC Core | 121    | n≥5 or confidence low; research_only  | Sprint 121               |
+| CCX-072 | AlphaObject lifecycle close          | P2       | todo     | CC Core | 125    | CLOSED → ARCHIVED with lessons        | Sprint 125               |
+| CCX-073 | Knowledge retrieval on ticker open   | P2       | **done** | CC Core | 125    | Prior lessons strip on dossier/deploy | `knowledge_retrieval.py` |
+| CCX-074 | Intelligence Engine daily report     | P2       | todo     | CC Core | 126    | Seven quality scores; research_only   | Sprint 126               |
+| CCX-075 | Historical analog pattern library    | P2       | todo     | CC Core | 123    | Knowledge tab only                    | Sprint 123               |
+| CCX-076 | failure_mode on AlphaObject lessons  | P3       | todo     | CC Core | 123    | Post-mortem fields                    | Sprint 123               |
+| CCX-077 | Hidden thematic concentration tagger | P2       | todo     | CC Core | 121    | AI overlap detection                  | Sprint 121               |
+| CCX-078 | Graph neighbor API                   | P2       | todo     | CC Core | 121    | `/api/v7/graph/neighbors/{ticker}`    | Sprint 121               |
 
 ---
 
@@ -222,17 +230,17 @@ Reordered per [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMM
 
 ## Meta Intelligence Engine (v15)
 
-| ID      | Item                                        | Priority | Status | Owner   | Sprint | Acceptance criteria                               | Evidence/PR                    |
-| ------- | ------------------------------------------- | -------- | ------ | ------- | ------ | ------------------------------------------------- | ------------------------------ |
-| CCX-132 | Usage/ignore logging contract               | P1       | todo   | CC Core | 127    | Surface dwell + dismiss events → JSONL            | `CC_X_META_INTELLIGENCE.md` P1 |
-| CCX-133 | Trust one-tap feedback hook                 | P1       | todo   | CC Core | 127    | Dismiss/override → trust feedback log             | Trust Engine Phase 1           |
-| CCX-134 | Evolution Dashboard stub (Ops)              | P1       | todo   | CC Core | 127    | Ops panel; `research_only`; MIE summary           | `CC_X_META_INTELLIGENCE.md` P1 |
-| CCX-135 | Belief Review full items (conviction drift) | P0       | todo   | CC Core | 118    | beliefs due, thesis updates; extends CCX-131 stub | v14 compounding                |
-| CCX-136 | Weekly CIO Review digest                    | P2       | todo   | CC Core | 118    | Weekly ops digest automation                      | v14 compounding                |
-| CCX-137 | Monthly Evolution Report                    | P2       | todo   | CC Core | 127    | MIE monthly JSON/PDF export                       | System Evolution Review        |
-| CCX-138 | Attention Cost scoring per surface          | P2       | todo   | CC Core | 128    | Per-surface attention cost metrics                | Attention Cost Engine          |
-| CCX-139 | Curiosity Engine research queue             | P2       | todo   | CC Core | 128    | Unexplored monitor candidates queue               | Curiosity Engine               |
-| CCX-140 | Top 20 self-improvements ranker             | P3       | todo   | CC Core | 129    | IC-lift potential ranking; delete/combine list    | MIE Phase 3                    |
+| ID      | Item                                        | Priority | Status          | Owner   | Sprint | Acceptance criteria                               | Evidence/PR             |
+| ------- | ------------------------------------------- | -------- | --------------- | ------- | ------ | ------------------------------------------------- | ----------------------- |
+| CCX-132 | Usage/ignore logging contract               | P1       | **done**        | CC Core | 127    | Surface dwell + dismiss events → JSONL            | `usage_log.py`          |
+| CCX-133 | Trust one-tap feedback hook                 | P1       | todo            | CC Core | 127    | Dismiss/override → trust feedback log             | Trust Engine Phase 1    |
+| CCX-134 | Evolution Dashboard stub (Ops)              | P1       | **deferred**    | CC Core | 127    | Ops panel; `research_only`; MIE summary           | DEFERRED from P0        |
+| CCX-135 | Belief Review full items (conviction drift) | P0       | **in-progress** | CC Core | 118    | beliefs due, thesis updates; extends CCX-131 stub | `belief_review.py`      |
+| CCX-136 | Weekly CIO Review digest                    | P2       | **done**        | CC Core | 118    | Weekly ops digest automation                      | `weekly_ic_digest.py`   |
+| CCX-137 | Monthly Evolution Report                    | P2       | todo            | CC Core | 127    | MIE monthly JSON/PDF export                       | System Evolution Review |
+| CCX-138 | Attention Cost scoring per surface          | P2       | todo            | CC Core | 128    | Per-surface attention cost metrics                | Attention Cost Engine   |
+| CCX-139 | Curiosity Engine research queue             | P2       | todo            | CC Core | 128    | Unexplored monitor candidates queue               | Curiosity Engine        |
+| CCX-140 | Top 20 self-improvements ranker             | P3       | todo            | CC Core | 129    | IC-lift potential ranking; delete/combine list    | MIE Phase 3             |
 
 ---
 
@@ -313,13 +321,13 @@ Reordered per [`CC_X_INVESTMENT_COMMITTEE_RESOLUTION.md`](./CC_X_INVESTMENT_COMM
 
 Maps v14 compounding loops to canonical backlog IDs (no duplicate rows):
 
-| Loop                           | Backlog ID(s)    | Status                            |
-| ------------------------------ | ---------------- | --------------------------------- |
-| Trade close → forward outcomes | CCX-041          | **done**                          |
-| Belief Review (stub → full)    | CCX-131, CCX-135 | Phase 2 (thesis/kill edit) / todo |
-| Weekly CIO Review digest       | CCX-136          | todo                              |
-| Monthly Evolution Report       | CCX-137          | todo                              |
-| Dossier belief tab             | _future_         | todo                              |
+| Loop                           | Backlog ID(s)    | Status                             |
+| ------------------------------ | ---------------- | ---------------------------------- |
+| Trade close → forward outcomes | CCX-041          | **done**                           |
+| Belief Review (stub → full)    | CCX-131, CCX-135 | **in-progress** (thesis/kill edit) |
+| Weekly CIO Review digest       | CCX-136          | **done**                           |
+| Monthly Evolution Report       | CCX-137          | todo                               |
+| Dossier belief tab             | _future_         | todo                               |
 
 Design: [`CC_X_META_INTELLIGENCE.md`](./CC_X_META_INTELLIGENCE.md) § v14 Alpha Compounding loops.
 
@@ -380,16 +388,18 @@ Bounded automation under human deploy gate. **Research ≠ Deploy** at every pha
 | Metric                  |   Count |
 | ----------------------- | ------: |
 | **Total backlog items** | **141** |
-| done                    |      29 |
-| in-progress             |       7 |
-| todo                    |     112 |
+| done                    |      46 |
+| in-progress             |      11 |
+| todo                    |      84 |
 | blocked                 |       0 |
 
-**Done:** CCX-001, CCX-001b, CCX-002, CCX-003, CCX-004, CCX-041, CCX-UX-01, CCX-UX-02, CCX-UX-03, CCX-UX-05, CCX-UX-07, CCX-109, CCX-110, CCX-111, CCX-128, CCX-129, CCX-130, CCX-147, CCX-157, CCX-158, CCX-159, CCX-160, CCX-162, CCX-170, CCX-171
+**Active P0:** CCX-156 (Journal Phase 2) · CCX-131/135 (Belief Review) · CCX-053 (Marginal ROC live wire) · CCX-108 (Trust-weighted CIIO)
 
-**In-progress:** CCX-108, CCX-131, CCX-053 (live wire), CCX-146, CCX-172, **CCX-156 (Journal Phase 2 checklist)**, **CCX-UX-04**, **CCX-163**, **CCX-164**, **CCX-073**
+**In-progress (P1+):** CCX-146 (Firm cadence Ops) · CCX-163 (Daily IC) · CCX-164 (Attention Budget) · CCX-172 (Workflow-nav)
 
-**Phase B (next — IC APPROVED order):** CCX-163 Daily IC expand · CCX-165–169 pipeline/funnel/capital · CCX-131→135 Belief Review full · CCX-045 calibration · CCX-UX-04 PM strip finish · CCX-006 provenance · CCX-007 CI gate
+**Next (Expectancy-First Week 2+):** Walk-forward wire to fitness matrix (CCX-094, CCX-181) · CPCV (CCX-184) · Alpha Factory chain (CCX-020–023)
+
+**IDOS next:** CCX-156 Phase 2 deploy-intent checklist · CCX-161 wisdom loop closure
 
 **DEFERRED (Resolution):** CCX-090 Playwright E2E · CCX-134 Evolution Dashboard · CCX-126 IO migration · CCX-070 Knowledge Graph
 
@@ -406,15 +416,46 @@ Bounded automation under human deploy gate. **Research ≠ Deploy** at every pha
 
 ---
 
+## External review P0 safety (2026-09-16) — **verified**
+
+Binding investor-review P0 items (commits `17afea93`, `2d2adf2f`, `2d39c374` lineage → `fe0e57a`).
+
+| P0   | Item                                                                 | Status       | Evidence                                                                                                                           |
+| ---- | -------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| P0-1 | `live_trading_gate` truth-table + account allow-list + broker bounds | **verified** | `src/core/live_trading_gate.py`, `src/core/order_execution.py`, `src/brokers/broker_manager.py`, `tests/test_live_trading_gate.py` |
+| P0-2 | `dry_run=True` keyword-only + simulation ledger + integration test   | **verified** | `BrokerManager.place_order(*, dry_run=True)`, `record_dry_run_order`, `tests/test_dry_run_orders.py`, `tests/test_state_paths.py`  |
+| P0-3 | No `/tmp` authoritative state → `data/`                              | **verified** | `src/core/state_paths.py`, `tests/test_state_paths.py` (no `/tmp` in `src/`)                                                       |
+| P0-4 | IDOS learning loop negative test — no deploy writes                  | **verified** | `tests/test_idos_mechanical_separation.py`, `tests/test_roadmap_p0.py`                                                             |
+| P0-5 | `gpt_validator` research-only; LLM not in entry path                 | **verified** | `src/engines/gpt_validator.py`, `auto_trading_engine._validate_signals`, `tests/test_gpt_validator_research_only.py`               |
+| P0-6 | `strategy_fitness` DSR + full boundary test matrix                   | **verified** | `src/engines/strategy_fitness.py`, `tests/test_strategy_fitness.py`                                                                |
+| P0-7 | Dashboard export allow-list + sentinel secret test                   | **verified** | `src/services/dashboard_export.py`, `tests/test_dashboard_export.py`                                                               |
+
+**Safety pytest gate (every PR):**
+
+```bash
+python -m pytest \
+  tests/test_live_trading_gate.py \
+  tests/test_dry_run_orders.py \
+  tests/test_state_paths.py \
+  tests/test_strategy_fitness.py \
+  tests/test_dashboard_export.py \
+  tests/test_gpt_validator_research_only.py \
+  tests/test_idos_mechanical_separation.py \
+  tests/test_roadmap_p0.py \
+  -q
+```
+
+---
+
 ## Repo hygiene (2026-09-16) — **done**
 
-| Item                        | Status       | Evidence                                                                                                          |
-| --------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Move tooling to `scripts/`  | **done**     | `scripts/cc_instant.py`, `scripts/cleanup.sh`; root `_cc_instant.py` thin launcher                                |
-| Delete root scratch scripts | **done**     | `fix_*.py`, `patch_*.py`, `test_*.py`, `vars_check*.py`, etc. removed                                             |
-| `.gitignore` hardening      | **done**     | scratch patterns, `progress.txt`, `backup_untracked/`, `data/state/*.lock`                                        |
-| `/tmp` → `data/` state      | **done**     | `state_paths.py`, lock/log under `data/state/`                                                                    |
-| P0 safety tests             | **verified** | `test_live_trading_gate.py`, `test_strategy_fitness.py`, `test_dashboard_export.py`, IDOS in `test_roadmap_p0.py` |
+| Item                        | Status       | Evidence                                                                           |
+| --------------------------- | ------------ | ---------------------------------------------------------------------------------- |
+| Move tooling to `scripts/`  | **done**     | `scripts/cc_instant.py`, `scripts/cleanup.sh`; root `_cc_instant.py` thin launcher |
+| Delete root scratch scripts | **done**     | `fix_*.py`, `patch_*.py`, `test_*.py`, `vars_check*.py`, etc. removed              |
+| `.gitignore` hardening      | **done**     | scratch patterns, `progress.txt`, `backup_untracked/`, `data/state/*.lock`         |
+| `/tmp` → `data/` state      | **done**     | `state_paths.py`, lock/log under `data/state/`                                     |
+| P0 safety tests             | **verified** | See **External review P0 safety** table above                                      |
 
 See [`CC_X_REPO_HYGIENE.md`](./CC_X_REPO_HYGIENE.md).
 

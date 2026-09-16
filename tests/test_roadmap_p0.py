@@ -115,7 +115,24 @@ def test_weekly_ic_digest_from_board():
     assert digest["daily_ic"] is not None
 
 
-def test_autonomous_learning_cycle_research_only():
+def test_autonomous_learning_cycle_research_only(monkeypatch):
+    monkeypatch.setattr(
+        "src.services.autonomous_learning_loop._observe",
+        lambda: {
+            "closed_trades": 0,
+            "forward_outcome_rows": 0,
+            "forward_marks_with_r": 0,
+            "journal_entries": 0,
+        },
+    )
+    monkeypatch.setattr(
+        "src.services.autonomous_learning_loop._propose",
+        lambda _trades: {
+            "beliefs_due": 0,
+            "ab_experiments_proposed": 0,
+            "may_authorize_deploy": False,
+        },
+    )
     result = run_learning_cycle(phases=["observe", "calibrate", "propose"])
     assert result["authority"] == "research_only"
     assert result["may_authorize_deploy"] is False
@@ -124,7 +141,16 @@ def test_autonomous_learning_cycle_research_only():
     assert "headline" in result
 
 
-def test_meta_intelligence_summary_shape():
+def test_meta_intelligence_summary_shape(monkeypatch):
+    monkeypatch.setattr(
+        "src.services.autonomous_learning_loop._observe",
+        lambda: {
+            "closed_trades": 0,
+            "forward_outcome_rows": 0,
+            "forward_marks_with_r": 0,
+            "journal_entries": 0,
+        },
+    )
     run_learning_cycle(phases=["observe"])
     summary = build_meta_intelligence_summary()
     assert summary["authority"] == "research_only"

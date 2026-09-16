@@ -286,10 +286,16 @@ Respond ONLY in JSON:
         signal: Signal,
         news_headlines: List[str],
         social_sentiment: str = "No social sentiment data available",
+        *,
+        research_only: bool = True,
     ) -> Dict[str, Any]:
         """
         Validate a trading signal using GPT as a skeptical risk manager.
         Enforces strict JSON schema and logs every call for governance.
+
+        IDOS: ``research_only`` must stay True on any path that could precede
+        ranking, sizing, or broker execution. ``adjusted_confidence`` is
+        commentary only — never wire it into trade gates or ensembler scores.
         """
         # Extract edge checklist from signal (added by SignalEngine v4)
         checklist = (signal.feature_snapshot or {}).get("edge_checklist", {})
@@ -377,7 +383,7 @@ Respond ONLY in JSON:
 
             llm_log["parsed_result"] = result
 
-            return {
+            payload: Dict[str, Any] = {
                 "validation_result": result.get("validation_result", "PASS"),
                 "approval_status": result.get("approval_status", "conditional"),
                 "approval_flags": result.get("approval_flags", {}),
@@ -392,6 +398,11 @@ Respond ONLY in JSON:
                 "validated_at": datetime.now(timezone.utc).isoformat(),
                 "llm_log": llm_log,
             }
+            if research_only:
+                payload["authority"] = "research_only"
+                payload["affects_execution"] = False
+                payload["broker_eligible"] = False
+            return payload
 
         except Exception as e:
             latency_ms = int((time.time() - start_ts) * 1000)
@@ -402,12 +413,17 @@ Respond ONLY in JSON:
             self.logger.error(f"GPT validation failed for {signal.ticker}: {e}")
             # Fall back to deterministic validation (never silently pass)
             result = self._deterministic_validation(signal, checklist, rr_ratio)
-            return {
+            payload = {
                 **result,
                 "error": str(e),
                 "validated_at": datetime.now(timezone.utc).isoformat(),
                 "llm_log": llm_log,
             }
+            if research_only:
+                payload["authority"] = "research_only"
+                payload["affects_execution"] = False
+                payload["broker_eligible"] = False
+            return payload
 
     def _deterministic_validation(
         self, signal: Signal, checklist: Dict, rr_ratio: float
@@ -584,7 +600,11 @@ Respond ONLY in JSON:
         for signal in signals:
             news = news_by_ticker.get(signal.ticker, [])
             sentiment = sentiment_by_ticker.get(signal.ticker, "No data")
-            tasks.append(self.validate_signal(signal, news, sentiment))
+            tasks.append(
+                self.validate_signal(
+                    signal, news, sentiment, research_only=research_only
+                )
+            )
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

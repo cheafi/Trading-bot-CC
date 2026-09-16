@@ -99,7 +99,7 @@ We believe ...
   Marginal ROC ladder correctly ranked cash > deploy on 9/12 WAIT days; belief review stub linked to forward outcomes.
 
 We don't know ...
-  Calibration on conviction vs size (CCX-135 open); attention cost per surface (CCX-132 todo); Discovery browse still confuses rank with deploy permission.
+  Calibration on conviction vs size (CCX-135 in-progress); attention cost per surface (CCX-138 open); Discovery browse still confuses rank with deploy permission.
 
 Therefore ...
   KEEP: Mission Brief + WAIT collapse (Q3+Q4 lift). EXTEND: Belief Review full items (Q2+Q3). DELETE: rank hero prominence on WAIT days (Q4 harm). One improvement approved: CCX-135.
@@ -158,7 +158,7 @@ export AUTONOMOUS_LEARNING=1   # default 0 — off in production
 
 | Item                                    | Backlog   | Module                                     | Status        |
 | --------------------------------------- | --------- | ------------------------------------------ | ------------- |
-| Usage/ignore logging contract           | CCX-132   | _todo_                                     | todo          |
+| Usage/ignore logging contract           | CCX-132   | `usage_log.py`                             | **done**      |
 | Trust feedback hook on dismiss/override | CCX-133   | _todo_                                     | todo          |
 | Evolution Dashboard stub (Ops)          | CCX-134   | Ops panel                                  | todo          |
 | Belief Review API + Ops panel           | CCX-131   | `decision.py`, `cc-app.js`                 | **stub done** |
@@ -214,7 +214,7 @@ export AUTONOMOUS_LEARNING=1   # default 0 — off in production
 | Candidate                                     | Rationale                                             |
 | --------------------------------------------- | ----------------------------------------------------- |
 | Dual deploy signal (`can_deploy_today` in UI) | Authority drift — **removed** (ADR-015)               |
-| Duplicate Mission / PM strips                 | Attention cost — CCX-UX-04 todo                       |
+| Duplicate Mission / PM strips                 | **Resolved** — CCX-UX-04 PM strip SSOT shipped        |
 | Rank hero on WAIT days                        | Silence Engine — **collapsed by default** (CCX-UX-07) |
 | Multiple near-miss sources                    | Consolidate to single contract                        |
 | Research surfaces with deploy-ish copy        | Guide + research banner only                          |
