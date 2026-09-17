@@ -57,7 +57,10 @@ def _search_azure_index(ticker: str, *, limit: int = 3) -> List[Dict[str, Any]]:
         return []
     endpoint = os.getenv("AZURE_SEARCH_ENDPOINT", "").rstrip("/")
     index = os.getenv("AZURE_SEARCH_INDEX", "")
-    key = os.getenv("AZURE_SEARCH_KEY", "")
+    key = (
+        os.getenv("AZURE_SEARCH_KEY", "").strip()
+        or os.getenv("AZURE_SEARCH_API_KEY", "").strip()
+    )
     query = f"{ticker} trading thesis lesson"
     url = (
         f"{endpoint}/indexes/{urllib.parse.quote(index)}/docs"

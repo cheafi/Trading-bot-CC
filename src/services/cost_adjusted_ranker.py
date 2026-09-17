@@ -212,7 +212,9 @@ def enrich_opportunity_rows(
             sym = str(r.get("ticker") or "").upper()
             if sym:
                 r["theme_cluster_id"] = theme_cluster_id_for(sym)
-        register_tickers([str(r.get("ticker") or "") for r in with_io if r.get("ticker")])
+        register_tickers(
+            [str(r.get("ticker") or "") for r in with_io if r.get("ticker")]
+        )
         return attach_alpha_objects(with_io, run_id=run_id, top_n=12)
     except Exception:
         logger.debug("enrich_opportunity_rows IO/Alpha skipped", exc_info=True)

@@ -1547,7 +1547,9 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
         "data_stale": _quality_stale,
         "brief_stale": _brief_stale,
     }
-    payload["opportunity_verdict"] = _opportunity_verdict or build_opportunity_verdict(payload)
+    payload["opportunity_verdict"] = _opportunity_verdict or build_opportunity_verdict(
+        payload
+    )
     payload["cc_state"] = build_cc_state(
         tradeability=decision_model.get("honest_tradeability") or tradeability,
         should_trade=should_trade,
@@ -1733,16 +1735,12 @@ async def _refresh_today_authority(
         from src.services.ibkr_service import get_ibkr_service
 
         ibkr_st = get_ibkr_service().status()
-        ibkr_connected = bool(
-            ibkr_st.get("session_usable") or ibkr_st.get("connected")
-        )
+        ibkr_connected = bool(ibkr_st.get("session_usable") or ibkr_st.get("connected"))
     except Exception:
         ibkr_connected = False
 
     trust = out.get("trust") or {}
-    scanner_degraded = bool(
-        trust.get("stale") or trust.get("freshness") == "DEGRADED"
-    )
+    scanner_degraded = bool(trust.get("stale") or trust.get("freshness") == "DEGRADED")
     da_prev = out.get("decision_authority") or {}
     da_source = str(da_prev.get("source") or trust.get("source") or "")
     used_brief_fallback = "brief" in da_source or "fallback" in da_source
@@ -1790,7 +1788,9 @@ async def _refresh_today_authority(
     try:
         attach_decision_board(out, ops=ops, source="today")
     except Exception:
-        logger.debug("refresh today authority: decision_board attach failed", exc_info=True)
+        logger.debug(
+            "refresh today authority: decision_board attach failed", exc_info=True
+        )
     return sanitize_for_json(out)
 
 
@@ -2613,7 +2613,9 @@ def _next_quarterly_belief_review(from_day: date) -> date:
     return candidate
 
 
-def _firm_cadence_rituals(from_day: date, *, forward_marks: int) -> list[dict[str, Any]]:
+def _firm_cadence_rituals(
+    from_day: date, *, forward_marks: int
+) -> list[dict[str, Any]]:
     daily_done = forward_marks >= 0  # gate check surfaced elsewhere; stub checklist
     rituals = [
         {
@@ -2770,7 +2772,9 @@ async def decision_journal_create_entry(body: Dict[str, Any]):
         entry = append_entry(payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    decision_id = str(payload.get("decision_id") or entry.get("decision_id") or "").strip()
+    decision_id = str(
+        payload.get("decision_id") or entry.get("decision_id") or ""
+    ).strip()
     ticker = str(payload.get("ticker") or entry.get("ticker") or "").upper()
     decision = str(entry.get("decision") or "").upper()
     if decision_id and decision in {"DEPLOY", "DEPLOY_INTENT", "TRADE", "BUY"}:
@@ -2821,11 +2825,15 @@ async def decision_journal_deploy_intent_checklist(
         ss = _today_cache.get("system_state") or {}
         if ss.get("deploy_open"):
             sym = str(
-                (ba.get("best_trade_now") or td.get("best_trade") or {}).get("ticker") or ""
+                (ba.get("best_trade_now") or td.get("best_trade") or {}).get("ticker")
+                or ""
             ).upper()
         else:
             sym = str(
-                (ba.get("best_watch_upgrade") or td.get("best_watch") or {}).get("ticker") or ""
+                (ba.get("best_watch_upgrade") or td.get("best_watch") or {}).get(
+                    "ticker"
+                )
+                or ""
             ).upper()
         for key in ("top_5", "top_ranked", "opportunities", "near_miss"):
             for row in _today_cache.get(key) or []:
@@ -2854,7 +2862,9 @@ async def red_team_challenge(ticker: str = Query("", max_length=16)):
 
 
 @router.get("/api/v7/outside-view/base-rate")
-async def outside_view_base_rate(setup_type: str = Query("generic_breakout", max_length=64)):
+async def outside_view_base_rate(
+    setup_type: str = Query("generic_breakout", max_length=64),
+):
     """Outside View base-rate stub — research_only."""
     from src.services.outside_view import build_outside_view_base_rate
 
@@ -3014,7 +3024,8 @@ async def pre_decision_gate(ticker: str = Query("", max_length=10)):
         deploy_open = bool(ss.get("deploy_open"))
         if deploy_open:
             sym = str(
-                (ba.get("best_trade_now") or td.get("best_trade") or {}).get("ticker") or ""
+                (ba.get("best_trade_now") or td.get("best_trade") or {}).get("ticker")
+                or ""
             ).upper()
         top = (_today_cache.get("top_ranked") or [None])[0]
         if isinstance(top, dict):
@@ -3499,7 +3510,9 @@ async def usage_log_event(body: Dict[str, Any]):
         surface=str((body or {}).get("surface") or "unknown"),
         event=str((body or {}).get("event") or "open"),
         tab=str((body or {}).get("tab") or ""),
-        meta=(body or {}).get("meta") if isinstance((body or {}).get("meta"), dict) else {},
+        meta=(body or {}).get("meta")
+        if isinstance((body or {}).get("meta"), dict)
+        else {},
     )
     payload["ok"] = True
     return sanitize_for_json(payload)
@@ -3566,4 +3579,3 @@ async def learning_loop_run(body: Dict[str, Any] | None = None):
     )
     result["ok"] = True
     return sanitize_for_json(result)
-

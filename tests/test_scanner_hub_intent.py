@@ -44,7 +44,7 @@ def test_cc_instant_stale_scanners_has_decision_intent():
     import json
     from pathlib import Path
 
-    instant_path = Path(__file__).resolve().parents[1] / "_cc_instant.py"
+    instant_path = Path(__file__).resolve().parents[1] / "scripts" / "cc_instant.py"
     chunk = instant_path.read_text().split("class Handler")[0]
     ns: dict = {"__file__": str(instant_path)}
     exec(chunk, ns)  # noqa: S102

@@ -6,7 +6,7 @@ from src.services.alpha_factory import spawn_alpha_object_from_row
 from src.services.attribution_tree import resolve_attribution_chain
 from src.services.ev_ranking import compute_ev_score, enrich_rows_with_ev
 from src.services.intelligence_engine import build_intelligence_daily_report
-from src.services.knowledge_graph import neighbors_for, theme_cluster_id_for
+from src.services.knowledge_graph import neighbors_for
 
 
 def test_ev_score_research_only():

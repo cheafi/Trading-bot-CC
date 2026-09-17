@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Profile import times for main.py and its heavy deps."""
 
-import time, sys
+import time
 
 t0 = time.time()
 print("Starting import profiling...", flush=True)

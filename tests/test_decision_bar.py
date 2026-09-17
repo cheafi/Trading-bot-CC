@@ -5,7 +5,6 @@ import unittest
 from src.services.decision_bar import (
     bar_from_portfolio,
     bar_from_today,
-    build_decision_bar,
     evidence_quality_block,
 )
 from src.services.confluence_engine import build_confluence

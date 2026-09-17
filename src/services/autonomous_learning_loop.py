@@ -27,6 +27,7 @@ def is_autonomous_learning_enabled() -> bool:
         "yes",
     )
 
+
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _STATE_PATH = _DATA_DIR / "autonomous_learning_loop_state.json"
 _WEEKLY_IC_CACHE = _DATA_DIR / "weekly_ic_digest_latest.json"
@@ -108,7 +109,11 @@ def _propose(trades: List[Dict[str, Any]]) -> Dict[str, Any]:
     belief_items = build_belief_items(outcomes)
     due = sum(1 for it in belief_items if str(it.get("status") or "") == "due_review")
 
-    schedule_result: Dict[str, Any] = {"total_proposed": 0, "proposed": [], "skipped": []}
+    schedule_result: Dict[str, Any] = {
+        "total_proposed": 0,
+        "proposed": [],
+        "skipped": [],
+    }
     if trades:
         schedule_result = auto_schedule_experiments(trades)
 
@@ -203,10 +208,11 @@ def run_learning_cycle(
         from src.core.deployment_manifest import load_deployment_manifest
 
         manifest_after = load_deployment_manifest()
-        result["deployment_manifest_unchanged"] = (
-            manifest_before.get("deploy_open") == manifest_after.get("deploy_open")
-            and manifest_before.get("updated_at") == manifest_after.get("updated_at")
-        )
+        result["deployment_manifest_unchanged"] = manifest_before.get(
+            "deploy_open"
+        ) == manifest_after.get("deploy_open") and manifest_before.get(
+            "updated_at"
+        ) == manifest_after.get("updated_at")
     return result
 
 
@@ -214,7 +220,11 @@ def _headline(payload: Dict[str, Any]) -> str:
     obs = payload.get("observe") or {}
     cal = (payload.get("calibrate") or {}).get("calibration_report") or {}
     prop = payload.get("propose") or {}
-    marks = (cal.get("sample") or {}).get("forward_marks") or obs.get("forward_marks_with_r") or 0
+    marks = (
+        (cal.get("sample") or {}).get("forward_marks")
+        or obs.get("forward_marks_with_r")
+        or 0
+    )
     due = prop.get("beliefs_due") or 0
     if marks == 0 and obs.get("closed_trades", 0) == 0:
         return "Learning loop idle — log decisions and close trades to compound."
@@ -273,13 +283,17 @@ def build_meta_intelligence_summary() -> Dict[str, Any]:
         "idos_questions": {
             "know": f"{observe.get('forward_marks_with_r', 0)} forward marks on record",
             "believe": (last_run.get("propose") or {}).get("beliefs_due", 0),
-            "doubt": "Calibration drift" if (last_run.get("calibrate") or {}).get("drift_alert") else 0,
+            "doubt": "Calibration drift"
+            if (last_run.get("calibrate") or {}).get("drift_alert")
+            else 0,
             "act": "Human deploy gate unchanged",
         },
     }
 
 
-def persist_weekly_ic_digest(*, board: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def persist_weekly_ic_digest(
+    *, board: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Scheduler hook — cache weekly IC digest JSON for Ops export."""
     from src.services.weekly_ic_digest import build_weekly_ic_digest
 

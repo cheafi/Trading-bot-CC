@@ -88,7 +88,9 @@ def cancel_cooling(session_id: str, reason: str = "operator_cancel") -> Dict[str
     session["state"] = STATE_CANCELLED
     session["cancel_reason"] = why
     session["cancelled_at"] = _iso(_now())
-    _log_workflow_event(session["ticker"], "cooling_cancelled", session_id=sid, reason=why)
+    _log_workflow_event(
+        session["ticker"], "cooling_cancelled", session_id=sid, reason=why
+    )
     return get_status(sid)
 
 

@@ -1,5 +1,6 @@
 """Sprint 47 tests."""
-import sys, pathlib
+import sys
+import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 def test_meta_ensemble_import():

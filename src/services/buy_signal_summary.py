@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-_SIGNAL_TYPES = frozenset(
-    {"BREAKOUT", "TREND", "RS_LEADER", "ETF_THEME", "REVERSAL"}
-)
+_SIGNAL_TYPES = frozenset({"BREAKOUT", "TREND", "RS_LEADER", "ETF_THEME", "REVERSAL"})
 _DEPLOY_ACTIONS = frozenset({"TRADE", "BUY", "BUY_ON_DIP", "TRADE_NOW", "STRONG_TRADE"})
 _PILOT_ACTIONS = frozenset({"PILOT"})
-_WATCH_ACTIONS = frozenset({"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR"})
+_WATCH_ACTIONS = frozenset(
+    {"WATCH", "WAIT", "WATCH_TRIGGER", "LEADER", "LEADER_MONITOR"}
+)
 _AVOID_ACTIONS = frozenset({"AVOID", "NO_TRADE", "NO_TOUCH", "DO_NOT_TOUCH", "PASS"})
 
 
@@ -34,7 +34,9 @@ def classify_signal_type(row: Dict[str, Any]) -> str:
         return "REVERSAL"
     if str(row.get("leader") or "").upper() == "LEADER" or _f(row.get("rs_rank")) >= 72:
         return "RS_LEADER"
-    if "uptrend" in str(row.get("trend_structure") or "").lower() or row.get("above_50sma"):
+    if "uptrend" in str(row.get("trend_structure") or "").lower() or row.get(
+        "above_50sma"
+    ):
         return "TREND"
     if _f(row.get("vol_ratio")) >= 1.4:
         return "BREAKOUT"
@@ -169,7 +171,9 @@ def _upgrade_path(row: Dict[str, Any], authority: str) -> str:
         if gaps.get(key) not in ("ok", "n/a", None):
             needs.append(label)
     if needs:
-        return "Upgrade if: " + ", ".join(needs[:3]) + " · 升級需：" + "、".join(needs[:3])
+        return (
+            "Upgrade if: " + ", ".join(needs[:3]) + " · 升級需：" + "、".join(needs[:3])
+        )
     return "Confirm volume + sector rank · 確認量能與板塊排名"
 
 
@@ -191,7 +195,9 @@ def build_buy_signal_summary(row: Dict[str, Any]) -> Dict[str, Any]:
         "why_now": why,
         "authority_label": authority,
         "upgrade_path": _upgrade_path(row, authority),
-        "surface_authority": "monitor_only" if authority != "DEPLOY" else row.get("surface_authority"),
+        "surface_authority": "monitor_only"
+        if authority != "DEPLOY"
+        else row.get("surface_authority"),
     }
 
 

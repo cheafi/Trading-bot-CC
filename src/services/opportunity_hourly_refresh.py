@@ -68,11 +68,15 @@ async def run_opportunity_refresh(
                     "opportunities": len(response.get("opportunities") or []),
                     "near_miss": len(response.get("near_miss") or []),
                     "watch_qualified": int(
-                        (response.get("filter_funnel") or {}).get("watch_qualified_setups")
+                        (response.get("filter_funnel") or {}).get(
+                            "watch_qualified_setups"
+                        )
                         or 0
                     ),
                     "deploy_qualified": int(
-                        (response.get("filter_funnel") or {}).get("deploy_qualified_setups")
+                        (response.get("filter_funnel") or {}).get(
+                            "deploy_qualified_setups"
+                        )
                         or 0
                     ),
                     "board_mode": response.get("board_mode"),

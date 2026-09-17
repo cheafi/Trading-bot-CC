@@ -10,14 +10,12 @@ Tests for:
 """
 
 import json
-import math
 import os
-import shutil
 import sys
 import tempfile
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import numpy as np
 import pytest

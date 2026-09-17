@@ -1422,9 +1422,7 @@ def build_ranked_decision_authority(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Derive decision authority for playbook ranked / degraded boards."""
     existing = payload.get("decision_authority")
     stale_serve = bool(
-        payload.get("stale")
-        or payload.get("cached")
-        or payload.get("refreshing")
+        payload.get("stale") or payload.get("cached") or payload.get("refreshing")
     )
     if (
         isinstance(existing, dict)

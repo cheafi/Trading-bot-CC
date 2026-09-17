@@ -1,5 +1,6 @@
 """Sprint 46 tests — Honest confidence, shadow resolve, Swing_Project features."""
-import pytest, sys, pathlib
+import sys
+import pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 def test_honest_confidence_label():

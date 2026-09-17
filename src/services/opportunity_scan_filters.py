@@ -89,9 +89,16 @@ def scanner_agreement_flags(row: Dict[str, Any]) -> List[str]:
     text = f"{strategy} {pattern}"
     if str(row.get("leader") or "").upper() == "LEADER" or _f(row.get("rs_rank")) >= 70:
         flags.append("rs_leader")
-    if row.get("near_52w_high") or "breakout" in text or "squeeze" in text or "vcp" in text:
+    if (
+        row.get("near_52w_high")
+        or "breakout" in text
+        or "squeeze" in text
+        or "vcp" in text
+    ):
         flags.append("breakout")
-    if "uptrend" in str(row.get("trend_structure") or "").lower() or row.get("above_50sma"):
+    if "uptrend" in str(row.get("trend_structure") or "").lower() or row.get(
+        "above_50sma"
+    ):
         flags.append("trend")
     if _f(row.get("vol_ratio")) >= 1.15:
         flags.append("volume")
@@ -110,7 +117,9 @@ def scanner_agreement_count(row: Dict[str, Any]) -> int:
     return len(scanner_agreement_flags(row))
 
 
-def passes_scanner_agreement(row: Dict[str, Any], *, min_agreement: int = SCANNER_AGREEMENT_MIN) -> bool:
+def passes_scanner_agreement(
+    row: Dict[str, Any], *, min_agreement: int = SCANNER_AGREEMENT_MIN
+) -> bool:
     """Require multi-factor agreement before research-tier WATCH promotion."""
     if row.get("execution_ready"):
         return True
@@ -172,7 +181,9 @@ def filter_watch_promotion_candidates(
         if not passes_liquidity_filter(row):
             stats["liquidity_dropped"] += 1
             continue
-        needs_agreement = require_agreement and row.get("promotion_source") == "near_avoid"
+        needs_agreement = (
+            require_agreement and row.get("promotion_source") == "near_avoid"
+        )
         if needs_agreement and not passes_scanner_agreement(row):
             stats["agreement_dropped"] += 1
             continue

@@ -9,7 +9,8 @@ Validates the index.html template restructure:
 - Why-now / why-not / invalidation / action fields rendered
 """
 
-import pathlib, re, sys
+import pathlib
+import re
 
 ROOT = pathlib.Path(__file__).resolve().parent
 # Try workspace copy first, then /tmp/cc_temp

@@ -232,7 +232,9 @@ class BaseBroker(ABC):
         pass
 
     @abstractmethod
-    async def place_order(self, order: OrderRequest, *, dry_run: bool = True) -> OrderResult:
+    async def place_order(
+        self, order: OrderRequest, *, dry_run: bool = True
+    ) -> OrderResult:
         """
         Place a trading order.
 

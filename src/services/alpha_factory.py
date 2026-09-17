@@ -62,11 +62,15 @@ def spawn_alpha_object_from_row(
     alpha = AlphaObject(
         ticker=ticker,
         investment_id=row.get("investment_id"),
-        hypothesis=str(row.get("why_now") or row.get("edge_hypothesis") or f"{ticker} setup"),
+        hypothesis=str(
+            row.get("why_now") or row.get("edge_hypothesis") or f"{ticker} setup"
+        ),
         setup_type=str(row.get("setup_type") or row.get("ladder_bucket") or ""),
         expected_alpha_bps=row.get("expected_alpha_bps") or row.get("net_edge_bps"),
         evidence=evidence,
-        confidence=min(float(row.get("thesis_conf") or row.get("confidence") or 0.5), 1.0),
+        confidence=min(
+            float(row.get("thesis_conf") or row.get("confidence") or 0.5), 1.0
+        ),
         stage=AlphaLifecycleStage.HYPOTHESIS,
         attribution_root_ref=row.get("attribution_root_ref")
         or make_attribution_root_ref(decision_id),

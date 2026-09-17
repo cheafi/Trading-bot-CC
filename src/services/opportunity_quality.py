@@ -242,7 +242,9 @@ def classify_opportunity_quality(
         tier = "PROMISING"
         score = min(score, 79)
 
-    reasons = _reasons_for_tier(tier, gates, row, data_stale=data_stale, brief_stale=brief_stale)
+    reasons = _reasons_for_tier(
+        tier, gates, row, data_stale=data_stale, brief_stale=brief_stale
+    )
     upgrade = _upgrade_path(gates, row) if tier in ("WEAK", "PROMISING") else []
 
     return {
@@ -251,7 +253,8 @@ def classify_opportunity_quality(
         "reasons": reasons,
         "upgrade_path": upgrade,
         "gates": gates,
-        "research_context_only": research_context_only or bool(row.get("research_context_only")),
+        "research_context_only": research_context_only
+        or bool(row.get("research_context_only")),
         "label_zh": {
             "STRONG": "強 · STRONG",
             "PROMISING": "可期 · PROMISING",
@@ -294,7 +297,10 @@ def build_quality_decomposition(row: Dict[str, Any]) -> Dict[str, Any]:
     portfolio_score = 80 if pf_allowed is not False else 40
 
     return {
-        "structure": {"score": structure_score, "extended": bool(struct.get("is_extended"))},
+        "structure": {
+            "score": structure_score,
+            "extended": bool(struct.get("is_extended")),
+        },
         "reward_risk": {"score": rr_score, "rr": round(rr, 2)},
         "leadership": {"score": leadership_score, "leader": leader or "—"},
         "timing": {"score": timing_score, "thesis": round(thesis, 2)},
@@ -313,7 +319,9 @@ def brief_age_days() -> Optional[int]:
         path = files[-1]
         m = re.search(r"brief-(\d{4}-\d{2}-\d{2})\.json", os.path.basename(path))
         if m:
-            brief_dt = datetime.strptime(m.group(1), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            brief_dt = datetime.strptime(m.group(1), "%Y-%m-%d").replace(
+                tzinfo=timezone.utc
+            )
             return max(0, (datetime.now(timezone.utc) - brief_dt).days)
         mtime = os.path.getmtime(path)
         return max(0, int((datetime.now(timezone.utc).timestamp() - mtime) / 86400))
@@ -348,7 +356,9 @@ def attach_quality_to_row(
     rank_total: Optional[int] = None,
 ) -> Dict[str, Any]:
     out = dict(row)
-    q = classify_opportunity_quality(out, data_stale=data_stale, brief_stale=brief_stale)
+    q = classify_opportunity_quality(
+        out, data_stale=data_stale, brief_stale=brief_stale
+    )
     out["quality"] = q
     out["quality_tier"] = q["tier"]
     out["quality_decomposition"] = build_quality_decomposition(out)
@@ -373,7 +383,9 @@ def attach_quality_to_rows(
         return []
     total = len(rows)
     return [
-        attach_quality_to_row(r, data_stale=data_stale, brief_stale=brief_stale, rank_total=total)
+        attach_quality_to_row(
+            r, data_stale=data_stale, brief_stale=brief_stale, rank_total=total
+        )
         for r in rows
     ]
 
@@ -389,9 +401,13 @@ def build_opportunity_verdict(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     all_rows = rows + near
     if not all(r.get("quality") for r in rows):
-        rows = attach_quality_to_rows(rows, data_stale=data_stale, brief_stale=brief_stale)
+        rows = attach_quality_to_rows(
+            rows, data_stale=data_stale, brief_stale=brief_stale
+        )
     if near and not all(r.get("quality") for r in near):
-        near = attach_quality_to_rows(near, data_stale=data_stale, brief_stale=brief_stale)
+        near = attach_quality_to_rows(
+            near, data_stale=data_stale, brief_stale=brief_stale
+        )
 
     monitor_qualified = sum(1 for r in all_rows if _is_monitor_qualified(r))
     quality_qualified = sum(
@@ -405,7 +421,9 @@ def build_opportunity_verdict(payload: Dict[str, Any]) -> Dict[str, Any]:
             or 0
         )
 
-    promising_rows = [r for r in all_rows if (r.get("quality") or {}).get("tier") == "PROMISING"]
+    promising_rows = [
+        r for r in all_rows if (r.get("quality") or {}).get("tier") == "PROMISING"
+    ]
     weak_rows = [r for r in rows if (r.get("quality") or {}).get("tier") == "WEAK"]
 
     if quality_qualified >= 1:
@@ -433,7 +451,11 @@ def build_opportunity_verdict(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     closest_upgrade: Optional[Dict[str, Any]] = None
     candidates = sorted(
-        [r for r in all_rows if (r.get("quality") or {}).get("tier") in ("WEAK", "PROMISING")],
+        [
+            r
+            for r in all_rows
+            if (r.get("quality") or {}).get("tier") in ("WEAK", "PROMISING")
+        ],
         key=lambda r: int((r.get("quality") or {}).get("score") or 0),
         reverse=True,
     )
@@ -460,8 +482,7 @@ def build_opportunity_verdict(payload: Dict[str, Any]) -> Dict[str, Any]:
     elif state == "PROMISING_ONLY":
         main_blocker = "No STRONG tier — partial gates only"
         next_action = (
-            "Monitor PROMISING rows for gate upgrades · "
-            "監察可期候選直至閘門補齊"
+            "Monitor PROMISING rows for gate upgrades · 監察可期候選直至閘門補齊"
         )
     else:
         main_blocker = "Board empty or all rejected"
@@ -499,15 +520,21 @@ def build_opportunity_verdict(payload: Dict[str, Any]) -> Dict[str, Any]:
                 if best_monitor
                 else None
             ),
-            "tier": (best_monitor.get("quality") or {}).get("tier") if best_monitor else None,
-            "score": (best_monitor.get("quality") or {}).get("score") if best_monitor else None,
+            "tier": (best_monitor.get("quality") or {}).get("tier")
+            if best_monitor
+            else None,
+            "score": (best_monitor.get("quality") or {}).get("score")
+            if best_monitor
+            else None,
         },
         "closest_upgrade": {
             "ticker": closest_upgrade.get("ticker") if closest_upgrade else None,
             "needs": (closest_upgrade.get("quality") or {}).get("upgrade_path") or []
             if closest_upgrade
             else [],
-            "tier": (closest_upgrade.get("quality") or {}).get("tier") if closest_upgrade else None,
+            "tier": (closest_upgrade.get("quality") or {}).get("tier")
+            if closest_upgrade
+            else None,
         },
         "main_blocker": main_blocker,
         "main_blocker_bilingual": main_blocker,
@@ -538,7 +565,9 @@ def tags_for_playbook_row(
     **_: Any,
 ) -> Dict[str, Any]:
     """Hook-compatible with enrich_opportunity_row tag pattern."""
-    q = classify_opportunity_quality(row, data_stale=data_stale, brief_stale=brief_stale)
+    q = classify_opportunity_quality(
+        row, data_stale=data_stale, brief_stale=brief_stale
+    )
     return {
         "quality": q,
         "quality_decomposition": build_quality_decomposition(row),
@@ -569,10 +598,7 @@ def attach_opportunity_verdict_to_payload(payload: Dict[str, Any]) -> Dict[str, 
     out = dict(payload)
     verdict = out.get("opportunity_verdict") or build_opportunity_verdict(out)
     rows = list(
-        out.get("top_ranked")
-        or out.get("top_5")
-        or out.get("opportunities")
-        or []
+        out.get("top_ranked") or out.get("top_5") or out.get("opportunities") or []
     )
     near = list(out.get("near_miss") or out.get("near_miss_rows") or [])
     all_rows = rows + near

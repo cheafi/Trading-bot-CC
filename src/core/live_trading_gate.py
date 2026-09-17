@@ -35,11 +35,7 @@ LiveTradingGateResult = LiveTradingAuthorisation
 
 def _parse_allowed_accounts() -> tuple[str, ...]:
     raw = os.environ.get("LIVE_TRADING_ACCOUNT", "")
-    return tuple(
-        part.strip().upper()
-        for part in raw.split(",")
-        if part.strip()
-    )
+    return tuple(part.strip().upper() for part in raw.split(",") if part.strip())
 
 
 def evaluate_live_trading_gate(

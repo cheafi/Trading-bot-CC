@@ -1,7 +1,5 @@
 """Sprint 45 tests — Batch Portfolio Import / Futu Sync / Portfolio Advise."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
 
 
 # ── 1. API endpoint registration ──────────────────────────────────────
@@ -20,7 +18,6 @@ class TestPortfolioEndpointsExist:
     """Verify Sprint 45 routes are registered."""
 
     def _routes(self):
-        import importlib, sys
         # We can't easily start the full app, so check source
         src = _read_all_api_source()
         return src
@@ -138,7 +135,7 @@ class TestDiscordCommands:
 
 class TestExpertCommitteeStillWorks:
     def test_import(self):
-        from src.engines.expert_committee import ExpertCommittee, CommitteeVerdict
+        from src.engines.expert_committee import ExpertCommittee
         ec = ExpertCommittee()
         assert len(ec.experts) == 7
 

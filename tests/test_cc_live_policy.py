@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 
 from src.services.cc_live_policy import (
     build_live_unavailable_ranked,

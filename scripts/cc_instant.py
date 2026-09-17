@@ -486,14 +486,18 @@ def _load_snapshot():
         return None
 
 
+def _brief_has_pipeline_rows(brief: dict) -> bool:
+    return any(brief.get(section) for section in ("actionable", "watch", "review"))
+
+
 def _load_latest_brief() -> dict | None:
-    """Load newest data/brief-YYYY-MM-DD.json without importing the app stack."""
+    """Load newest brief with pipeline rows (skip empty same-day snapshots)."""
     cache_path = _REPO_ROOT / "data/cache/brief_latest.json"
     try:
         from src.services.brief_data_service import load_brief
 
         data = load_brief()
-        if isinstance(data, dict) and data:
+        if isinstance(data, dict) and data and _brief_has_pipeline_rows(data):
             data = dict(data)
             data["_brief_path"] = data.get("_brief_path") or "brief_data_service"
             return data
@@ -509,7 +513,7 @@ def _load_latest_brief() -> dict | None:
                 try:
                     with path.open(encoding="utf-8") as fh:
                         data = json.load(fh)
-                    if isinstance(data, dict):
+                    if isinstance(data, dict) and _brief_has_pipeline_rows(data):
                         data["_brief_path"] = str(path)
                         try:
                             cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -530,7 +534,7 @@ def _load_latest_brief() -> dict | None:
     try:
         if cache_path.is_file():
             data = json.loads(cache_path.read_text(encoding="utf-8"))
-            if isinstance(data, dict) and data:
+            if isinstance(data, dict) and data and _brief_has_pipeline_rows(data):
                 data["_brief_path"] = str(cache_path)
                 return data
     except Exception:

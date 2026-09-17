@@ -215,9 +215,7 @@ def _format_message(
         context_label = "Signal"
     else:
         badge = "👀 WATCH / MONITOR"
-        authority = (
-            "Research only · 監控 · NOT deploy permission · 非部署許可 · rank ≠ permission"
-        )
+        authority = "Research only · 監控 · NOT deploy permission · 非部署許可 · rank ≠ permission"
         footer_extra = "Monitor only — rank ≠ permission · 僅供監控，排名≠許可"
         context_label = "Why it matters"
 
@@ -347,7 +345,9 @@ def _detect_alerts(
                         "blocker": _row_blocker(top_row),
                         "headline": "New top-ranked · 新榜首",
                         "degraded": degraded,
-                        "buy_signal_summary": str(top_row.get("buy_signal_summary") or ""),
+                        "buy_signal_summary": str(
+                            top_row.get("buy_signal_summary") or ""
+                        ),
                         "why_now": str(top_row.get("why_now") or ""),
                     }
                 )

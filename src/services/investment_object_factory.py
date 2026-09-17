@@ -29,10 +29,7 @@ def _provenance_from_row(row: Dict[str, Any]) -> ProvenanceBlock:
     trust = row.get("trust") if isinstance(row.get("trust"), dict) else {}
     prov = row.get("provenance") if isinstance(row.get("provenance"), dict) else {}
     mode = str(
-        prov.get("mode")
-        or trust.get("freshness")
-        or row.get("data_mode")
-        or "LIVE"
+        prov.get("mode") or trust.get("freshness") or row.get("data_mode") or "LIVE"
     ).upper()
     if mode in ("DEGRADED", "STALE"):
         mode = "DEGRADED"
@@ -71,7 +68,9 @@ def investment_object_from_row(
     ticker = str(row.get("ticker") or "").upper()
     decision_id = str(row.get("decision_id") or make_decision_id(ticker, row=row))
     fit = portfolio_fit or {}
-    stage = InvestmentStage.GATED if row.get("execution_ready") else InvestmentStage.IDEA
+    stage = (
+        InvestmentStage.GATED if row.get("execution_ready") else InvestmentStage.IDEA
+    )
     if row.get("deploy_eligible"):
         stage = InvestmentStage.GATED
 
@@ -80,13 +79,17 @@ def investment_object_from_row(
         sector_overlap_pct=float(
             fit.get("sector_overlap_pct") or row.get("sector_overlap_pct") or 0.0
         ),
-        correlation_note=str(fit.get("correlation_note") or row.get("correlation_note") or ""),
+        correlation_note=str(
+            fit.get("correlation_note") or row.get("correlation_note") or ""
+        ),
         replacement_delta=fit.get("replacement_delta") or row.get("replacement_delta"),
         what_becomes_worse=list(
             fit.get("what_becomes_worse") or row.get("what_becomes_worse") or []
         ),
         concentration_label=str(
-            fit.get("concentration_label") or row.get("concentration_label") or "neutral"
+            fit.get("concentration_label")
+            or row.get("concentration_label")
+            or "neutral"
         ),
     )
 
@@ -106,7 +109,9 @@ def investment_object_from_row(
         ev_score=row.get("ev_score"),
         ev_components=dict(row.get("ev_components") or {}),
         confidence=int(row.get("confidence") or row.get("score") or 50),
-        theme_tags=list(row.get("theme_tags") or ([row["theme"]] if row.get("theme") else [])),
+        theme_tags=list(
+            row.get("theme_tags") or ([row["theme"]] if row.get("theme") else [])
+        ),
         sector=str(row.get("sector") or ""),
         theme_cluster_id=row.get("theme_cluster_id"),
         portfolio_impact=portfolio_impact,

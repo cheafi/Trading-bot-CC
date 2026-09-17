@@ -11,7 +11,6 @@ import sys
 import os
 
 import numpy as np
-import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -85,7 +84,6 @@ class TestPositionSizing:
 
     def test_size_respects_max_position(self):
         """Sized position must not exceed max_position_pct of portfolio."""
-        from src.core.risk_limits import RISK
         portfolio = 100_000
         # 1% risk with a wide 10% stop → modest position
         entry, stop = 100.0, 90.0  # 10% stop

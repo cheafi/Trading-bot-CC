@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any
 
 # Allow-listed top-level export keys only.
 _EXPORT_ROOT_ALLOWLIST = frozenset(
@@ -77,8 +78,8 @@ def _is_secret_key(key: str) -> bool:
 def _filter_mapping(
     data: Mapping[str, Any],
     allowlist: Iterable[str],
-) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
+) -> dict[str, Any]:
+    out: dict[str, Any] = {}
     for key in allowlist:
         if key not in data or _is_secret_key(key):
             continue
@@ -98,7 +99,7 @@ def build_dashboard_export_view(
     source: Mapping[str, Any],
     *,
     version: str = "cc-x",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Return an allow-listed dashboard export payload — strips secrets by construction."""
     root = _filter_mapping(source, _EXPORT_ROOT_ALLOWLIST)
     if "system_state" in source and isinstance(source["system_state"], dict):
@@ -122,10 +123,10 @@ def build_dashboard_export_view(
     return root
 
 
-def export_contains_secret(payload: Mapping[str, Any]) -> Optional[str]:
+def export_contains_secret(payload: Mapping[str, Any]) -> str | None:
     """Return the first secret-like key found anywhere in payload (test helper)."""
 
-    def _walk(obj: Any, prefix: str = "") -> Optional[str]:
+    def _walk(obj: Any, prefix: str = "") -> str | None:
         if isinstance(obj, Mapping):
             for key, value in obj.items():
                 key_s = f"{prefix}.{key}" if prefix else str(key)

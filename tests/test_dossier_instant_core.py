@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CC_INSTANT = ROOT / "_cc_instant.py"
+CC_INSTANT = ROOT / "scripts" / "cc_instant.py"
 
 
 def _load_cc_helpers():

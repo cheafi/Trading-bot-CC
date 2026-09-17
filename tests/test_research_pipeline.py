@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,7 +11,7 @@ from src.services import research_store, vibe_agent_store
 from src.services.operator_state_contract import build_page_capability
 from src.services.reports_library import export_report
 from src.services.research_pipeline import run_research_pipeline
-from src.services.research_safety import PINE_DISCLAIMER, research_safety_contract, sanitize_research_payload
+from src.services.research_safety import PINE_DISCLAIMER, research_safety_contract
 from src.services.strategy_builder import parse_strategy_prompt
 from src.services.strategy_export import export_pine_draft
 from src.services.validation_lab import run_validation

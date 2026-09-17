@@ -33,9 +33,7 @@ def _extract_regime(payload: Dict[str, Any]) -> Dict[str, Any]:
         "label": mr.get("label") or mr.get("risk_state") or "NEUTRAL",
         "trend": mr.get("trend") or "SIDEWAYS",
         "tradeability": tb,
-        "should_trade": bool(
-            mr.get("should_trade", tb not in ("NO_TRADE", "WAIT"))
-        ),
+        "should_trade": bool(mr.get("should_trade", tb not in ("NO_TRADE", "WAIT"))),
         "vix": mr.get("vix"),
         "breadth": mr.get("breadth"),
         "macro_regime": dm.get("macro_regime"),
@@ -67,9 +65,9 @@ def _normalize_payload_for_board(payload: Dict[str, Any]) -> Dict[str, Any]:
         out["execution_readiness"] = ba["execution_readiness"]
     funnel = out.get("filter_funnel") or {}
     if out.get("deploy_qualified_count") is None and funnel:
-        out["deploy_qualified_count"] = funnel.get("deploy_qualified_setups") or funnel.get(
-            "execution_ready_setups"
-        )
+        out["deploy_qualified_count"] = funnel.get(
+            "deploy_qualified_setups"
+        ) or funnel.get("execution_ready_setups")
     return out
 
 
@@ -213,7 +211,9 @@ def build_decision_board(
             decision_authority=normalized.get("decision_authority") or {},
             execution_readiness=normalized.get("execution_readiness") or {},
             surface_authority=normalized.get("surface_authority"),
-            trust=normalized.get("trust") if isinstance(normalized.get("trust"), dict) else None,
+            trust=normalized.get("trust")
+            if isinstance(normalized.get("trust"), dict)
+            else None,
         )
     if not normalized.get("system_state"):
         attach_system_state(normalized)

@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-CC_INSTANT = ROOT / "_cc_instant.py"
+CC_INSTANT = ROOT / "scripts" / "cc_instant.py"
 
 
 def _load_instant_ibkr_helpers():

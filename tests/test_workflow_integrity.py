@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
-CC_INSTANT = ROOT / "_cc_instant.py"
+CC_INSTANT = ROOT / "scripts" / "cc_instant.py"
 
 
 def test_index_html_instant_degraded_banner_wired():

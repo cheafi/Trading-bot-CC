@@ -20,9 +20,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict, List
 
-import numpy as np
 import pandas as pd
-import pytest
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -251,8 +249,7 @@ def test_recent_wins_losses_split():
 
 def test_portfolio_returns_returns_tuple():
     """_portfolio_returns() must return (pd.Series, dict) — Sprint 107 contract."""
-    import asyncio
-    from unittest.mock import AsyncMock, MagicMock, patch
+    from unittest.mock import patch
     from src.services.fund_lab_service import FundLabService
 
     svc = FundLabService()
@@ -272,7 +269,6 @@ def test_portfolio_returns_returns_tuple():
 
 
 def test_portfolio_returns_per_pick_keyed_by_ticker():
-    import asyncio
     from unittest.mock import patch
     from src.services.fund_lab_service import FundLabService
 

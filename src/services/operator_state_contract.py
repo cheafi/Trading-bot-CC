@@ -586,9 +586,17 @@ def build_warmup_module_checklist(
     """Warmup checklist for /health while full API imports (cc_instant + Ops strip)."""
     return [
         {"key": "shell", "label": "Shell", "ready": bool(shell_ok)},
-        {"key": "cached_board", "label": "Cached board", "ready": bool(cached_board_ok)},
+        {
+            "key": "cached_board",
+            "label": "Cached board",
+            "ready": bool(cached_board_ok),
+        },
         {"key": "market_data", "label": "Market data", "ready": bool(market_data_ok)},
-        {"key": "dossier_core", "label": "Dossier core", "ready": bool(dossier_core_ok)},
+        {
+            "key": "dossier_core",
+            "label": "Dossier core",
+            "ready": bool(dossier_core_ok),
+        },
         {
             "key": "research_enrichments",
             "label": "Research enrichments",

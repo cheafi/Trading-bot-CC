@@ -26,7 +26,9 @@ def build_intelligence_daily_report(
         lessons_captured=lessons_captured,
     )
     gates_active = bool((payload.get("decision_authority") or {}).get("gates_active"))
-    knowledge_hits = len(payload.get("top_5") or []) + len(payload.get("opportunities") or [])
+    knowledge_hits = len(payload.get("top_5") or []) + len(
+        payload.get("opportunities") or []
+    )
 
     scores = {
         "knowledge": _score_block(
@@ -58,7 +60,11 @@ def build_intelligence_daily_report(
         "alpha": _score_block(
             min(60 + int(alpha_kpis.get("alpha_preserved_bps") or 0) // 10, 85),
             +2,
-            ["alpha_preserved > alpha_lost" if alpha_kpis["alpha_preserved_bps"] >= alpha_kpis["alpha_lost_bps"] else "alpha under pressure"],
+            [
+                "alpha_preserved > alpha_lost"
+                if alpha_kpis["alpha_preserved_bps"] >= alpha_kpis["alpha_lost_bps"]
+                else "alpha under pressure"
+            ],
         ),
     }
     avg = sum(s["value"] for s in scores.values()) / len(scores)

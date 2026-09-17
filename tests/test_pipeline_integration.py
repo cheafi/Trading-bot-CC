@@ -6,11 +6,10 @@ with mock data. No broker, no GPT, no yfinance calls.
 
 Run: python -m pytest tests/test_pipeline_integration.py -v
 """
-import asyncio
 import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -25,7 +24,6 @@ from src.engines.signal_engine import (
 )
 from src.engines.opportunity_ensembler import OpportunityEnsembler
 from src.engines.regime_router import RegimeRouter, RegimeState
-from src.scanners.universe_builder import UniverseBuilder
 
 
 # ── Fixtures ──────────────────────────────────────────────────────

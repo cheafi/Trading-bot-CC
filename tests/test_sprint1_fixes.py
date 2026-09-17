@@ -8,7 +8,6 @@ Tests:
   4. Risk breakers: daily PnL updates, weekly enforced, partial exits work
 """
 import unittest
-from unittest.mock import patch, MagicMock
 from datetime import datetime
 import sys
 import os

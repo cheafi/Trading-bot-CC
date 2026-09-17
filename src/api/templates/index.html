@@ -2712,6 +2712,7 @@
             </template>
             <div class="text-[8px] mt-1 mono" style="color:var(--t3)" x-show="marketStripStaleSnapshotLine()" x-text="marketStripStaleSnapshotLine()"></div>
             <div class="text-[8px] mono" style="color:var(--t3)" x-show="marketStripStaleRenderLine()" x-text="marketStripStaleRenderLine()"></div>
+            <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="staleRefreshRecoveryLine()"></div>
           </div>
         </template>
         <template x-if="marketStrip.loading && !indices.length">

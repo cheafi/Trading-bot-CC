@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
 CC_HELPERS = ROOT / "src" / "api" / "static" / "cc-helpers.js"
 DEPLOY_PARTIAL = ROOT / "src" / "api" / "templates" / "cc" / "partials" / "deploy_surfaces.html"
-RUNBOOK = ROOT / "docs" / "CC_SOAK_STAGING_RUNBOOK.md"
+RUNBOOK = ROOT / "docs" / "archive" / "CC_SOAK_STAGING_RUNBOOK.md"
 
 
 def _extract_js_object(fn_name: str, js: str) -> dict[str, str]:

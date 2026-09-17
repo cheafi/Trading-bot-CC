@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.services.rs_decision_surface import _buyability, _period_return_pct
+from src.services.rs_decision_surface import _buyability
 
 
 class TestRsDecision(unittest.TestCase):

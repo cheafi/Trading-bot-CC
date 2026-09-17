@@ -1,1 +1,2 @@
-The Alpine JS UI spec is applied.
+# Current sprint (2026-09-16) — see docs/CC_X_ENGINEERING_BACKLOG.md
+# Active: CCX-156 Journal Phase 2 · CCX-131/135 Belief Review · CCX-053 Marginal ROC · CCX-180 DSR/fitness Week 1 shipped

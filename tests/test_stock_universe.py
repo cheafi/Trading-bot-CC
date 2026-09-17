@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 
-import pytest
 
 from src.core.stock_universe import (
     CORE_WATCHLIST,
@@ -20,7 +19,6 @@ from src.core.stock_universe import (
 from src.core.universe_loader import (
     load_universe,
     parse_universe,
-    reset_universe_cache,
     validate_ticker,
 )
 

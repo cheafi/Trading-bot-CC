@@ -186,7 +186,7 @@ def test_index_html_mission_monitors_fallback_label():
 
 
 def test_cc_instant_degraded_banner_contract():
-    source = (ROOT / "_cc_instant.py").read_text(encoding="utf-8")
+    source = (ROOT / "scripts" / "cc_instant.py").read_text(encoding="utf-8")
     assert "DEGRADED_BANNER" in source
     assert "_stamp_instant_degraded" in source
     assert "_encode_degraded" in source

@@ -15,9 +15,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.engines.opportunity_ensembler import (
     OpportunityEnsembler,
     DEFAULT_WEIGHTS,
-    MIN_COMPOSITE_SCORE,
-    MIN_RISK_REWARD,
-    MIN_WIN_PROBABILITY,
 )
 
 

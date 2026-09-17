@@ -17,9 +17,7 @@ _TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,12}$")
 _MAX_TICKER_LEN = 12
 
 # Repo-root relative — resolved from this module, never from request input.
-_DEFAULT_UNIVERSE_PATH = (
-    Path(__file__).resolve().parents[2] / "data" / "universe.json"
-)
+_DEFAULT_UNIVERSE_PATH = Path(__file__).resolve().parents[2] / "data" / "universe.json"
 
 
 def validate_ticker(ticker: str) -> Optional[str]:

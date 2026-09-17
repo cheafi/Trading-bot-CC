@@ -4,7 +4,6 @@ Tests for src/services/indicators.py
 Risk principle: every indicator must be CAUSAL (no look-ahead bias).
 Team RISK verdict: look-ahead in indicators = silent P&L fraud.
 """
-import math
 import sys
 import os
 
@@ -17,7 +16,6 @@ from src.services.indicators import (
     rolling_mean,
     rolling_std,
     ema,
-    _ema_fast,
     compute_indicators,
     dual_thrust_levels,
     compute_rs_vs_benchmark,

@@ -286,7 +286,9 @@ class FutuBroker(BaseBroker):
             logger.error(f"Get quote error for {ticker}: {e}")
             return None
 
-    async def place_order(self, order: OrderRequest, *, dry_run: bool = True) -> OrderResult:
+    async def place_order(
+        self, order: OrderRequest, *, dry_run: bool = True
+    ) -> OrderResult:
         """Place a trading order."""
         from src.core.order_execution import (
             assert_live_order_permitted,
@@ -309,7 +311,9 @@ class FutuBroker(BaseBroker):
                 message="Dry-run — Futu place_order not called",
             )
 
-        assert_live_order_permitted(dry_run=False, account=getattr(self, "account_id", ""))
+        assert_live_order_permitted(
+            dry_run=False, account=getattr(self, "account_id", "")
+        )
 
         if not self.is_connected:
             return OrderResult(success=False, message="Not connected to Futu")

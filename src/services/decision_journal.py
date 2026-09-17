@@ -220,7 +220,9 @@ def summary(limit: int = 20) -> Dict[str, Any]:
         "recent_count": len(recent),
         "stub_count_recent": stubs,
         "entries": recent,
-        "schema_fields": sorted(_REQUIRED_FIELDS | {"date", "review_dates", "outcome", "learning"}),
+        "schema_fields": sorted(
+            _REQUIRED_FIELDS | {"date", "review_dates", "outcome", "learning"}
+        ),
         "generated_at": _utc_now_iso(),
     }
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from src.core.stock_universe import (
     ALL_ETFS,
@@ -15,9 +14,7 @@ from src.core.stock_universe import (
 from src.engines.scanner_matrix import IndexETFTrendScanner
 from src.engines.sector_classifier import SectorClassifier
 from src.services.decision_truth_model import (
-    _PipelineWrap,
     _brief_monitor_cap,
-    refine_action,
 )
 from src.services.playbook_near_miss import (
     DISCOVERY_NEAR_MISS_STRIP_LIMIT,

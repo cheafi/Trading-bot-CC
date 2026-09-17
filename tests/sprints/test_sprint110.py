@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -42,7 +41,6 @@ class TestRecordOutcomeExtended:
     def test_stores_forward_return(self, tmp_path):
         from src.engines.self_learning import (
             record_prediction_outcome,
-            _load_brier_data,
         )
 
         with _patched_brier_path(tmp_path):

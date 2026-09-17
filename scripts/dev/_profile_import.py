@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Profile import times to find the startup bottleneck."""
 
-import time, sys, traceback
+import time
 
 t0 = time.time()
 

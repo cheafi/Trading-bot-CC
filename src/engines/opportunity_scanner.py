@@ -465,9 +465,7 @@ async def run_opportunity_scanner(
     generated_at = datetime.now(timezone.utc).isoformat()
 
     # Core CC X tier first, then bulk scanner universe (chunked fetch)
-    universe = list(
-        dict.fromkeys(tiered_scan_universe() + list(US_UNIVERSE))
-    )
+    universe = list(dict.fromkeys(tiered_scan_universe() + list(US_UNIVERSE)))
     universe_size = len(universe)
 
     # ── Step 1: Fetch SPY as benchmark ──────────────────────────────────────

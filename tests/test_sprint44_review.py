@@ -12,10 +12,7 @@ Covers:
 
 from __future__ import annotations
 
-import math
-from unittest.mock import AsyncMock, patch
 
-import pytest
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -27,9 +24,6 @@ class TestConformalPredictor:
     def test_import(self):
         from src.engines.conformal_predictor import (
             ConformalPredictor,
-            PredictionInterval,
-            reliability_bucket,
-            reliability_note,
         )
         assert ConformalPredictor is not None
 
@@ -110,7 +104,7 @@ class TestConformalPredictor:
 class TestExpertCommittee:
     def test_import(self):
         from src.engines.expert_committee import (
-            ExpertCommittee, Expert, ExpertVote, CommitteeVerdict,
+            ExpertCommittee,
         )
         assert ExpertCommittee is not None
 
@@ -314,7 +308,7 @@ class TestFredClient:
 
 class TestEdgarClient:
     def test_import(self):
-        from src.ingestors.edgar import EdgarClient, Filing, InsiderTransaction
+        from src.ingestors.edgar import EdgarClient
         assert EdgarClient is not None
 
     def test_cik_cache(self):

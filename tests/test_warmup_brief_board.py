@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import json
 
-from _cc_instant import _brief_fallback_ranked_rows, _encode_degraded, _finalize_degraded_ranked
+from _cc_instant import _brief_fallback_ranked_rows, _finalize_degraded_ranked
 
 
 def test_warmup_brief_board_payload():

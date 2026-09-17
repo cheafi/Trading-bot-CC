@@ -7,7 +7,6 @@ breadth/spread driven regime classification, and minimum hold time.
 
 from __future__ import annotations
 
-import math
 import sys
 import os
 

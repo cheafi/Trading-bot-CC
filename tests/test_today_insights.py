@@ -1,7 +1,6 @@
 """Unit tests for today_insights service."""
 
 import unittest
-from types import SimpleNamespace
 
 from src.services.today_insights import (
     build_evidence_badges,

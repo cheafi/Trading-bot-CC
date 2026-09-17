@@ -126,7 +126,9 @@ class AlphaLesson(BaseModel):
     summary: str = ""
     failure_mode: str = ""
     best_exit_note: str = ""
-    analog_tags: List[str] = Field(default_factory=list)  # e.g. "March 2024", "July 2025"
+    analog_tags: List[str] = Field(
+        default_factory=list
+    )  # e.g. "March 2024", "July 2025"
     linked_knowledge_ids: List[str] = Field(default_factory=list)
 
 

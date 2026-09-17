@@ -251,9 +251,7 @@ async def cc_header(
     if decision_board:
         regime = decision_board.get("regime") or {}
         tradeability = str(
-            decision_board.get("tradeability")
-            or regime.get("tradeability")
-            or "WAIT"
+            decision_board.get("tradeability") or regime.get("tradeability") or "WAIT"
         )
         should_trade = bool(regime.get("should_trade", False))
         decision_authority = (
@@ -323,11 +321,7 @@ async def cc_header(
         "source": "cc-header-light" if light else "cc-header",
         "freshness": "UNKNOWN"
         if light
-        else (
-            "DEGRADED"
-            if pills["data"] in ("STALE", "CRITICAL")
-            else "REAL_TIME"
-        ),
+        else ("DEGRADED" if pills["data"] in ("STALE", "CRITICAL") else "REAL_TIME"),
         "stale": light
         or pills["data"] in ("STALE", "CRITICAL")
         or pills["brief"] in ("STALE", "CRITICAL"),
@@ -377,9 +371,7 @@ async def cc_header(
             "healthy": healthy,
             "light_mode": light,
             "light_banner": (
-                "Fast header — data freshness not verified"
-                if light
-                else None
+                "Fast header — data freshness not verified" if light else None
             ),
             "display_mode": display_mode,
             "trust_mode": trust_mode,
@@ -407,8 +399,7 @@ async def cc_header(
                     "regime_trend": (today or {}).get("market_regime", {}).get("trend"),
                     "execution_blocked": bool(eng["circuit_breaker"])
                     or not ibkr_connected,
-                    "stale": light
-                    or pills["data"] in ("STALE", "CRITICAL", "UNKNOWN"),
+                    "stale": light or pills["data"] in ("STALE", "CRITICAL", "UNKNOWN"),
                     "fallback": page_authority_mode == "fallback_board",
                     "position_count": portfolio_context.get("position_count"),
                     "ibkr_label": ibkr_st.get("health_label") or "IBKR",

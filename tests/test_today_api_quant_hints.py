@@ -10,7 +10,6 @@ from src.services.today_insights import (
     build_opportunity_recheck_heuristic,
     build_quant_cluster_hints,
     detect_monitor_upgrade_gap_alerts,
-    format_monitor_upgrade_gap_alert,
     resolve_book_dd_utilization_for_hints,
 )
 

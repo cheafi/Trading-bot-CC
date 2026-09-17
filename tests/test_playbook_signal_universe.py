@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from src.engines.sector_pipeline import SectorPipeline
 from src.services.decision_truth_model import (

@@ -534,7 +534,11 @@ def _smart_money_summary(
     thesis_support = "neutral"
     if insider_sig == "bullish" and verdict in ("TRADE", "WATCH"):
         thesis_support = "support"
-    elif insider_sig == "bearish" and verdict in ("TRADE", "WATCH") or insider_sig == "bearish":
+    elif (
+        insider_sig == "bearish"
+        and verdict in ("TRADE", "WATCH")
+        or insider_sig == "bearish"
+    ):
         thesis_support = "contradict"
 
     def _row(
@@ -776,10 +780,16 @@ def _build_decision_stack(
     primary_state = primary_map.get(verdict, "WATCH")
 
     execution_style: str | None = None
-    if exec_state in ("BUY_ON_PULLBACK", "BUY_NOW") and primary_state in (
-        "WATCH",
-        "TRADE",
-    ) or exec_state not in ("AVOID_NOW", "WATCH_CONFIRM") and primary_state != "AVOID":
+    if (
+        exec_state in ("BUY_ON_PULLBACK", "BUY_NOW")
+        and primary_state
+        in (
+            "WATCH",
+            "TRADE",
+        )
+        or exec_state not in ("AVOID_NOW", "WATCH_CONFIRM")
+        and primary_state != "AVOID"
+    ):
         execution_style = exec_state
 
     if not regime_ok:

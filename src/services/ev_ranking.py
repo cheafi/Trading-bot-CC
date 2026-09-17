@@ -39,15 +39,25 @@ def compute_ev_score(
     liquidity = 1.0 if str(row.get("liquidity_fit") or "ok") == "ok" else 0.7
     fit = (portfolio_fit_score or row.get("portfolio_fit_score") or 50) / 100.0
     execution = 1.0 if row.get("execution_ready") else 0.55
-    macro = 0.9 if str(tradeability or row.get("tradeability") or "WAIT").upper() in (
-        "TRADE",
-        "SELECTIVE",
-    ) else 0.5
+    macro = (
+        0.9
+        if str(tradeability or row.get("tradeability") or "WAIT").upper()
+        in (
+            "TRADE",
+            "SELECTIVE",
+        )
+        else 0.5
+    )
     cost_penalty = float(edge.get("cost_drag") or 0.0) / 10.0
-    crowding_penalty = 0.15 if str(row.get("crowding") or "").lower() in (
-        "high",
-        "elevated",
-    ) else 0.0
+    crowding_penalty = (
+        0.15
+        if str(row.get("crowding") or "").lower()
+        in (
+            "high",
+            "elevated",
+        )
+        else 0.0
+    )
     decay_penalty = 0.1 if row.get("strategy_decay_line") else 0.0
 
     components = {

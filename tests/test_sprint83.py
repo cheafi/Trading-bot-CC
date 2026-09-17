@@ -41,7 +41,6 @@ def test_imports():
 
 def test_regime_service_aget():
     """RegimeService.aget() is a coroutine and returns same structure as get()."""
-    import inspect
     from src.services.regime_service import RegimeService
 
     # aget must be a classmethod that returns a coroutine
@@ -204,7 +203,7 @@ def main():
                 passed += 1
             else:
                 failed += 1
-                print(f"  ❌ FAILED")
+                print("  ❌ FAILED")
         except Exception as e:
             failed += 1
             print(f"  ❌ ERROR: {e}")

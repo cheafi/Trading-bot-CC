@@ -24,7 +24,9 @@ def validate_row_provenance(row: Dict[str, Any]) -> Tuple[bool, List[str]]:
     return validate_provenance_block(flat)
 
 
-def assert_rows_have_provenance(rows: List[Dict[str, Any]], *, min_rows: int = 1) -> None:
+def assert_rows_have_provenance(
+    rows: List[Dict[str, Any]], *, min_rows: int = 1
+) -> None:
     """CI gate — raises AssertionError when provenance missing on scored rows."""
     checked = [r for r in rows if r.get("ticker")][: min(len(rows), max(min_rows, 12))]
     failures: List[str] = []

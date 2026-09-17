@@ -42,7 +42,10 @@ INDEX_ETFS: list[str] = _loaded.by_asset_class("index_proxy")
 SECTOR_ETFS: list[str] = [
     r.ticker
     for r in _loaded.records
-    if r.asset_class == "etf" and r.sector == "ETF" and r.theme in {
+    if r.asset_class == "etf"
+    and r.sector == "ETF"
+    and r.theme
+    in {
         "Technology",
         "Financials",
         "Healthcare",
@@ -57,7 +60,9 @@ SECTOR_ETFS: list[str] = [
     }
 ]
 THEMATIC_ETFS: list[str] = [
-    r.ticker for r in _loaded.records if r.asset_class == "etf" and r.ticker not in SECTOR_ETFS
+    r.ticker
+    for r in _loaded.records
+    if r.asset_class == "etf" and r.ticker not in SECTOR_ETFS
 ]
 
 # Liquid US equities — mega/large cap + high-volume growth (core tier equities)

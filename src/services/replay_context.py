@@ -51,7 +51,9 @@ class ReplayContext:
 
     def dossier_cache_key(self, ticker: str) -> str:
         """Disk cache key for single-name dossier replay (ticker + as_of)."""
-        return f"{REPLAY_CACHE_VERSION}:dossier:{ticker.upper()}:{self.as_of.isoformat()}"
+        return (
+            f"{REPLAY_CACHE_VERSION}:dossier:{ticker.upper()}:{self.as_of.isoformat()}"
+        )
 
     def authority_contract(self) -> Dict[str, Any]:
         """Non-negotiable replay authority — research != deploy, no IBKR handoff."""
@@ -141,7 +143,9 @@ def build_replay_decision_authority(
     return base
 
 
-def apply_replay_row_authority(row: Dict[str, Any], ctx: ReplayContext) -> Dict[str, Any]:
+def apply_replay_row_authority(
+    row: Dict[str, Any], ctx: ReplayContext
+) -> Dict[str, Any]:
     """Attach historical decision vs live authority on opportunity rows."""
     from src.services.decision_truth_model import apply_authority_to_row
 

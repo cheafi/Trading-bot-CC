@@ -108,9 +108,8 @@ def _norm_ppf(p: float) -> float:
 
     if p < plow:
         q = math.sqrt(-2.0 * math.log(p))
-        return (
-            (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5])
-            / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0)
+        return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
+            (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1.0
         )
     if p > phigh:
         q = math.sqrt(-2.0 * math.log(1.0 - p))
@@ -368,7 +367,9 @@ def build_fitness_matrix(
         is_sharpe = _coerce_float(row.get("is_sharpe"))
         profit_factor = _coerce_float(row.get("profit_factor") or row.get("pf"))
         max_dd = _coerce_float(row.get("max_dd") or row.get("max_drawdown"))
-        trade_count = _coerce_int(row.get("trade_count") or row.get("oos_trades") or row.get("trades"))
+        trade_count = _coerce_int(
+            row.get("trade_count") or row.get("oos_trades") or row.get("trades")
+        )
         row_slippage = bool(row.get("after_slippage")) or after_slippage
 
         if is_sharpe > 0:
@@ -485,7 +486,9 @@ def build_fitness_matrix_payload(
         if persist:
             persist_fitness_matrix(records)
         return {
-            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "generated_at": datetime.now(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z"),
             "authority": "research_only",
             "may_authorize_deploy": False,
             "record_count": len(records),

@@ -163,10 +163,6 @@ class TestPortfolioBrain:
     def test_importable(self):
         from src.engines.portfolio_brain import (
             PortfolioPolicy,
-            Holding,
-            PortfolioRun,
-            PortfolioReview,
-            PortfolioBrain,
             TREND_LEADERS_POLICY,
         )
 
@@ -268,7 +264,6 @@ class TestKeepDiscard:
         from src.engines.keep_discard import (
             StrategyVariant,
             StrategyEvaluator,
-            ExperimentLog,
         )
 
         assert StrategyVariant is not None

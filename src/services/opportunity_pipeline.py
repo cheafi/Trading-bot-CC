@@ -149,7 +149,9 @@ def finalize_opportunity_pipeline(
 
         if not out.get("brief_context"):
             out["brief_context"] = resolve_brief_stale_context(
-                used_brief_fallback=bool(out.get("from_brief") or out.get("brief_fallback")),
+                used_brief_fallback=bool(
+                    out.get("from_brief") or out.get("brief_fallback")
+                ),
             )
         out["data_stale"] = data_stale
         out["brief_stale"] = brief_stale
@@ -166,7 +168,11 @@ def finalize_opportunity_pipeline(
             or (out.get("brief_context") or {}).get("as_of")
             or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
-        prov_mode = "STALE" if data_stale else str(out.get("mode") or out.get("data_mode") or "LIVE")
+        prov_mode = (
+            "STALE"
+            if data_stale
+            else str(out.get("mode") or out.get("data_mode") or "LIVE")
+        )
         for key in _row_lists(out):
             rows = out.get(key)
             if isinstance(rows, list) and rows:
@@ -182,7 +188,9 @@ def finalize_opportunity_pipeline(
             out["top_ranked"] = out["opportunities"]
         out = attach_opportunity_verdict_to_payload(out)
     except Exception:
-        logger.debug("opportunity_pipeline quality/verdict failed (%s)", source, exc_info=True)
+        logger.debug(
+            "opportunity_pipeline quality/verdict failed (%s)", source, exc_info=True
+        )
 
     try:
         from src.services.score_families import (
@@ -218,7 +226,9 @@ def finalize_opportunity_pipeline(
             cross_asset=out.get("cross_asset_confirmation"),
         )
     except Exception:
-        logger.debug("opportunity_pipeline score_families failed (%s)", source, exc_info=True)
+        logger.debug(
+            "opportunity_pipeline score_families failed (%s)", source, exc_info=True
+        )
 
     if attach_board:
         try:
@@ -226,7 +236,9 @@ def finalize_opportunity_pipeline(
 
             attach_decision_board(out, ops=ops, source=source)
         except Exception:
-            logger.debug("opportunity_pipeline board attach failed (%s)", source, exc_info=True)
+            logger.debug(
+                "opportunity_pipeline board attach failed (%s)", source, exc_info=True
+            )
 
     out["pipeline_source"] = source
     return out

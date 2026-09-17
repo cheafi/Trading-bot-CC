@@ -41,8 +41,16 @@ def build_alpha_monitor_kpis(
 ) -> Dict[str, Any]:
     """Daily alpha KPIs — not signal counts."""
     closed = _load_closed_trades_today()
-    produced_bps = sum(float(t.get("pnl_pct") or 0) * 100 for t in closed if float(t.get("pnl_pct") or 0) > 0)
-    lost_bps = sum(abs(float(t.get("pnl_pct") or 0) * 100) for t in closed if float(t.get("pnl_pct") or 0) < 0)
+    produced_bps = sum(
+        float(t.get("pnl_pct") or 0) * 100
+        for t in closed
+        if float(t.get("pnl_pct") or 0) > 0
+    )
+    lost_bps = sum(
+        abs(float(t.get("pnl_pct") or 0) * 100)
+        for t in closed
+        if float(t.get("pnl_pct") or 0) < 0
+    )
     preserved_bps = max(produced_bps - lost_bps, 0.0)
 
     return {

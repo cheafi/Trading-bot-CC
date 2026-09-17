@@ -54,7 +54,9 @@ def _now_iso() -> str:
 
 def list_queue() -> Dict[str, Any]:
     store = _load_store()
-    items = [_normalize_item(it) for it in (store.get("items") or []) if isinstance(it, dict)]
+    items = [
+        _normalize_item(it) for it in (store.get("items") or []) if isinstance(it, dict)
+    ]
     total_budget = sum(int(it.get("budget_minutes") or 0) for it in items)
     return {
         "items": items,
@@ -66,14 +68,18 @@ def list_queue() -> Dict[str, Any]:
     }
 
 
-def add_item(ticker: str, *, budget_minutes: int = 30, category: str = "Research") -> Dict[str, Any]:
+def add_item(
+    ticker: str, *, budget_minutes: int = 30, category: str = "Research"
+) -> Dict[str, Any]:
     """Add ticker to queue with time budget."""
     key = str(ticker or "").strip().upper()
     if not key:
         raise ValueError("ticker required")
     cat = str(category or "Research").strip()
     if cat not in _VALID_CATEGORIES:
-        raise ValueError(f"category must be one of: {', '.join(sorted(_VALID_CATEGORIES))}")
+        raise ValueError(
+            f"category must be one of: {', '.join(sorted(_VALID_CATEGORIES))}"
+        )
     try:
         budget = int(budget_minutes)
     except (TypeError, ValueError) as exc:
@@ -126,7 +132,9 @@ def _normalize_item(raw: Dict[str, Any]) -> Dict[str, Any]:
         cat = "Research"
     return {
         "ticker": str(raw.get("ticker") or "").upper(),
-        "budget_minutes": int(raw.get("budget_minutes") or DEFAULT_CATEGORY_BUDGETS[cat]),
+        "budget_minutes": int(
+            raw.get("budget_minutes") or DEFAULT_CATEGORY_BUDGETS[cat]
+        ),
         "category": cat,
         "added_at": raw.get("added_at"),
         "status": str(raw.get("status") or "queued"),

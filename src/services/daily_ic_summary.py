@@ -39,7 +39,9 @@ def build_daily_ic_summary(
         "deploy_open": deploy_open,
         "deploy_label": "OPEN · 可部署" if deploy_open else "BLOCKED · 封鎖",
         "tradeability": tradeability,
-        "posture": str(td.get("deploy_posture") or best_action.get("capital_stance") or "WAIT"),
+        "posture": str(
+            td.get("deploy_posture") or best_action.get("capital_stance") or "WAIT"
+        ),
         "stance_one_liner": str(
             best_action.get("stance_one_liner")
             or td.get("stance_one_liner")
@@ -64,9 +66,9 @@ def build_daily_ic_summary(
 
     active_sleeve = sleeve.get("active_today") or sleeve.get("fund_manager") or {}
     portfolio = {
-        "best_trade": (best_action.get("best_trade_now") or td.get("best_trade") or {}).get(
-            "ticker"
-        ),
+        "best_trade": (
+            best_action.get("best_trade_now") or td.get("best_trade") or {}
+        ).get("ticker"),
         "best_watch": (
             best_action.get("best_watch_upgrade") or td.get("best_watch") or {}
         ).get("ticker"),
@@ -79,7 +81,8 @@ def build_daily_ic_summary(
         "sleeve_name": active_sleeve.get("display_name")
         or active_sleeve.get("active_sleeve_name"),
         "sleeve_gate_status": active_sleeve.get("gate_status"),
-        "sleeve_stance": active_sleeve.get("stance") or active_sleeve.get("sleeve_action_now"),
+        "sleeve_stance": active_sleeve.get("stance")
+        or active_sleeve.get("sleeve_action_now"),
     }
 
     try:
@@ -109,7 +112,9 @@ def build_daily_ic_summary(
     }
 
     sections = [mission, market, portfolio, capital, one_belief]
-    filled = sum(1 for s in sections if any(v for v in s.values() if v not in (None, "", "—")))
+    filled = sum(
+        1 for s in sections if any(v for v in s.values() if v not in (None, "", "—"))
+    )
 
     return {
         "status": "stub",

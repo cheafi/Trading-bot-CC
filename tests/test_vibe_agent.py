@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,7 +17,6 @@ from src.services.vibe_agent import (
     generate_overnight_brief,
     parse_vibe_intent,
     persist_intent_and_rules,
-    review_agent_outcome,
 )
 from src.services.vibe_agent_safety import (
     agent_safety_contract,

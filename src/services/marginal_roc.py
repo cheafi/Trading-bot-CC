@@ -74,7 +74,9 @@ def build_marginal_roc_ladder(*, deploy_open: bool = False) -> Dict[str, Any]:
                 "source": "playbook",
                 "held": ticker in held_tickers,
                 "marginal_return_on_capital_bps": marginal_bps,
-                "vs_cash": "beats_cash" if marginal_bps >= _CASH_HURDLE_BPS else "below_cash",
+                "vs_cash": "beats_cash"
+                if marginal_bps >= _CASH_HURDLE_BPS
+                else "below_cash",
                 "authority": "research_only",
             }
         )
@@ -92,12 +94,16 @@ def build_marginal_roc_ladder(*, deploy_open: bool = False) -> Dict[str, Any]:
                 "source": "portfolio",
                 "held": True,
                 "marginal_return_on_capital_bps": marginal_bps,
-                "vs_cash": "beats_cash" if marginal_bps >= _CASH_HURDLE_BPS else "below_cash",
+                "vs_cash": "beats_cash"
+                if marginal_bps >= _CASH_HURDLE_BPS
+                else "below_cash",
                 "authority": "research_only",
             }
         )
 
-    ladder.sort(key=lambda r: float(r.get("marginal_return_on_capital_bps") or 0), reverse=True)
+    ladder.sort(
+        key=lambda r: float(r.get("marginal_return_on_capital_bps") or 0), reverse=True
+    )
     for i, entry in enumerate(ladder):
         entry["rank"] = i + 1
 
@@ -108,7 +114,7 @@ def build_marginal_roc_ladder(*, deploy_open: bool = False) -> Dict[str, Any]:
     if best and best_beats_cash:
         cash_headline = (
             f"Best: {best['ticker']} {best['marginal_return_on_capital_bps']}bps vs "
-            f"cash { _CASH_HURDLE_BPS}bps · 邊際候選勝過現金"
+            f"cash {_CASH_HURDLE_BPS}bps · 邊際候選勝過現金"
         )
         next_hint = best["ticker"]
     else:

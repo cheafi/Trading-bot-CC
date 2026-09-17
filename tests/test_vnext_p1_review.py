@@ -11,14 +11,10 @@ Tests for P1 review items:
 """
 
 import hashlib
-import json
 import os
 import sys
-from datetime import date, datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
-import numpy as np
 import pytest
 
 pytest_plugins = ("anyio",)

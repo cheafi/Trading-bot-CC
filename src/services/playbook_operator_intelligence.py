@@ -553,7 +553,9 @@ def enrich_playbook_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
         from src.services.buy_signal_summary import attach_buy_signal_to_rows
 
-        payload["opportunities"] = attach_buy_signal_to_rows(payload.get("opportunities") or [])
+        payload["opportunities"] = attach_buy_signal_to_rows(
+            payload.get("opportunities") or []
+        )
         payload["near_miss"] = attach_buy_signal_to_rows(payload.get("near_miss") or [])
     except Exception:
         pass

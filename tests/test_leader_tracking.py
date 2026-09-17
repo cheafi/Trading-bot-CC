@@ -1,7 +1,6 @@
 """Leader / Holdings Tracking module tests."""
 
 import os
-import tempfile
 
 import pytest
 

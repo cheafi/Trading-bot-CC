@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from src.services.data_freshness_service import (
-    _bar_session_date,
     _last_us_equity_session,
     _tier_from_bar,
 )

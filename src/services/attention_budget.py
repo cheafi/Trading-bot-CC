@@ -18,9 +18,7 @@ _CATEGORY_LABELS: Dict[str, str] = {
 }
 
 _ENOUGH_MESSAGE = "Enough — come back tomorrow · 夠了 — 明天再來"
-_ENOUGH_MESSAGE_BILINGUAL = (
-    "Enough — come back tomorrow · 夠了 — 明天再來"
-)
+_ENOUGH_MESSAGE_BILINGUAL = "Enough — come back tomorrow · 夠了 — 明天再來"
 
 
 def budget_schema() -> Dict[str, Any]:

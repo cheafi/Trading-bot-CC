@@ -21,7 +21,6 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any
 
-import pytest
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -113,7 +112,6 @@ def test_auto_schedule_skips_in_range(tmp_path, monkeypatch):
 
 def test_auto_schedule_skips_active_shadow(tmp_path, monkeypatch):
     _patch_auto(tmp_path, monkeypatch)
-    import src.engines.self_learning as sl
     from src.engines.self_learning import auto_schedule_experiments
 
     # Pre-seed ab_shadow with ensemble_min_score already active

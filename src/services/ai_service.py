@@ -42,9 +42,7 @@ _AZURE_DEPLOYMENT_NARRATIVE = os.getenv(
 _AZURE_DEPLOYMENT_SIGNAL = os.getenv(
     "AZURE_OPENAI_DEPLOYMENT_SIGNAL", _AZURE_DEPLOYMENT
 )
-_AZURE_DEPLOYMENT_QUICK = os.getenv(
-    "AZURE_OPENAI_DEPLOYMENT_QUICK", _AZURE_DEPLOYMENT
-)
+_AZURE_DEPLOYMENT_QUICK = os.getenv("AZURE_OPENAI_DEPLOYMENT_QUICK", _AZURE_DEPLOYMENT)
 _AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2026-01-15-preview")
 _AZURE_TENANT = os.getenv("AZURE_TENANT_ID", "")
 _AZURE_CLIENT = os.getenv("AZURE_CLIENT_ID", "")
@@ -442,9 +440,7 @@ class AIService:
                 body = await resp.text()
                 if resp.status in (401, 403):
                     self._disable_provider("azure_openai", f"auth {resp.status}")
-                logger.warning(
-                    "[AI] azure_openai %s: %s", resp.status, body[:200]
-                )
+                logger.warning("[AI] azure_openai %s: %s", resp.status, body[:200])
         except Exception as exc:
             logger.warning("[AI] azure_openai error: %s", exc)
             self._error_count += 1
@@ -491,7 +487,10 @@ class AIService:
             chain.append((_OPENCLAW_BASE, _OPENCLAW_KEY, preferred_model, "openclaw"))
         if _NVIDIA_KEY and "nvidia" not in self._disabled_providers:
             chain.append((_NVIDIA_BASE, _NVIDIA_KEY, _MODEL_NVIDIA, "nvidia"))
-        if _azure_openai_configured() and "azure_openai" not in self._disabled_providers:
+        if (
+            _azure_openai_configured()
+            and "azure_openai" not in self._disabled_providers
+        ):
             azure_deployment = _resolve_azure_deployment(preferred_model)
             azure_text = await self._call_azure_provider(
                 azure_deployment,
@@ -591,7 +590,10 @@ class AIService:
                 ],
             },
         ]
-        if _azure_openai_configured() and "azure_openai" not in self._disabled_providers:
+        if (
+            _azure_openai_configured()
+            and "azure_openai" not in self._disabled_providers
+        ):
             azure_deployment = _resolve_azure_deployment(model)
             text = await self._call_azure_provider(
                 azure_deployment,

@@ -1,5 +1,4 @@
 """Extraction script — run once then delete."""
-import re
 
 main = open("src/api/main.py").read()
 lines = main.splitlines(keepends=True)
@@ -43,7 +42,7 @@ print(f"scan_body: lines {scan_start+1}–{scan_end}")
 print("helpers chars:", len(helpers), "scan chars:", len(scan_body))
 
 # Write scanner.py
-scanner_code = f"""\"\"\"CC — Scanner Service (extracted from src/api/main.py P4).
+scanner_code = """\"\"\"CC — Scanner Service (extracted from src/api/main.py P4).
 
 ScannerService holds the watchlist-scan caches and the full async scan logic.
 Wire once in app startup via _init_shared_services(), access everywhere via

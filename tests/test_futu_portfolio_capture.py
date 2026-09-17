@@ -7,7 +7,6 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.services.futu_portfolio_parser import (
-    FutuHolding,
     holdings_from_rows,
     parse_futu_text,
     sanitize_ticker,
