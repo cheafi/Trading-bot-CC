@@ -152,3 +152,22 @@ def test_strategy_lab_shadow_reports_research_only():
         assert cap["can_deploy"] is False
         assert cap["can_handoff"] is False
         assert cap["surface_type"] == "research_monitoring"
+
+
+def test_operator_state_contract_public_surface():
+    """Regression: API + tests import these; accidental truncation breaks CI collection."""
+    import src.services.operator_state_contract as contract
+
+    required = (
+        "build_page_capability",
+        "build_playbook_rank_buckets",
+        "build_system_state",
+        "build_warmup_module_checklist",
+        "classify_rank_bucket",
+        "format_operator_sentence",
+        "pick_dashboard_monitors",
+        "resolve_tab_id",
+        "structural_valid_for_monitor",
+    )
+    missing = [name for name in required if not hasattr(contract, name)]
+    assert not missing, f"missing contract exports: {missing}"
