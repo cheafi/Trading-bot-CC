@@ -263,13 +263,13 @@ class IBBroker(BaseBroker):
             return OrderResult(
                 success=True,
                 order_id="dry-run",
-                status=OrderStatus.FILLED,
+                status=OrderStatus.SIMULATED,
                 filled_qty=order.quantity,
                 message="Dry-run — IB placeOrder not called",
             )
 
         assert_live_order_permitted(
-            dry_run=False, account=getattr(self, "account_id", "")
+            dry_run=False, account=self.account or getattr(self, "account_id", "")
         )
 
         if not self.is_connected or not self._ib:

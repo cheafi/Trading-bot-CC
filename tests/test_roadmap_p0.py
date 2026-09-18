@@ -115,6 +115,24 @@ def test_weekly_ic_digest_from_board():
     assert digest["daily_ic"] is not None
 
 
+def test_autonomous_learning_cycle_blocks_bad_manifest_owner(monkeypatch):
+    monkeypatch.setattr(
+        "src.services.autonomous_learning_loop._observe",
+        lambda: {
+            "closed_trades": 0,
+            "forward_outcome_rows": 0,
+            "forward_marks_with_r": 0,
+            "journal_entries": 0,
+        },
+    )
+    monkeypatch.setattr(
+        "src.core.deployment_manifest.load_deployment_manifest",
+        lambda: {"updated_by": "autonomous_learning_loop"},
+    )
+    with pytest.raises(RuntimeError, match="deployment manifest"):
+        run_learning_cycle(phases=["observe"])
+
+
 def test_autonomous_learning_cycle_research_only(monkeypatch):
     monkeypatch.setattr(
         "src.services.autonomous_learning_loop._observe",

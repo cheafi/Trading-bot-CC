@@ -363,7 +363,7 @@ async def ibkr_place_order(
 
     from src.core.live_trading_gate import authorize_live_order
 
-    live_auth = authorize_live_order(svc._app.account if svc._app else "")
+    live_auth = authorize_live_order(svc._account_id or "")
     dry_run = mode != "live" or not live_auth.live_allowed
 
     result = await svc.place_order(
@@ -378,7 +378,7 @@ async def ibkr_place_order(
         exchange=req.exchange,
         currency=req.currency,
         dry_run=dry_run,
-        account=getattr(svc._app, "account", ""),
+        account=svc._account_id or "",
     )
 
     if result.error and "may still be active" not in result.error:
@@ -449,7 +449,7 @@ async def ibkr_place_bracket(
 
     from src.core.live_trading_gate import authorize_live_order
 
-    live_auth = authorize_live_order(svc._app.account if svc._app else "")
+    live_auth = authorize_live_order(svc._account_id or "")
     dry_run = mode != "live" or not live_auth.live_allowed
 
     result = await svc.place_bracket_order(
@@ -466,7 +466,7 @@ async def ibkr_place_bracket(
         trail_amount=req.trail_amount,
         trail_percent=req.trail_percent,
         dry_run=dry_run,
-        account=getattr(svc._app, "account", ""),
+        account=svc._account_id or "",
     )
 
     if result.get("error"):

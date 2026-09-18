@@ -32,6 +32,7 @@ Design: pure scoring, no I/O, no broker calls.
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 if TYPE_CHECKING:
@@ -171,17 +172,23 @@ class OpportunityEnsembler:
         if not recommendations:
             return []
 
-        # Sprint 90: block GPT-rejected signals before scoring
-        eligible = [
-            rec
-            for rec in recommendations
-            if getattr(rec, "approval_status", "") != "rejected"
-        ]
-        if len(eligible) < len(recommendations):
-            logger.info(
-                "OpportunityEnsembler: suppressed %d GPT-rejected signals",
-                len(recommendations) - len(eligible),
-            )
+        # Sprint 90: block GPT-rejected signals — research_only guard
+        # Only suppress in research mode; execution path must not silently
+        # veto signals that passed all upstream gates.
+        research_only = os.environ.get("RESEARCH_ONLY", "0") == "1"
+        if research_only:
+            eligible = [
+                rec
+                for rec in recommendations
+                if getattr(rec, "approval_status", "") != "rejected"
+            ]
+            if len(eligible) < len(recommendations):
+                logger.info(
+                    "OpportunityEnsembler: suppressed %d GPT-rejected signals (research_only)",
+                    len(recommendations) - len(eligible),
+                )
+        else:
+            eligible = list(recommendations)
 
         scored = [
             self._score_one(rec, regime, strategy_health or {}) for rec in eligible

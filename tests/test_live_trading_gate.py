@@ -35,8 +35,18 @@ from src.core.live_trading_gate import (
                 "IB_API_PORT": LIVE_IB_API_PORT,
                 "LIVE_TRADING_ACCOUNT": "DU123",
             },
-            True,
             False,
+            True,
+        ),
+        (
+            {
+                "LIVE_TRADING": "1",
+                "IB_MODE": "live",
+                "IB_PORT": LIVE_IB_API_PORT,
+                "LIVE_TRADING_ACCOUNT": "DU123",
+            },
+            False,
+            True,
         ),
         (
             {
@@ -110,6 +120,20 @@ def test_assert_live_gate_exits_when_live_requested_but_incomplete(
 
     with pytest.raises(SystemExit):
         assert_live_gate_or_paper(live_requested=True)
+
+
+def test_evaluate_live_gate_denies_blank_or_whitespace_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LIVE_TRADING", "1")
+    monkeypatch.setenv("IB_MODE", "live")
+    monkeypatch.setenv("IB_API_PORT", LIVE_IB_API_PORT)
+    monkeypatch.setenv("LIVE_TRADING_ACCOUNT", "DU123")
+
+    for acct in ("", "   ", "\t"):
+        result = authorize_live_order(acct)
+        assert result.live_allowed is False
+        assert result.paper_by_construction is True
 
 
 def test_assert_live_gate_allows_paper_by_default(

@@ -106,6 +106,7 @@ class PaperTradingEngine:
                             quantity=target_shares,
                             order_type="LMT",
                             limit_price=current_price,
+                            dry_run=True,
                         )
                         logger.info(
                             f"[PAPER TRADER] IBKR Yield: {res.status} | ID: {res.order_id}"
@@ -127,6 +128,7 @@ class PaperTradingEngine:
                         action="SELL",
                         quantity=pos_obj.position,
                         order_type="MKT",  # Market order on exits to guarantee execution of risk stops
+                        dry_run=True,
                     )
                     logger.info(
                         f"[PAPER TRADER] IBKR Yield: {res.status} | ID: {res.order_id}"

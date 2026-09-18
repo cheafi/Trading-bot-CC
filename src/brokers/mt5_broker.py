@@ -214,7 +214,7 @@ class MetaTraderBroker(BaseBroker):
             return OrderResult(
                 success=True,
                 order_id="dry-run",
-                status=OrderStatus.FILLED,
+                status=OrderStatus.SIMULATED,
                 filled_qty=order.quantity,
                 message="Dry-run — MT5 order_send not called",
             )

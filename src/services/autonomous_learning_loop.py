@@ -133,10 +133,11 @@ def _assert_no_deployment_manifest_write() -> None:
     from src.core.deployment_manifest import load_deployment_manifest
 
     before = load_deployment_manifest()
-    if before.get("updated_by") not in (None, "system", "ops", "human"):
-        logger.warning(
-            "autonomous_learning_loop: unexpected deployment manifest owner %s",
-            before.get("updated_by"),
+    owner = before.get("updated_by")
+    if owner not in (None, "system", "ops", "human"):
+        raise RuntimeError(
+            "autonomous_learning_loop blocked: unexpected deployment manifest "
+            f"owner {owner!r}"
         )
 
 

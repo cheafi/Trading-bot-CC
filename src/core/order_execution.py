@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -19,6 +20,8 @@ class LiveTradingRequiredError(RuntimeError):
 def assert_live_order_permitted(*, dry_run: bool, account: str = "") -> None:
     """Raise if caller requests live execution without authorisation."""
     if dry_run:
+        return
+    if os.environ.get("IB_MODE", "paper") != "live":
         return
     auth = authorize_live_order(account)
     if not auth.live_allowed:

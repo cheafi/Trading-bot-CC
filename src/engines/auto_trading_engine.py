@@ -12,6 +12,7 @@ Runs 24/7 without human intervention. Handles:
 
 import asyncio
 import logging
+import os
 import time
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Set
@@ -1344,6 +1345,7 @@ class AutoTradingEngine:
                         side=close_side,
                         quantity=qty,
                         order_type=OrderType.MARKET,
+                        dry_run=self.dry_run,
                     )
                     logger.info("Closed %s via %s", ticker, reason)
 
@@ -1758,25 +1760,31 @@ class AutoTradingEngine:
         except Exception as e:
             logger.warning("EOD model retrain error: %s", e)
 
-        # 2.5 Sprint 90: hot-swap MetaEnsemble learned weights into ensembler
-        try:
-            from src.engines.meta_ensemble import MetaEnsemble
+        # 2.5 Sprint 90: MetaEnsemble hot-swap — research / dry-run only (not live)
+        if self.dry_run or os.environ.get("META_ENSEMBLE_LIVE_HOTSWAP", "0") == "1":
+            try:
+                from src.engines.meta_ensemble import MetaEnsemble
 
-            me = MetaEnsemble()
-            learned = me.get_learned_weights()
-            if learned:
-                self.ensembler.set_weights(learned)
-                logger.info(
-                    "EOD: MetaEnsemble weights applied to ensembler (%d components)",
-                    len(learned),
-                )
-            else:
-                logger.debug(
-                    "EOD: MetaEnsemble weights not ready (need %d samples)",
-                    me._min_samples,
-                )
-        except Exception as e:
-            logger.warning("EOD MetaEnsemble weight update error: %s", e)
+                me = MetaEnsemble()
+                learned = me.get_learned_weights()
+                if learned:
+                    self.ensembler.set_weights(learned)
+                    logger.info(
+                        "EOD: MetaEnsemble weights applied to ensembler (%d components)",
+                        len(learned),
+                    )
+                else:
+                    logger.debug(
+                        "EOD: MetaEnsemble weights not ready (need %d samples)",
+                        me._min_samples,
+                    )
+            except Exception as e:
+                logger.warning("EOD MetaEnsemble weight update error: %s", e)
+        else:
+            logger.info(
+                "EOD: MetaEnsemble hot-swap skipped (live path — set "
+                "META_ENSEMBLE_LIVE_HOTSWAP=1 to override)"
+            )
 
         # 3. Benchmark portfolio attribution
         try:
@@ -2351,6 +2359,7 @@ class AutoTradingEngine:
                         side=close_side,
                         quantity=qty,
                         order_type=OrderType.MARKET,
+                        dry_run=self.dry_run,
                     )
                     logger.info(
                         "Shutdown: closed %s (%d shares)",

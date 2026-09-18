@@ -57,6 +57,7 @@ async def test_broker_manager_live_without_gate_raises(
 ) -> None:
     for key in ("LIVE_TRADING", "IB_MODE", "IB_API_PORT", "LIVE_TRADING_ACCOUNT"):
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("IB_MODE", "live")
 
     manager = BrokerManager()
     live_broker = MagicMock()

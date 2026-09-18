@@ -3,8 +3,9 @@
 Live execution requires ALL of (exact, case-sensitive):
   - LIVE_TRADING=1
   - IB_MODE=live
-  - IB_API_PORT=4003
+  - IB_API_PORT=4003 (or IB_PORT=4003 — must match live IB Gateway socket)
   - LIVE_TRADING_ACCOUNT contains the broker account id (comma-separated allow-list)
+  - A non-empty broker account id at the order boundary (no boot-time fail-open)
 
 Default is paper by construction when any requirement is missing.
 """
@@ -45,7 +46,10 @@ def evaluate_live_trading_gate(
     """Evaluate env-only live gate. Account checked when provided."""
     live_trading = os.environ.get("LIVE_TRADING", "") == "1"
     ib_mode_live = os.environ.get("IB_MODE", "") == "live"
-    port_ok = os.environ.get("IB_API_PORT", "") == LIVE_IB_API_PORT
+    port_ok = (
+        os.environ.get("IB_API_PORT", "") == LIVE_IB_API_PORT
+        or os.environ.get("IB_PORT", "") == LIVE_IB_API_PORT
+    )
     allowed_accounts = _parse_allowed_accounts()
     acct = str(account or "").strip().upper()
 
@@ -55,7 +59,7 @@ def evaluate_live_trading_gate(
     if not ib_mode_live:
         missing.append("IB_MODE=live")
     if not port_ok:
-        missing.append(f"IB_API_PORT={LIVE_IB_API_PORT}")
+        missing.append(f"IB_API_PORT={LIVE_IB_API_PORT} (or IB_PORT)")
 
     env_ok = live_trading and ib_mode_live and port_ok
     if not env_ok:
@@ -99,12 +103,12 @@ def evaluate_live_trading_gate(
             account_allowed=False,
         )
 
-    # Boot-time: env triple + allow-list configured (account checked per order).
+    missing.append("broker account id required for live authorisation")
     return LiveTradingAuthorisation(
-        live_allowed=True,
-        paper_by_construction=False,
-        reason="live_gate_confirmed",
-        missing=(),
+        live_allowed=False,
+        paper_by_construction=True,
+        reason="paper_by_construction",
+        missing=tuple(missing),
         account="",
         account_allowed=False,
     )
