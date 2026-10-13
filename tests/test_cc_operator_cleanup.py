@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 from src.services.cc_state import attach_page_capability, attach_system_state
@@ -23,9 +24,17 @@ def test_resolve_tab_id_maps_ui_tabs():
 
 
 def test_classify_rank_bucket_deploy_and_reject():
-    assert classify_rank_bucket(
-        {"ticker": "AAA", "action": "TRADE", "ladder_bucket": "deploy_ready", "execution_ready": True}
-    ) == "deployQualified"
+    assert (
+        classify_rank_bucket(
+            {
+                "ticker": "AAA",
+                "action": "TRADE",
+                "ladder_bucket": "deploy_ready",
+                "execution_ready": True,
+            }
+        )
+        == "deployQualified"
+    )
     assert classify_rank_bucket({"ticker": "ZZZ", "action": "AVOID"}) == "rejectedAvoid"
 
 
@@ -33,7 +42,10 @@ def test_attach_page_capability_on_payload():
     payload = {
         "cc_state": {
             "tradeability_state": {"tradeability": "WAIT", "should_trade": False},
-            "freshness_state": {"worst_tier": "STALE", "board_source": "fallback_brief"},
+            "freshness_state": {
+                "worst_tier": "STALE",
+                "board_source": "fallback_brief",
+            },
             "execution_state": {"engine_running": False, "state": "DISCONNECTED"},
             "board_decision_state": {"state": "RESEARCH_ONLY"},
         },
@@ -58,9 +70,53 @@ def test_global_strip_dedupes_mission_panel_in_template():
 
 def test_playbook_display_rows_no_visible_fallback():
     js = CC_APP.read_text(encoding="utf-8")
-    assert "playbookVisibleRows()" not in re.search(
-        r"playbookDisplayRows\(\)\{[\s\S]*?\n      \},", js
-    ).group(0)
+    match = re.search(
+        r"^[ \t]*playbookDisplayRows\s*\(\s*\)\s*\{" r".*?^[ \t]*\}[ \t]*,[ \t]*$",
+        js,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert match is not None, "Missing playbookDisplayRows implementation"
+    method = match.group(0)
+    assert not re.search(r"\bplaybookVisibleRows\s*\(", method)
+    html = INDEX.read_text(encoding="utf-8")
+    assert "playbookDisplayRows()" in html
+
+    script = "const app = {" + method + "};\n" + """
+const assert = require('node:assert/strict');
+const actionable = [{ticker: 'AAA', action: 'TRADE'}];
+app.playbookVisibleRows = () => {
+    throw new Error('Monitor display must not use actionable rows');
+};
+app.rankedOpps = {rows: actionable, near_miss: []};
+assert.deepEqual(app.playbookDisplayRows(), []);
+const watch = {ticker: 'BBB', action: 'WATCH'};
+app.rankedOpps.near_miss = [watch];
+app.rankedOpps.rank_buckets = {monitor_rows: []};
+assert.deepEqual(app.playbookDisplayRows(), []);
+const monitor = [{ticker: 'CCC', action: 'WATCH'}];
+app.rankedOpps.rank_buckets = {monitor_rows: monitor};
+assert.strictEqual(app.playbookDisplayRows(), monitor);
+for (const buckets of [null, {}, {monitor_rows: null}]) {
+    app.rankedOpps.rank_buckets = buckets;
+    app.rankedOpps.near_miss = [
+        watch,
+        {ticker: 'ZZZ', action: 'avoid'},
+        {ticker: 'YYY', action: 'NO_TRADE'},
+        {ticker: 'XXX', effective_action: 'BLOCKED'},
+        {ticker: 'WWW', action: 'WATCH', hard_reject: true},
+    ];
+    assert.deepEqual(app.playbookDisplayRows(), [watch]);
+}
+"""
+    result = subprocess.run(
+        ["node", "-"],
+        input=script,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_discovery_cached_fallback_sections_in_template():
@@ -73,7 +129,12 @@ def test_discovery_cached_fallback_sections_in_template():
 def test_flow_mock_collapsed_in_template():
     html = INDEX.read_text(encoding="utf-8")
     assert "Mock / synthetic samples · debug" in html
-    block = html[html.index("flowPanel.decision?.mock_flow") : html.index("Mock / synthetic samples · debug") + 60]
+    block = html[
+        html.index("flowPanel.decision?.mock_flow") : html.index(
+            "Mock / synthetic samples · debug"
+        )
+        + 60
+    ]
     assert "<details" in block
 
 
