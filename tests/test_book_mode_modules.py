@@ -1,4 +1,4 @@
-"""Tests for book-mode stubs: 巴芒 / Turtle / 乱世."""
+"""Tests for book-mode stubs: 巴芒 / Turtle / 乱世 (SYNTHETIC inputs)."""
 
 from __future__ import annotations
 
@@ -25,8 +25,33 @@ def test_turtle_requires_stop_for_entry():
 
 def test_crisis_blocks_high_vix():
     c = evaluate_crisis_regime(tradeability="TRADE", vix=30, should_trade=True)
+    assert c["state"] == "funding_stress"
+    assert c["level"] == "elevated"
+    assert c["deploy_blocked"] is True
+    assert c["posture"] == "preservation"
+    assert c["capital_preservation_priority"] is True
+    assert c["attack_permission"] is False
+
+
+def test_crisis_at_vix_35_boundary_preserves_capital():
+    # Book classification uses >=35; no production threshold change.
+    c = evaluate_crisis_regime(tradeability="TRADE", vix=35, should_trade=True)
+    assert c["state"] == "cascade"
     assert c["level"] == "crisis"
     assert c["deploy_blocked"] is True
+    assert c["posture"] == "preservation"
+    assert c["capital_preservation_priority"] is True
+    assert c["attack_permission"] is False
+
+
+def test_crisis_above_vix_35_preserves_capital():
+    c = evaluate_crisis_regime(tradeability="TRADE", vix=36, should_trade=True)
+    assert c["state"] == "cascade"
+    assert c["level"] == "crisis"
+    assert c["deploy_blocked"] is True
+    assert c["posture"] == "preservation"
+    assert c["capital_preservation_priority"] is True
+    assert c["attack_permission"] is False
 
 
 def test_crisis_strip_for_today_payload():

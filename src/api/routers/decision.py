@@ -832,9 +832,11 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
         top5=top5,
     )
     avoid = [
-        f"{a.get('ticker', '—')}: {a.get('reason')}"
-        if a.get("ticker") != "—"
-        else a.get("reason", "")
+        (
+            f"{a.get('ticker', '—')}: {a.get('reason')}"
+            if a.get("ticker") != "—"
+            else a.get("reason", "")
+        )
         for a in avoid_now
     ]
     if not avoid:
@@ -990,9 +992,10 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
 
     all_opps_for_action = [_row_for_action(cr) for cr in sorted_council]
     top5_for_action = all_opps_for_action[:12]
+    best_action = {}
+    overlap_warning = {"warnings": [], "level": "low"}
     try:
         from src.api.app_state import get_engine
-        from src.services.best_action import build_best_action, compute_theme_overlap
         from src.services.execution_readiness import build_execution_readiness
         from src.services.ibkr_service import get_ibkr_service
         from src.services.runtime_truth import (
@@ -1022,18 +1025,6 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
             execution_readiness,
             engine=engine,
         )
-        best_action = build_best_action(
-            top5_for_action,
-            tradeability=tradeability,
-            should_trade=should_trade,
-            regime_label=regime_label,
-            ibkr_connected=bool(ibkr_st.get("connected")),
-            ibkr_mode=ibkr_st.get("mode") or "paper",
-            source="decision_engine",
-            stale=scanner_degraded,
-            as_of=now.isoformat() + "Z",
-        )
-        overlap_warning = compute_theme_overlap(top5_for_action)
     except Exception:
         logger.debug("today best_action/execution failed", exc_info=True)
         best_action = {}
@@ -1043,9 +1034,7 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
     bracket_ready = bool(
         top5 and top5[0].get("entry_price") and top5[0].get("stop_price")
     )
-    ibkr_connected = bool(
-        (best_action.get("execution_readiness") or {}).get("ibkr_connected")
-    )
+    ibkr_connected = bool(execution_readiness.get("ibkr_connected"))
     decision_model = build_three_layer_model(
         should_trade=should_trade,
         trend_label=trend_label,
@@ -1267,8 +1256,36 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
     )
     top5 = _pipe.get("top_ranked") or top5
     near_miss = _pipe.get("near_miss") or near_miss
-    all_opps_for_action = _pipe.get("opportunities") or all_opps_for_action
+    all_opps_for_action = _pipe.get("opportunities", all_opps_for_action)
     _opportunity_verdict = _pipe.get("opportunity_verdict")
+
+    # Summarize final rows, not provisional WAIT or raw council actions.
+    try:
+        from src.services.best_action import (
+            build_best_action,
+            compute_theme_overlap,
+        )
+
+        best_action = build_best_action(
+            all_opps_for_action[:12],
+            tradeability=tradeability,
+            should_trade=bool(
+                should_trade
+                and decision_authority.get("allows_trade_labels")
+                and not decision_authority.get("gates_active")
+                and not any((decision_authority.get("gates") or {}).values())
+            ),
+            regime_label=regime_label,
+            ibkr_connected=ibkr_connected,
+            ibkr_mode=(execution_readiness or {}).get("mode") or "paper",
+            source=decision_authority.get("source") or "decision_engine",
+            stale=scanner_degraded or used_brief_fallback,
+            as_of=now.isoformat() + "Z",
+        )
+        overlap_warning = compute_theme_overlap(all_opps_for_action[:12])
+    except Exception:
+        logger.debug("today final best_action failed", exc_info=True)
+        best_action = {}
 
     todays_decision = build_todays_decision(
         tradeability=tradeability,
@@ -1475,6 +1492,7 @@ async def today_summary(request: Request, _: bool = Depends(verify_api_key)):
         "market_pulse": market_pulse,
         "top_5": top5,
         "top_ranked": top5,
+        "opportunities": all_opps_for_action,
         "filter_funnel": funnel,
         "best_setup_family": best_family,
         "family_breakdown": {
@@ -1703,17 +1721,38 @@ async def _refresh_today_authority(
         build_cc_state,
     )
     from src.services.decision_board_service import attach_decision_board
-    from src.services.decision_truth_model import build_decision_authority
+    from src.services.decision_truth_model import (
+        apply_authority_to_rows,
+        build_decision_authority,
+    )
+    from src.services.best_action import (
+        build_best_action,
+        compute_theme_overlap,
+    )
 
     out = deepcopy(payload)
     regime_state = await _fetch_regime(request)
     should_trade = bool(getattr(regime_state, "should_trade", False))
 
     mr = dict(out.get("market_regime") or {})
+    board_state = (out.get("cc_state") or {}).get("tradeability_state") or {}
+    da_prev = out.get("decision_authority") or {}
+    board = out.get("decision_board") or {}
+    system_state = out.get("system_state") or {}
+    should_trade = should_trade and not any(
+        item.get("should_trade") is False
+        or item.get("deploy_blocked")
+        or item.get("deploy_open") is False
+        for item in (out, mr, board_state, da_prev, board, system_state)
+    )
     if not should_trade:
         mr["should_trade"] = False
         regime_label = str(getattr(regime_state, "regime", "") or "").upper()
-        if regime_label == "RISK_OFF" or getattr(regime_state, "no_trade_reason", ""):
+        if (
+            str(mr.get("tradeability") or "").upper() == "NO_TRADE"
+            or regime_label == "RISK_OFF"
+            or getattr(regime_state, "no_trade_reason", "")
+        ):
             mr["tradeability"] = "NO_TRADE"
         else:
             mr["tradeability"] = "WAIT"
@@ -1725,8 +1764,29 @@ async def _refresh_today_authority(
     tradeability = str(
         dm.get("honest_tradeability") or mr.get("tradeability") or "WAIT"
     ).upper()
-    if not should_trade:
+    board_labels = {
+        str(value).upper()
+        for value in (
+            mr.get("tradeability"),
+            mr.get("honest_tradeability"),
+            dm.get("honest_tradeability"),
+            board_state.get("tradeability"),
+            board.get("tradeability"),
+            system_state.get("tradeability"),
+            out.get("board_tradeability"),
+            da_prev.get("tradeability"),
+        )
+        if value
+    }
+    if "NO_TRADE" in board_labels:
+        tradeability = "NO_TRADE"
+    elif "WAIT" in board_labels:
+        tradeability = "WAIT"
+    if not should_trade and tradeability != "NO_TRADE":
         tradeability = str(mr.get("tradeability") or "WAIT").upper()
+    mr["tradeability"] = tradeability
+    mr["honest_tradeability"] = tradeability
+    out["decision_model"] = {**dm, "honest_tradeability": tradeability}
 
     ops = _board_ops_snapshot(request)
     eng_running = bool(ops.get("running"))
@@ -1741,9 +1801,11 @@ async def _refresh_today_authority(
 
     trust = out.get("trust") or {}
     scanner_degraded = bool(trust.get("stale") or trust.get("freshness") == "DEGRADED")
-    da_prev = out.get("decision_authority") or {}
     da_source = str(da_prev.get("source") or trust.get("source") or "")
-    used_brief_fallback = "brief" in da_source or "fallback" in da_source
+    used_brief_fallback = any(
+        "brief" in source or "fallback" in source
+        for source in (da_source.lower(), str(trust.get("source") or "").lower())
+    )
     funnel = out.get("filter_funnel") or {}
     deploy_count = int(
         funnel.get("deploy_qualified_setups")
@@ -1765,6 +1827,55 @@ async def _refresh_today_authority(
         ranked_stale=scanner_degraded,
         deploy_ideas_count=deploy_count,
     )
+    # A cached snapshot may gain vetoes, never lose its prior authority ceiling.
+    previous_gates = da_prev.get("gates") or {}
+    decision_authority["gates"] = {
+        **previous_gates,
+        **{
+            key: bool(value or previous_gates.get(key))
+            for key, value in decision_authority["gates"].items()
+        },
+    }
+    decision_authority["gates_active"] = bool(
+        decision_authority["gates_active"]
+        or da_prev.get("gates_active")
+        or any(decision_authority["gates"].values())
+    )
+    prior_restricted = bool(da_prev) and (
+        da_prev.get("allows_trade_labels") is False
+        or da_prev.get("authority_level", "deploy") != "deploy"
+        or da_prev.get("effective_action_max", "DEPLOY") != "DEPLOY"
+        or da_prev.get("source", "live") != "live"
+    )
+    if prior_restricted or decision_authority["gates_active"]:
+        decision_authority["allows_trade_labels"] = False
+        decision_authority["degraded"] = True
+        decision_authority["authority_level"] = (
+            "suspended"
+            if "suspended"
+            in (decision_authority["authority_level"], da_prev.get("authority_level"))
+            else "research"
+        )
+        ceilings = {"NONE": 0, "RESEARCH": 1, "WATCH": 2, "DEPLOY": 3}
+        decision_authority["effective_action_max"] = min(
+            (
+                decision_authority["effective_action_max"],
+                da_prev.get("effective_action_max", "RESEARCH"),
+                "RESEARCH",
+            ),
+            key=lambda value: ceilings.get(value, 0),
+        )
+        decision_authority["display_action_max"] = decision_authority[
+            "effective_action_max"
+        ]
+        decision_authority["degraded_copy"].update(
+            system_mode="degraded",
+            decision_authority_line=(
+                "Decision authority: suspended"
+                if decision_authority["authority_level"] == "suspended"
+                else "Decision authority: research-only"
+            ),
+        )
     out["decision_authority"] = decision_authority
 
     execution_readiness = dict(out.get("execution_readiness") or {})
@@ -1773,6 +1884,27 @@ async def _refresh_today_authority(
     execution_readiness["broker_connected"] = ibkr_connected
     execution_readiness["ibkr_connected"] = ibkr_connected
     out["execution_readiness"] = execution_readiness
+
+    for key in ("top_5", "top_ranked", "opportunities", "near_miss", "near_miss_rows"):
+        if key in out:
+            out[key] = apply_authority_to_rows(out.get(key) or [], decision_authority)
+    summary_rows = (
+        out["opportunities"]
+        if "opportunities" in out
+        else out.get("top_ranked") or out.get("top_5") or []
+    )
+    out["best_action"] = build_best_action(
+        summary_rows[:12],
+        tradeability=tradeability,
+        should_trade=should_trade and decision_authority["allows_trade_labels"],
+        regime_label=str(mr.get("label") or ""),
+        ibkr_connected=ibkr_connected,
+        ibkr_mode=str(ibkr_st.get("mode") or "paper") if ibkr_connected else "paper",
+        source=decision_authority["source"],
+        stale=scanner_degraded or used_brief_fallback,
+        as_of=out.get("generated_at") or trust.get("as_of"),
+    )
+    out["overlap_warning"] = compute_theme_overlap(summary_rows[:12])
 
     surface_authority = out.get("surface_authority")
     out["cc_state"] = build_cc_state(
@@ -3510,9 +3642,11 @@ async def usage_log_event(body: Dict[str, Any]):
         surface=str((body or {}).get("surface") or "unknown"),
         event=str((body or {}).get("event") or "open"),
         tab=str((body or {}).get("tab") or ""),
-        meta=(body or {}).get("meta")
-        if isinstance((body or {}).get("meta"), dict)
-        else {},
+        meta=(
+            (body or {}).get("meta")
+            if isinstance((body or {}).get("meta"), dict)
+            else {}
+        ),
     )
     payload["ok"] = True
     return sanitize_for_json(payload)
