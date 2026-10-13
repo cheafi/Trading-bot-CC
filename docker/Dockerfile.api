@@ -44,7 +44,9 @@ COPY --chown=cc:cc docs/CC_X_ARCHITECTURE.md docs/
 COPY --chown=cc:cc config/ config/
 COPY --chown=cc:cc changelog.json ./
 COPY --chown=cc:cc _cc_instant.py ./
+COPY --chown=cc:cc scripts/cc_instant.py scripts/run_telegram_bot.py scripts/
 COPY --chown=cc:cc run_dashboard.py ./
+COPY --chown=cc:cc data/universe.json data/
 
 # Writable runtime directories:
 #   data/         — SQLite DBs, brief JSONs, execution fills

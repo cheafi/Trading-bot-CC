@@ -4,6 +4,7 @@ Tests for src/services/indicators.py
 Risk principle: every indicator must be CAUSAL (no look-ahead bias).
 Team RISK verdict: look-ahead in indicators = silent P&L fraud.
 """
+
 import sys
 import os
 
@@ -22,8 +23,8 @@ from src.services.indicators import (
     signal_quality_features,
 )
 
-
 # ── Fixtures ──────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def price_series():
@@ -42,14 +43,15 @@ def volume_series():
 @pytest.fixture
 def ohlcv(price_series, volume_series):
     close = price_series
-    high  = close + np.random.uniform(0, 2, len(close))
-    low   = close - np.random.uniform(0, 2, len(close))
+    high = close + np.random.uniform(0, 2, len(close))
+    low = close - np.random.uniform(0, 2, len(close))
     open_ = np.roll(close, 1)
     open_[0] = close[0]
     return high, low, close, open_, volume_series
 
 
 # ── Causal / look-ahead tests ─────────────────────────────────────
+
 
 class TestCausalProperty:
     """CRITICAL: indicators must not peek at future bars."""
@@ -60,9 +62,9 @@ class TestCausalProperty:
         result = rolling_mean(arr, 5)
         # The value at index 4 must equal the mean of indices 0-4
         expected = float(np.mean(arr[:5]))
-        assert abs(result[4] - expected) < 1e-9, (
-            f"rolling_mean[4]={result[4]:.4f} != mean(arr[0:5])={expected:.4f}"
-        )
+        assert (
+            abs(result[4] - expected) < 1e-9
+        ), f"rolling_mean[4]={result[4]:.4f} != mean(arr[0:5])={expected:.4f}"
 
     def test_rolling_mean_changes_when_we_drop_future(self, price_series):
         """Confirm rolling_mean on truncated series gives same result at shared horizon."""
@@ -80,9 +82,9 @@ class TestCausalProperty:
         arr[80:] *= 2.0
         result2 = ema(arr, 20)
         # Past ema values (up to 79) must be identical
-        assert np.allclose(result1[:60], result2[:60], atol=1e-9), (
-            "ema is sensitive to future bars — look-ahead bias detected!"
-        )
+        assert np.allclose(
+            result1[:60], result2[:60], atol=1e-9
+        ), "ema is sensitive to future bars — look-ahead bias detected!"
 
     def test_rolling_std_no_lookahead(self, price_series):
         arr = price_series
@@ -92,6 +94,7 @@ class TestCausalProperty:
 
 
 # ── Rolling mean ──────────────────────────────────────────────────
+
 
 class TestRollingMean:
     def test_constant_series(self):
@@ -107,7 +110,9 @@ class TestRollingMean:
         """rolling_mean uses expanding mean for early bars — no NaN prefix."""
         window = 20
         result = rolling_mean(price_series, window)
-        assert not np.any(np.isnan(result)), "rolling_mean uses expanding warmup — no NaN expected"
+        assert not np.any(
+            np.isnan(result)
+        ), "rolling_mean uses expanding warmup — no NaN expected"
 
     def test_full_window_correct(self, price_series):
         """Once full window is available, value equals simple mean of last window bars."""
@@ -119,6 +124,7 @@ class TestRollingMean:
 
 # ── compute_indicators ────────────────────────────────────────────
 
+
 class TestComputeIndicators:
     def test_returns_dict(self, price_series, volume_series):
         ind = compute_indicators(price_series, volume_series)
@@ -127,37 +133,58 @@ class TestComputeIndicators:
     def test_required_keys_present(self, price_series, volume_series):
         ind = compute_indicators(price_series, volume_series)
         required = [
-            "sma20", "sma50", "rsi14", "vol_ratio",
-            "macd_line", "macd_signal", "macd_hist",
-            "bb_upper", "bb_mid", "bb_lower", "bb_pct_b",
+            "sma20",
+            "sma50",
+            "rsi14",
+            "vol_ratio",
+            "macd_line",
+            "macd_signal",
+            "macd_hist",
+            "bb_upper",
+            "bb_mid",
+            "bb_lower",
+            "bb_pct_b",
         ]
         for key in required:
             assert key in ind, f"Missing indicator key: {key}"
+
+    def test_rsi_compatibility_alias(self, price_series, volume_series):
+        """Legacy callers and RSI-14 callers must receive the same array."""
+        ind = compute_indicators(price_series, volume_series)
+        assert ind["rsi"] is ind["rsi14"]
+        assert ind["rsi"].shape == price_series.shape
+
+    def test_rsi_alias_no_lookahead(self, price_series, volume_series):
+        """Synthetic future prices must not change either RSI history."""
+        original = compute_indicators(price_series, volume_series)
+        changed_close = price_series.copy()
+        changed_close[60:] *= 2.0
+        changed = compute_indicators(changed_close, volume_series)
+        for key in ("rsi", "rsi14"):
+            np.testing.assert_array_equal(original[key][:60], changed[key][:60])
 
     def test_rsi_bounded_0_to_100(self, price_series, volume_series):
         ind = compute_indicators(price_series, volume_series)
         rsi = np.array(ind["rsi14"])
         valid = rsi[~np.isnan(rsi)]
-        assert np.all(valid >= 0) and np.all(valid <= 100), (
-            "RSI must be in [0, 100]"
-        )
+        assert np.all(valid >= 0) and np.all(valid <= 100), "RSI must be in [0, 100]"
 
     def test_bb_band_ordering(self, price_series, volume_series):
         ind = compute_indicators(price_series, volume_series)
         upper = np.array(ind["bb_upper"])
-        mid   = np.array(ind["bb_mid"])
+        mid = np.array(ind["bb_mid"])
         lower = np.array(ind["bb_lower"])
         valid = ~(np.isnan(upper) | np.isnan(mid) | np.isnan(lower))
         assert np.all(upper[valid] >= mid[valid]), "BB upper must >= mid"
-        assert np.all(mid[valid]   >= lower[valid]), "BB mid must >= lower"
+        assert np.all(mid[valid] >= lower[valid]), "BB mid must >= lower"
 
     def test_macd_hist_is_diff(self, price_series, volume_series):
         """macd_hist = macd_line - macd_signal."""
         ind = compute_indicators(price_series, volume_series)
-        line   = np.array(ind["macd_line"])
+        line = np.array(ind["macd_line"])
         signal = np.array(ind["macd_signal"])
-        hist   = np.array(ind["macd_hist"])
-        valid  = ~(np.isnan(line) | np.isnan(signal) | np.isnan(hist))
+        hist = np.array(ind["macd_hist"])
+        valid = ~(np.isnan(line) | np.isnan(signal) | np.isnan(hist))
         assert np.allclose(hist[valid], (line - signal)[valid], atol=1e-9)
 
     def test_vol_ratio_positive(self, price_series, volume_series):
@@ -169,18 +196,23 @@ class TestComputeIndicators:
 
 # ── Dual Thrust ───────────────────────────────────────────────────
 
+
 class TestDualThrust:
     def test_upper_above_lower(self, ohlcv):
         high, low, close, open_, _ = ohlcv
-        upper, lower = dual_thrust_levels(high, low, close, open_, k1=0.5, k2=0.5, lookback=5)
-        valid = ~(np.isnan(upper) | np.isnan(lower))
-        assert np.all(upper[valid] >= lower[valid]), (
-            "Dual Thrust upper must be >= lower"
+        upper, lower = dual_thrust_levels(
+            high, low, close, open_, k1=0.5, k2=0.5, lookback=5
         )
+        valid = ~(np.isnan(upper) | np.isnan(lower))
+        assert np.all(
+            upper[valid] >= lower[valid]
+        ), "Dual Thrust upper must be >= lower"
 
     def test_output_length_matches_input(self, ohlcv):
         high, low, close, open_, _ = ohlcv
-        upper, lower = dual_thrust_levels(high, low, close, open_, k1=0.5, k2=0.5, lookback=10)
+        upper, lower = dual_thrust_levels(
+            high, low, close, open_, k1=0.5, k2=0.5, lookback=10
+        )
         assert len(upper) == len(close)
         assert len(lower) == len(close)
 
@@ -188,10 +220,11 @@ class TestDualThrust:
         high, low, close, open_, _ = ohlcv
         lookback = 10
         upper, _ = dual_thrust_levels(high, low, close, open_, lookback=lookback)
-        assert np.all(np.isnan(upper[:lookback - 1]))
+        assert np.all(np.isnan(upper[: lookback - 1]))
 
 
 # ── RS vs Benchmark ───────────────────────────────────────────────
+
 
 class TestRsVsBenchmark:
     def _make_series(self, n=252, trend=0.001):
@@ -207,21 +240,23 @@ class TestRsVsBenchmark:
 
     def test_leader_when_outperforming(self):
         """Strongly outperforming stock → LEADER or STRONG status."""
-        stock = self._make_series(trend=0.005)   # strong uptrend
+        stock = self._make_series(trend=0.005)  # strong uptrend
         bench = self._make_series(trend=0.0001)  # flat benchmark
         result = compute_rs_vs_benchmark(stock, bench)
-        assert result["rs_status"] in ("LEADER", "STRONG"), (
-            f"Expected LEADER/STRONG for outperformer, got {result['rs_status']}"
-        )
+        assert result["rs_status"] in (
+            "LEADER",
+            "STRONG",
+        ), f"Expected LEADER/STRONG for outperformer, got {result['rs_status']}"
 
     def test_laggard_when_underperforming(self):
         """Strongly underperforming stock → LAGGARD or WEAK status."""
         stock = self._make_series(trend=-0.003)  # downtrend
-        bench = self._make_series(trend=0.003)   # uptrend benchmark
+        bench = self._make_series(trend=0.003)  # uptrend benchmark
         result = compute_rs_vs_benchmark(stock, bench)
-        assert result["rs_status"] in ("LAGGARD", "WEAK"), (
-            f"Expected LAGGARD/WEAK for underperformer, got {result['rs_status']}"
-        )
+        assert result["rs_status"] in (
+            "LAGGARD",
+            "WEAK",
+        ), f"Expected LAGGARD/WEAK for underperformer, got {result['rs_status']}"
 
     def test_rs_keys_present(self):
         stock = self._make_series()
@@ -233,6 +268,7 @@ class TestRsVsBenchmark:
 
 # ── Signal quality features ───────────────────────────────────────
 
+
 class TestSignalQualityFeatures:
     def test_returns_dict(self, price_series, volume_series):
         ind = compute_indicators(price_series, volume_series)
@@ -243,9 +279,9 @@ class TestSignalQualityFeatures:
         ind = compute_indicators(price_series, volume_series)
         q = signal_quality_features(price_series, volume_series, ind)
         valid = {"OVERSOLD", "NEUTRAL", "MOMENTUM", "OVERBOUGHT", "EXTREME_OVERSOLD"}
-        assert q.get("rsi_regime") in valid, (
-            f"Unexpected rsi_regime: {q.get('rsi_regime')}"
-        )
+        assert (
+            q.get("rsi_regime") in valid
+        ), f"Unexpected rsi_regime: {q.get('rsi_regime')}"
 
     def test_macd_momentum_boolean(self, price_series, volume_series):
         ind = compute_indicators(price_series, volume_series)

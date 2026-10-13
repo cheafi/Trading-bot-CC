@@ -28,6 +28,9 @@ import urllib.request
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+# Direct script execution adds scripts/, not the repo root, to the import path.
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 os.chdir(_REPO_ROOT)
 
 
@@ -174,20 +177,31 @@ def _read_template_bytes() -> bytes:
         pass
     if len(fallback) >= _MIN_TEMPLATE_BYTES:
         return fallback
-    return fallback or b"<html><body>CC template unavailable - run node scripts/build-cc-template.mjs</body></html>"
+    return (
+        fallback
+        or b"<html><body>CC template unavailable - run node scripts/build-cc-template.mjs</body></html>"
+    )
 
 
 def _patch_dashboard_api_key(plain: bytes) -> bytes:
     """Instant server serves raw template — replace Jinja api_key token."""
     key = os.environ.get("API_SECRET_KEY", "dev-secret-local")
-    token = b"window._apiKey = {{ api_key|tojson|safe }};"
+    token = b"{{ api_key|tojson|safe }}"
     if token in plain:
-        repl = ("window._apiKey = " + json.dumps(key) + ";").encode()
+        # Match tojson's HTML-safe escaping for either script element format.
+        repl = (
+            json.dumps(key)
+            .replace("<", "\\u003c")
+            .replace(">", "\\u003e")
+            .replace("&", "\\u0026")
+            .replace("'", "\\u0027")
+        ).encode()
         return plain.replace(token, repl)
     return plain
 
 
 def _read_gzip_dashboard_file() -> bytes | None:
+    """Render gzip in memory; never persist the API key in the asset cache."""
     _bootstrap_gzip_dashboard_cache()
     for gz_path in (_GZIP_DASHBOARD_CACHE, _GZIP_DASHBOARD_PATH):
         if not gz_path.is_file():
@@ -197,7 +211,8 @@ def _read_gzip_dashboard_file() -> bytes | None:
             if gz and len(gz) < _MAX_GZIP_DASHBOARD_BYTES:
                 plain = gzip.decompress(gz)
                 if len(plain) >= _MIN_TEMPLATE_BYTES:
-                    return gz
+                    patched = _patch_dashboard_api_key(plain)
+                    return gzip.compress(patched) if patched != plain else gz
         except Exception:
             continue
     return None
@@ -245,7 +260,7 @@ def _dashboard_response_body(*, use_gzip: bool) -> bytes:
         if use_gzip:
             return gz_asset
         try:
-            plain = _patch_dashboard_api_key(gzip.decompress(gz_asset))
+            plain = gzip.decompress(gz_asset)
             return plain
         except Exception:
             pass
@@ -256,7 +271,7 @@ def _dashboard_response_body(*, use_gzip: bool) -> bytes:
 def _template_response_bodies() -> tuple[bytes, bytes]:
     gz_asset = _read_gzip_dashboard_file()
     if gz_asset:
-        plain = _patch_dashboard_api_key(gzip.decompress(gz_asset))
+        plain = gzip.decompress(gz_asset)
         return plain, gz_asset
     raw = _read_template_bytes()
     if len(raw) >= _MIN_TEMPLATE_BYTES:
@@ -290,8 +305,8 @@ def _write_backend_fatal(exc: BaseException) -> None:
             "at": time.time(),
             "error": str(exc)[:240],
             "hint": (
-                "Install API deps: pip install \"uvicorn[standard]==0.25.0\" "
-                "\"fastapi==0.108.0\" (or pip install -e .) then restart _cc_instant.py"
+                'Install API deps: pip install "uvicorn[standard]==0.25.0" '
+                '"fastapi==0.108.0" (or pip install -e .) then restart _cc_instant.py'
                 if "uvicorn" in str(exc).lower() or "No module named" in str(exc)
                 else "See terminal [backend] FATAL traceback; fix import error and restart."
             ),
@@ -561,7 +576,9 @@ def _brief_fallback_ranked_rows(limit: int = 30) -> list[dict]:
         for section in ("actionable", "watch", "review"):
             for row in brief.get(section) or []:
                 try:
-                    from src.services.playbook_signal_universe import normalize_brief_row
+                    from src.services.playbook_signal_universe import (
+                        normalize_brief_row,
+                    )
 
                     sig = normalize_brief_row(row)
                 except Exception:
@@ -1026,9 +1043,7 @@ def _stale_stock_intel_bytes(path: str, reason: str) -> bytes | None:
     }
 
     module_errors: dict[str, str] = {}
-    partial_notice = (
-        "Brief-backed core from instant snapshot — load enrichments or retry when live API is ready."
-    )
+    partial_notice = "Brief-backed core from instant snapshot — load enrichments or retry when live API is ready."
     if not row:
         module_errors["dossier"] = (
             f"{ticker} not in latest brief cache — quote/technicals pending live API"
@@ -1313,7 +1328,9 @@ def _stale_backtest_lab_bytes(path: str, reason: str) -> bytes:
                 "best_strategy": None,
             },
             "walk_forward": {
-                "windows": [{"window": "recent", "label": "Recent window", "error": reason}],
+                "windows": [
+                    {"window": "recent", "label": "Recent window", "error": reason}
+                ],
                 "stability_score": 0,
                 "verdict": "insufficient_data",
                 "note": "Backend importing — run lab again when API is ready",
@@ -1385,8 +1402,6 @@ def _stale_ops_error_log_bytes(reason: str) -> bytes:
     )
 
 
-
-
 def _stale_ops_status_bytes(reason: str) -> bytes:
     """Minimal operator status while backend is slow or proxy times out."""
     from datetime import datetime, timezone
@@ -1425,6 +1440,7 @@ def _stale_ops_status_bytes(reason: str) -> bytes:
         },
         reason=reason,
     )
+
 
 def _stale_ops_changelog_bytes(reason: str) -> bytes:
     """Disk changelog while uvicorn is still importing."""
@@ -1553,8 +1569,12 @@ def _stale_scanners_bytes() -> bytes:
                 "ticker": tk,
                 "scanner": "brief_fallback",
                 "category": "PATTERN",
-                "score": round(min(10.0, max(3.0, score / 10 if score > 10 else score)), 1),
-                "strength": round(min(10.0, max(3.0, score / 10 if score > 10 else score)), 1),
+                "score": round(
+                    min(10.0, max(3.0, score / 10 if score > 10 else score)), 1
+                ),
+                "strength": round(
+                    min(10.0, max(3.0, score / 10 if score > 10 else score)), 1
+                ),
                 "headline": "Brief watchlist (degraded hub)",
                 "why_surfaced": "Morning brief row until live scanner matrix loads",
                 "signal_source": "brief_fallback",
@@ -1683,8 +1703,10 @@ def _stale_ranked_bytes(reason: str) -> bytes:
     opps = _brief_fallback_ranked_rows(limit=30)
     if not opps:
         brief = _load_latest_brief() or {}
-        for row in (brief.get("actionable") or []) + (brief.get("watch") or []) + (
-            brief.get("review") or []
+        for row in (
+            (brief.get("actionable") or [])
+            + (brief.get("watch") or [])
+            + (brief.get("review") or [])
         ):
             rs = float(row.get("rs_score") or 0)
             tier = "High" if rs >= 75 else ("Medium" if rs >= 60 else "Low")
@@ -1791,7 +1813,10 @@ def _degraded_portfolio_position_post(body: bytes) -> tuple[int, bytes] | None:
     if shares <= 0:
         return 400, json.dumps({"detail": "Shares must be greater than 0"}).encode()
     if entry <= 0:
-        return 400, json.dumps({"detail": "Entry price must be greater than 0"}).encode()
+        return (
+            400,
+            json.dumps({"detail": "Entry price must be greater than 0"}).encode(),
+        )
 
     now = datetime.now(timezone.utc).isoformat() + "Z"
     pos = _build_local_position(payload, now=now)
@@ -1856,14 +1881,14 @@ def _degraded_ai_narrative_post(body: bytes) -> tuple[int, bytes]:
         f"Regime **{trend}**, tradeability **{tradeability}**.",
     ]
     if top5:
-        preview = ", ".join(
-            str(row.get("ticker") or "?") for row in top5[:5]
-        )
+        preview = ", ".join(str(row.get("ticker") or "?") for row in top5[:5])
         lines.append(f"Board preview: {preview}.")
     elif board_narrative:
         lines.append(board_narrative[:600])
     else:
-        lines.append("No ranked setups on the board yet — observe until the funnel clears.")
+        lines.append(
+            "No ranked setups on the board yet — observe until the funnel clears."
+        )
     lines.append(
         f"{note} Retry Generate after /health shows mode=full for LLM-backed prose."
     )
@@ -1928,9 +1953,7 @@ def _degraded_ibkr_status_bytes(full_path: str) -> bytes:
     host = str((qs.get("host") or ["127.0.0.1"])[0]).strip() or "127.0.0.1"
     port = int((qs.get("port") or [str(7497 if mode == "paper" else 4001)])[0])
     diagnosis = _degraded_ibkr_diagnosis(mode, host, port)
-    reason = (
-        "backend importing — IBKR status is transport probe only until /health mode=full"
-    )
+    reason = "backend importing — IBKR status is transport probe only until /health mode=full"
     readiness = {
         "full_handoff_ready": False,
         "session_usable": False,
@@ -1999,15 +2022,13 @@ def _degraded_ibkr_connect_post(body: bytes) -> tuple[int, bytes]:
     req = _parse_ibkr_json_body(body)
     mode, host, port = _ibkr_mode_host_port(req)
     diagnosis = _degraded_ibkr_diagnosis(mode, host, port)
-    detail = (
-        "Clarity Console API is still loading — wait for /health mode=full, then Connect."
-    )
+    detail = "Clarity Console API is still loading — wait for /health mode=full, then Connect."
     if diagnosis.get("api_port_open"):
-        detail += (
-            " IB Gateway port is open; the API session starts only after the full backend loads."
-        )
+        detail += " IB Gateway port is open; the API session starts only after the full backend loads."
     elif diagnosis.get("short") == "OFFLINE":
-        detail += " Start IB Gateway or TWS and enable Socket API (paper default port 7497)."
+        detail += (
+            " Start IB Gateway or TWS and enable Socket API (paper default port 7497)."
+        )
     payload = {
         "ok": False,
         "detail": detail,
@@ -2046,7 +2067,9 @@ def _degraded_portfolio_monitor_bytes() -> bytes:
                 "cost_basis": cost,
                 "unrealized_pnl": round((price - entry) * shares, 2),
                 "pnl_pct": round((price / entry - 1) * 100, 2) if entry else 0,
-                "stop_defined": bool(h.get("stop_defined") or (h.get("stop_price") or 0) > 0),
+                "stop_defined": bool(
+                    h.get("stop_defined") or (h.get("stop_price") or 0) > 0
+                ),
                 "quote_pending": bool(h.get("quote_pending", True)),
             }
         )
@@ -2313,7 +2336,9 @@ def _stale_firm_health_bytes(path_only: str, reason: str) -> bytes | None:
     return None
 
 
-def _degraded_response(path_only: str, reason: str, full_path: str = "") -> bytes | None:
+def _degraded_response(
+    path_only: str, reason: str, full_path: str = ""
+) -> bytes | None:
     """Disk/brief fallbacks for dashboard-critical endpoints."""
     path = full_path or path_only
     if path_only.startswith("/api/v7/intelligence/"):
@@ -2444,7 +2469,11 @@ def _stale_cc_header_bytes() -> bytes:
         "degraded": True,
         "instant_degraded": True,
         "degraded_banner": DEGRADED_BANNER,
-        "trust": {"stale": True, "source": "instant-degraded", "reason": "backend importing"},
+        "trust": {
+            "stale": True,
+            "source": "instant-degraded",
+            "reason": "backend importing",
+        },
     }
     return _encode_degraded(payload, reason="backend importing")
 
@@ -2513,7 +2542,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/gzip")
                 self.send_header("Content-Length", str(len(gz)))
-                self.send_header("Cache-Control", "public, max-age=60")
+                self.send_header("Cache-Control", "no-store")
                 self._cors_headers()
                 self.end_headers()
                 self.wfile.write(gz)
@@ -2584,7 +2613,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 }
                 if fatal_hint:
                     extra["backend_fatal_hint"] = fatal_hint
-                from src.services.operator_state_contract import build_warmup_module_checklist
+                from src.services.operator_state_contract import (
+                    build_warmup_module_checklist,
+                )
 
                 health_payload = _stamp_instant_degraded(
                     {
@@ -2641,6 +2672,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path_only = self.path.split("?", 1)[0]
         degrade_reason = "backend importing — full API still loading"
 
+        # Readiness belongs to this shell, not FastAPI (which has no /readyz).
+        # Probe once per request; the latched proxy flag can outlive backend health.
+        if self.command == "GET" and path_only == "/readyz":
+            ready = _backend_healthy()
+            self._send_json(
+                json.dumps(
+                    {
+                        "status": "ok" if ready else "warming",
+                        "alive": True,
+                        "ready": ready,
+                        "mode": "full" if ready else "loading",
+                        "uptime_seconds": round(time.time() - _start, 1),
+                    }
+                ).encode(),
+                status=200 if ready else 503,
+            )
+            return
+
         # Always-local fast GET paths — never block the UI on a slow :8001 ranked pipeline.
         if self.command == "GET" and path_only in (
             "/api/v7/warmup/brief-board",
@@ -2695,14 +2744,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if body is not None:
             self._send_json(body)
             return
-        if self.path in ("/healthz", "/readyz"):
+        if path_only == "/healthz":
             self._send_json(
                 json.dumps(
                     {
                         "status": "ok",
                         "alive": True,
-                        "ready": _backend_healthy(),
-                        "mode": "loading" if not _backend_healthy() else "full",
+                        # Backend was unavailable or proxying failed above.
+                        "ready": False,
+                        "mode": "loading",
                         "uptime_seconds": round(time.time() - _start, 1),
                     }
                 ).encode()
@@ -2960,27 +3010,66 @@ def _spawn_backend() -> subprocess.Popen:
     proc = subprocess.Popen(
         [sys.executable, "-u", str(Path(__file__).resolve())],
         env=env,
-        cwd=str(Path(__file__).resolve().parent),
+        cwd=str(Path(__file__).resolve().parent.parent),
     )
     print(f"[backend] child started pid={proc.pid}", flush=True)
     return proc
 
 
-def _supervise_backend(proc: subprocess.Popen) -> None:
-    """Log backend child exit; restart without stopping the instant server."""
-    while True:
+def _stop_backend(proc: subprocess.Popen) -> None:
+    """Terminate and reap our child within a bounded shutdown budget."""
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=5.0)
+    except subprocess.TimeoutExpired:
+        proc.kill()
         try:
-            code = proc.wait(timeout=5.0)
+            proc.wait(timeout=1.0)
         except subprocess.TimeoutExpired:
-            continue
-        print(
-            f"[backend] child exited (code={code!r}) — instant server stays up; restarting backend in 3s",
-            flush=True,
-        )
-        global _backend_ready
+            print(
+                f"[backend] child pid={proc.pid} did not exit after kill",
+                flush=True,
+            )
+
+
+def _supervise_backend(stop: threading.Event) -> None:
+    """Own and clean up every child, including replacements."""
+    global _backend_ready
+    proc = None
+    try:
+        while not stop.is_set():
+            try:
+                proc = _spawn_backend()
+            except OSError as exc:
+                _backend_ready = False
+                print(
+                    f"[backend] child spawn failed: {exc!r} — "
+                    "instant server stays up; retrying backend in 3s",
+                    flush=True,
+                )
+                if stop.wait(3):
+                    return
+                continue
+            while not stop.wait(0.2):
+                code = proc.poll()
+                if code is not None:
+                    break
+            if stop.is_set():
+                return
+            print(
+                f"[backend] child exited (code={code!r}) — "
+                "instant server stays up; restarting backend in 3s",
+                flush=True,
+            )
+            _backend_ready = False
+            if stop.wait(3):
+                return
+    finally:
         _backend_ready = False
-        time.sleep(3)
-        proc = _spawn_backend()
+        if proc is not None:
+            _stop_backend(proc)
 
 
 def _log_main_exit() -> None:
@@ -2991,45 +3080,69 @@ def main() -> None:
     if not _acquire_single_instance():
         sys.exit(0)
 
-    # Clear stale listeners from a crashed prior instance (we hold the singleton lock)
-    _kill_port(PORT)
-    _kill_port(BACKEND_PORT)
-    time.sleep(0.5)
+    stop = threading.Event()
+    supervisor = None
+    server = None
 
-    atexit.register(_log_main_exit)
+    def _request_shutdown(signum, frame):
+        # Unwind serve_forever on the main thread; never call shutdown from it.
+        if not stop.is_set():
+            raise KeyboardInterrupt
 
-    # Backend import + uvicorn in a child interpreter so heavy native imports cannot
-    # take down the instant HTTP server (multiprocessing.spawn also killed :8000 ~30–60s).
-    if os.environ.get("CC_INSTANT_NO_BACKEND") == "1":
-        print("[backend] skipped (CC_INSTANT_NO_BACKEND)", flush=True)
-        backend_proc = None
-    else:
-        backend_proc = _spawn_backend()
-        threading.Thread(
-            target=_supervise_backend,
-            args=(backend_proc,),
-            name="cc-backend-supervisor",
-            daemon=True,
-        ).start()
-
-    server = ReusableTCPServer(("0.0.0.0", PORT), Handler)
-    print(f"CC Dashboard ready at http://localhost:{PORT}", flush=True)
-    print("   API importing in background...", flush=True)
+    previous_sigterm = signal.signal(signal.SIGTERM, _request_shutdown)
     try:
+        # Clear stale listeners while holding the singleton lock.
+        _kill_port(PORT)
+        _kill_port(BACKEND_PORT)
+        time.sleep(0.5)
+
+        atexit.register(_log_main_exit)
+        server = ReusableTCPServer(("0.0.0.0", PORT), Handler)
+
+        # Keep spawning and cleanup together, including after restarts.
+        if os.environ.get("CC_INSTANT_NO_BACKEND") == "1":
+            print("[backend] skipped (CC_INSTANT_NO_BACKEND)", flush=True)
+        else:
+            supervisor = threading.Thread(
+                target=_supervise_backend,
+                args=(stop,),
+                name="cc-backend-supervisor",
+                daemon=True,
+            )
+            supervisor.start()
+
+        print(f"CC Dashboard ready at http://localhost:{PORT}", flush=True)
+        print("   API importing in background...", flush=True)
         while True:
             try:
                 server.serve_forever()
             except KeyboardInterrupt:
                 raise
             except Exception as e:
-                print(f"[instant] serve_forever error: {e!r} — retrying in 1s", flush=True)
+                print(
+                    f"[instant] serve_forever error: {e!r} — retrying in 1s",
+                    flush=True,
+                )
                 time.sleep(1)
     except KeyboardInterrupt:
         print("\nShutting down...")
-        server.shutdown()
-        if backend_proc is not None and backend_proc.is_alive():
-            backend_proc.terminate()
-            backend_proc.join(timeout=5)
+    finally:
+        stop.set()
+        try:
+            if server is not None:
+                # The serving loop has unwound; only close its socket.
+                server.server_close()
+        finally:
+            try:
+                if supervisor is not None and supervisor.ident is not None:
+                    supervisor.join(timeout=8.0)
+                    if supervisor.is_alive():
+                        print(
+                            "[backend] supervisor did not stop within 8s",
+                            flush=True,
+                        )
+            finally:
+                signal.signal(signal.SIGTERM, previous_sigterm)
 
 
 if __name__ == "__main__":
