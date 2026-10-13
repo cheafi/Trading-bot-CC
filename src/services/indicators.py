@@ -86,6 +86,8 @@ def compute_indicators(close: np.ndarray, volume: np.ndarray) -> Dict:
     Returns: sma20, sma50, sma200, rsi14, vol_ratio, atr14, atr_pct,
              macd_line, macd_signal, macd_hist, bb_upper, bb_mid, bb_lower,
              bb_pct_b, bb_width, parabolic_sar (simplified), heikin_close.
+
+    ``rsi`` is a compatibility alias for the same RSI-14 array as ``rsi14``.
     """
     n = len(close)
     sma20 = rolling_mean(close, 20)
@@ -146,6 +148,7 @@ def compute_indicators(close: np.ndarray, volume: np.ndarray) -> Dict:
         "sma50": sma50,
         "sma200": sma200,
         "rsi14": rsi14,
+        "rsi": rsi14,  # Compatibility for scanner/advisor callers.
         "vol_ratio": vol_ratio,
         "atr14": atr14,
         "atr_pct": atr_pct,
@@ -326,9 +329,7 @@ def signal_quality_features(
     bb_signal = (
         "LOWER_BAND"
         if bb_pct_b < 0.2
-        else "UPPER_BAND"
-        if bb_pct_b > 0.8
-        else "MID_BAND"
+        else "UPPER_BAND" if bb_pct_b > 0.8 else "MID_BAND"
     )
 
     # BB contraction: low width = coiling energy → expect expansion
@@ -339,13 +340,11 @@ def signal_quality_features(
     rsi_regime = (
         "OVERSOLD"
         if rsi < 30
-        else "RECOVERING"
-        if rsi < 45
-        else "NEUTRAL"
-        if rsi < 55
-        else "MOMENTUM"
-        if rsi < 70
-        else "OVERBOUGHT"
+        else (
+            "RECOVERING"
+            if rsi < 45
+            else "NEUTRAL" if rsi < 55 else "MOMENTUM" if rsi < 70 else "OVERBOUGHT"
+        )
     )
 
     # Volume surge: >2x average = institutional interest

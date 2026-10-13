@@ -98,7 +98,10 @@ locales/
 patches/
 releases/
 schemas/
-scripts/
+# Keep the directory traversable, but include only runtime entrypoints.
+scripts/*
+!scripts/cc_instant.py
+!scripts/run_telegram_bot.py
 models/
 webview-ui/
 
@@ -123,14 +126,17 @@ test_*.py
 tests/
 *_test.py
 
-# Data directory — mounted as volume in dev, not baked into image
-# (see docker-compose.dev.yml volumes: ./data:/app/data)
-data/
+# Runtime state stays out of the image; static universe config is required
+# during backend imports even when no development data volume is mounted.
+data/*
+!data/universe.json
 
 # Backup / scratch directories
 backup_untracked/
 plans/
-docs/
+# Dockerfile.api copies this runtime architecture reference, not all docs.
+docs/*
+!docs/CC_X_ARCHITECTURE.md
 
 # Jupyter / notebooks
 *.ipynb
