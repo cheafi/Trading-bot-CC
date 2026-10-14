@@ -386,8 +386,11 @@ async def market_intel_endpoint(
                     )
         except Exception:
             pass
-        sb = request.app.state.scoreboard
-        regime = sb.regime_label if hasattr(sb, "regime_label") else "UNKNOWN"
+        cache = getattr(request.app.state, "regime_cache", None)
+        if isinstance(cache, dict):
+            regime = cache.get("regime") or "UNKNOWN"
+        else:
+            regime = getattr(cache, "regime", None) or "UNKNOWN"
         report = _market_intel.analyse(
             ticker=ticker,
             price=price,

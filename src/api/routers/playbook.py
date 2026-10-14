@@ -943,7 +943,11 @@ async def warm_playbook_discovery_cache(app) -> None:
             )
         app.state.playbook_ranked_cache = _get_ranked_cached(cache_key) or {}
     except Exception as exc:
-        logger.warning("[Prewarm] Playbook ranked warm failed (non-fatal): %s", exc)
+        logger.warning(
+            "[Prewarm] Playbook ranked warm failed (non-fatal): %s: %s",
+            type(exc).__name__,
+            exc,
+        )
 
     rs_key = _rs_ranking_cache_key(None, None, 50)
     if not _get_rs_ranking_cached(rs_key):

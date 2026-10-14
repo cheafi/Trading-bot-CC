@@ -3593,6 +3593,116 @@
     </main>
 
     <!-- ═══════════════════════════════════════════════════════ -->
+    <!-- SIGNAL BOARD — hourly BUY / SELL paper signals          -->
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <main x-show="tab==='signalboard'" class="fade" data-cc="signal-board-surface"
+          x-init="if(tab==='signalboard')fetchSignalBoard();$watch('tab',v=>{if(v==='signalboard')fetchSignalBoard()});setInterval(()=>{if(tab==='signalboard')fetchSignalBoard()},300000)">
+      <div class="trust-strip" style="flex-wrap:wrap;gap:8px">
+        <span style="color:var(--amber)">● PAPER SIGNAL</span>
+        <span x-text="signalBoard.data?.authority?.note || 'Not an order — execution gates unchanged'"></span>
+      </div>
+      <div class="p-3 space-y-3">
+        <div class="flex items-center gap-2 flex-wrap">
+          <div class="text-[13px] font-bold">🚦 訊號板 · Signal Board</div>
+          <span class="pill text-[8px]" :class="signalBoard.data?.regime?.label==='RISK_ON'?'pg':(signalBoard.data?.regime?.label==='RISK_OFF'?'pr':'pa')" x-text="signalBoard.data?.regime?.label || '—'"></span>
+          <span class="text-[9px]" style="color:var(--t3)" x-show="signalBoard.data?.generated_at" x-text="'Updated '+signalBoardTime(signalBoard.data?.generated_at)+' · bar '+(signalBoard.data?.as_of_bar||'—')+(signalBoard.data?.partial_bar?' (intraday)':'')+' · next '+signalBoardTime(signalBoard.data?.next_refresh_at)"></span>
+          <span class="text-[9px]" style="color:var(--t3)" x-show="signalBoard.data?.universe" x-text="(signalBoard.data?.universe?.liquid||0)+' liquid of '+(signalBoard.data?.universe?.requested||0)+' scanned'"></span>
+          <button class="btn-s text-[10px]" style="margin-left:auto" @click="refreshSignalBoard()" :disabled="signalBoard.refreshing || signalBoard.data?.refreshing" x-text="(signalBoard.refreshing||signalBoard.data?.refreshing)?'Scanning…':'↻ Rescan now'"></button>
+        </div>
+        <div class="text-[9px]" style="color:var(--t2)" x-show="signalBoard.data?.regime?.note" x-text="signalBoard.data?.regime?.note"></div>
+
+        <template x-if="signalBoard.error">
+          <div class="card card-p text-[10px]" style="border-color:var(--red);color:var(--red)" x-text="signalBoard.error"></div>
+        </template>
+        <template x-if="!signalBoard.data && signalBoard.loading">
+          <div class="card card-p text-[10px]" style="color:var(--t3)">Loading Signal Board…</div>
+        </template>
+        <template x-if="signalBoard.data?.status==='warming'">
+          <div class="card card-p text-[10px]" style="border-color:var(--amber);color:var(--amber)" x-text="signalBoard.data.detail"></div>
+        </template>
+
+        <template x-if="signalBoard.data?.status==='ok'">
+          <div class="space-y-3">
+            <div class="grid gap-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
+              <div class="card card-p"><div class="text-[8px] uppercase" style="color:var(--t3)">Top buy</div><div class="text-[15px] font-bold mono" style="color:var(--green)" x-text="signalBoard.data.headline?.top_buy || '—'"></div></div>
+              <div class="card card-p"><div class="text-[8px] uppercase" style="color:var(--t3)">Top sell</div><div class="text-[15px] font-bold mono" style="color:var(--red)" x-text="signalBoard.data.headline?.top_sell || '—'"></div></div>
+              <div class="card card-p"><div class="text-[8px] uppercase" style="color:var(--t3)">Buy / Sell signals</div><div class="text-[15px] font-bold mono" x-text="(signalBoard.data.headline?.buy_count||0)+' / '+(signalBoard.data.headline?.sell_count||0)"></div></div>
+              <div class="card card-p"><div class="text-[8px] uppercase" style="color:var(--t3)">Holding exit alerts</div><div class="text-[15px] font-bold mono" :style="(signalBoard.data.headline?.exit_alerts||0)>0?'color:var(--red)':''" x-text="signalBoard.data.headline?.exit_alerts||0"></div></div>
+            </div>
+
+            <div class="grid gap-3" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+              <template x-for="side in [{title:'BUY',color:'var(--green)',buckets:[['strong_buy','Strong Buy'],['buy','Buy']]},{title:'SELL',color:'var(--red)',buckets:[['strong_sell','Strong Sell'],['sell','Sell']]}]" :key="side.title">
+                <div class="space-y-2">
+                  <div class="text-[11px] font-bold" :style="'color:'+side.color" x-text="side.title"></div>
+                  <template x-for="bk in side.buckets" :key="bk[0]">
+                    <div class="space-y-1">
+                      <div class="text-[9px] uppercase" style="color:var(--t3)" x-text="bk[1]+' · '+(signalBoard.data.bucket_totals?.[bk[0]]||0)+' found'+((signalBoard.data.bucket_totals?.[bk[0]]||0)>signalBoardBucket(bk[0]).length?' (top '+signalBoardBucket(bk[0]).length+' shown)':'')"></div>
+                      <template x-if="!signalBoardBucket(bk[0]).length">
+                        <div class="text-[9px]" style="color:var(--t3)">None this scan.</div>
+                      </template>
+                      <template x-for="s in signalBoardBucket(bk[0])" :key="s.ticker">
+                        <div class="card card-p" :style="'border-left:3px solid '+side.color">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <span class="mono font-bold text-[12px] cursor-pointer" @click="openDossier(s.ticker)" x-text="s.ticker"></span>
+                            <span class="pill text-[7px]" :class="side.title==='BUY'?'pg':'pr'" x-text="s.setup"></span>
+                            <span class="text-[8px]" style="color:var(--t3)" x-text="s.sector"></span>
+                            <span class="mono text-[10px]" style="margin-left:auto" x-text="'Score '+s.score"></span>
+                          </div>
+                          <div class="mono text-[9px] mt-1" style="color:var(--t2)" x-text="'Entry '+s.entry+' · Stop '+s.stop+' · T1 '+s.target1+' · T2 '+s.target2+' · risk '+s.risk_pct+'%'"></div>
+                          <div class="text-[9px] mt-1" style="color:var(--t2)" x-text="(s.why||[]).join(' · ')"></div>
+                          <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="s.invalidation+' · RS pct '+s.rs_percentile+' · vol '+s.volume_ratio+'x · RSI '+s.rsi"></div>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <div class="card card-p" x-show="(signalBoard.data.holdings||[]).length">
+              <div class="text-[10px] font-bold mb-1">My holdings — exit / trim alerts</div>
+              <template x-for="h in signalBoard.data.holdings||[]" :key="h.ticker">
+                <div class="flex items-center gap-2 flex-wrap text-[9px] py-1" style="border-top:1px solid var(--border)">
+                  <span class="mono font-bold" x-text="h.ticker"></span>
+                  <span class="pill text-[7px]" :class="h.action==='EXIT'?'pr':(h.action==='TRIM'?'pa':'pg')" x-text="h.action"></span>
+                  <span class="mono" x-show="h.price" x-text="h.price"></span>
+                  <span class="mono" style="color:var(--t3)" x-show="h.trailing_stop" x-text="'trail stop '+h.trailing_stop"></span>
+                  <span class="mono" x-show="h.pnl_pct!==null&&h.pnl_pct!==undefined" :style="h.pnl_pct>=0?'color:var(--green)':'color:var(--red)'" x-text="(h.pnl_pct>=0?'+':'')+h.pnl_pct+'%'"></span>
+                  <span style="color:var(--t2)" x-text="(h.reasons||[]).join(' · ')"></span>
+                </div>
+              </template>
+            </div>
+
+            <div class="grid gap-3" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+              <template x-for="w in [{key:'long',title:'Watch — strong trend, wait for entry',color:'var(--green)'},{key:'short',title:'Watch — weak trend, wait for breakdown',color:'var(--red)'}]" :key="w.key">
+                <div class="card card-p">
+                  <div class="text-[10px] font-bold mb-1" :style="'color:'+w.color" x-text="w.title"></div>
+                  <template x-if="!(signalBoard.data.watch?.[w.key]||[]).length"><div class="text-[9px]" style="color:var(--t3)">None.</div></template>
+                  <template x-for="r in signalBoard.data.watch?.[w.key]||[]" :key="r.ticker">
+                    <div class="text-[9px] py-0.5"><span class="mono font-bold" x-text="r.ticker"></span> <span class="mono" style="color:var(--t3)" x-text="r.price"></span> — <span style="color:var(--t2)" x-text="r.wait_for"></span></div>
+                  </template>
+                </div>
+              </template>
+            </div>
+
+            <div class="card card-p text-[9px]" style="color:var(--t2)">
+              <div class="font-bold text-[10px] mb-1">Track record (last <span x-text="signalBoard.data.track_record?.window_days||60"></span> days)</div>
+              <div x-text="(signalBoard.data.track_record?.signals||0)+' signals · '+(signalBoard.data.track_record?.closed||0)+' closed · win rate '+(signalBoard.data.track_record?.win_rate ?? '—')+'% · avg '+(signalBoard.data.track_record?.avg_r_closed ?? '—')+'R'"></div>
+              <div style="color:var(--t3)" x-text="signalBoard.data.track_record?.note"></div>
+            </div>
+
+            <details class="card card-p text-[9px]" style="color:var(--t2)">
+              <summary class="cursor-pointer text-[10px] font-bold">How signals are built</summary>
+              <template x-for="(v,k) in signalBoard.data.method||{}" :key="k">
+                <div class="mt-1"><span class="mono" style="color:var(--t3)" x-text="k+': '"></span><span x-text="typeof v==='string'?v:Object.entries(v).map(e=>e[0]+' — '+e[1]).join(' | ')"></span></div>
+              </template>
+            </details>
+          </div>
+        </template>
+      </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
     <!-- SURFACE 3: SYMBOL DOSSIER                              -->
     <!-- ═══════════════════════════════════════════════════════ -->
     <main x-show="tab==='dossier'" class="fade" data-cc="dossier-surface">
@@ -9146,6 +9256,7 @@
     <nav data-cc-bottom-nav style="position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bd);padding:6px 0 max(env(safe-area-inset-bottom),6px);z-index:50">
       <div class="flex justify-around max-w-lg mx-auto">
         <a href="#" data-cc-nav="today" @click.prevent="switchTab('today')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='today'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">☀</span>今日<span style="font-size:8px;opacity:.5">Today</span></a>
+        <a href="#" data-cc-nav="signalboard" @click.prevent="switchTab('signalboard')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signalboard'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🚦</span>訊號<span style="font-size:8px;opacity:.5">Signals</span></a>
         <a href="#" data-cc-nav="signals" @click.prevent="switchTab('signals')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='signals'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">📋</span>策略<span style="font-size:8px;opacity:.5">Playbook</span></a>
         <a href="#" data-cc-nav="portfolio" @click.prevent="switchTab('portfolio')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='portfolio'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">💼</span>持倉<span style="font-size:8px;opacity:.5">Portfolio</span></a>
         <a href="#" data-cc-nav="dossier" @click.prevent="switchTab('dossier')" class="flex flex-col items-center text-[9px] gap-0.5" style="text-decoration:none" :style="tab==='dossier'?'color:var(--green)':'color:var(--t3)'"><span style="font-size:16px">🗂</span>工作區<span style="font-size:8px;opacity:.5">Workspace</span></a>

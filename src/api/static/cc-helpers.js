@@ -3458,6 +3458,7 @@ function ccNormalizeTab(tab, fallback) {
 	const allowed = new Set([
 		"guide",
 		"today",
+		"signalboard",
 		"signals",
 		"scanners",
 		"portfolio",
@@ -3494,6 +3495,7 @@ function cc() {
 		),
 		tabs: [
 			{ id: "today", icon: "☀", label: "今日" },
+			{ id: "signalboard", icon: "🚦", label: "訊號板" },
 			{ id: "signals", icon: "📋", label: "策略簿" },
 			{ id: "portfolio", icon: "💼", label: "持倉" },
 			{ id: "dossier", icon: "🗂", label: "工作區" },
@@ -3730,6 +3732,7 @@ function cc() {
 		leadersDash: {},
 		leadersView: "hub",
 		leadersHub: { loading: false, leaders: [] },
+		signalBoard: { data: null, loading: false, error: "", refreshing: false },
 		leadersFilter: { category: "", quality: "", search: "" },
 		leadersDetail: null,
 		leadersConsensus: { items: [] },
@@ -3927,6 +3930,7 @@ function cc() {
 		_attentionBudgetTab: "today",
 		_attentionBudgetSec: 0,
 		reviewPackLoading: false,
+		uiLayoutExportLoading: false,
 		stratHealth: { loading: false, data: null, window: 30, err: "" },
 		histVar: { loading: false, data: null, err: "", last_run: 0 },
 		freshness: null,
@@ -13088,6 +13092,51 @@ function cc() {
 				if (r.ok) this.leadersDash = await r.json()
 			} catch (e) {
 				console.warn("leaders dash", e)
+			}
+		},
+		async fetchSignalBoard() {
+			if (this.signalBoard.loading) return
+			this.signalBoard.loading = true
+			this.signalBoard.error = ""
+			try {
+				const r = await fetch("/api/v7/signal-board")
+				if (!r.ok) throw new Error("HTTP " + r.status)
+				const d = await r.json()
+				this.signalBoard.data = d
+				if ((d.status === "warming" || d.refreshing) && this.tab === "signalboard") {
+					setTimeout(() => this.fetchSignalBoard(), 20000)
+				}
+			} catch (e) {
+				this.signalBoard.error = "Signal Board unavailable — " + (e && e.message ? e.message : "fetch failed")
+			} finally {
+				this.signalBoard.loading = false
+			}
+		},
+		async refreshSignalBoard() {
+			this.signalBoard.refreshing = true
+			try {
+				const r = await fetch("/api/v7/signal-board/refresh", {
+					method: "POST",
+					headers: { "X-API-Key": window._apiKey || "" },
+				})
+				if (!r.ok) throw new Error("HTTP " + r.status)
+				setTimeout(() => this.fetchSignalBoard(), 15000)
+			} catch (e) {
+				this.signalBoard.error = "Refresh failed — " + (e && e.message ? e.message : "request failed")
+			} finally {
+				setTimeout(() => (this.signalBoard.refreshing = false), 15000)
+			}
+		},
+		signalBoardBucket(name) {
+			const d = this.signalBoard.data
+			return (d && d.buckets && d.buckets[name]) || []
+		},
+		signalBoardTime(iso) {
+			if (!iso) return "—"
+			try {
+				return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+			} catch (e) {
+				return iso
 			}
 		},
 		async fetchLeadersHub() {

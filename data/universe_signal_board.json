@@ -1,0 +1,3844 @@
+{
+	"meta": {
+		"version": "2026-10-14",
+		"description": "Signal Board universe: S&P 500 + Nasdaq-100 + liquid ETFs/index proxies",
+		"provenance": "static snapshot (S&P 500 constituents CSV, Nasdaq-100 list from nasdaq.com, ETFs from data/universe.json); refresh manually when index membership changes",
+		"count": 639
+	},
+	"symbols": [
+		{
+			"ticker": "A",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AAPL",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "ABBV",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ABNB",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "ABT",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ACGL",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ACN",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ADBE",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "ADI",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "ADM",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ADP",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "ADSK",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "AEE",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AEP",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "AES",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AFL",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AIG",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AIZ",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AJG",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AKAM",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ALB",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ALGN",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ALL",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ALLE",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AMAT",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "AMCR",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AMD",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "AME",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AMGN",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "AMP",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AMT",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AMZN",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "ANET",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AON",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AOS",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "APA",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "APD",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "APH",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "APO",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "APP",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "APTV",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ARE",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ARES",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ATO",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AVGO",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "AVY",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AWK",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AXON",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "AXP",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "AZO",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BA",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BAC",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BALL",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BAX",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BBY",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BDX",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BE",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BEN",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BF-B",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BG",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BIIB",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BKNG",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "BKR",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "BLK",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BMY",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BNY",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BR",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BRK-B",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BRO",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BSX",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BX",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "BXP",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "C",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CAH",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CARR",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CASY",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CAT",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CB",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CBOE",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CBRE",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CCI",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CCL",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CDNS",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "CDW",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CEG",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "CF",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CFG",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CHD",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CHRW",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CHTR",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CI",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CIEN",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CINF",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CL",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CLX",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CMCSA",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "CME",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CMG",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CMI",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CMS",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CNC",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CNP",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "COF",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "COHR",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "COIN",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "COO",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "COP",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "COR",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "COST",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "CPAY",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CPRT",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "CPT",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CRH",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CRL",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CRM",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CRWD",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "CSCO",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "CSGP",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CSX",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "CTAS",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "CTSH",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CVNA",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CVS",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "CVX",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "D",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DAL",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DASH",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "DD",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DDOG",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "DE",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DECK",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DELL",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DG",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DGX",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DHI",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DHR",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DIS",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DLR",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DLTR",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DOC",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DOV",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DOW",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DPZ",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DRI",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DTE",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DUK",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DVA",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DVN",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "DXCM",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "EBAY",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ECHO",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ECL",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ED",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EFX",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EG",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EIX",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EL",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ELV",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EME",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EMR",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EOG",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EQIX",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EQT",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ERIE",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ES",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ESS",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ETN",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ETR",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EVRG",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EW",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EXC",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "EXE",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EXPD",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EXPE",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "EXR",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "F",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FANG",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "FAST",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "FCX",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FDS",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FDX",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FDXF",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FE",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FERG",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FFIV",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FICO",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FIS",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FISV",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FITB",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FIX",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FLEX",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FOX",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FOXA",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FRT",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FSLR",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "FTNT",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "FTV",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GD",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GDDY",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GE",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GEHC",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "GEN",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GEV",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GILD",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "GIS",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GL",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GLW",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GM",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GNRC",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GOOG",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "GOOGL",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "GPC",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GPN",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GRMN",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GS",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "GWW",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HAL",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HAS",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HBAN",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HCA",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HD",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HIG",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HII",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HLT",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HON",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "HONA",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "HOOD",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HPE",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HPQ",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HRL",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HSIC",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HST",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HSY",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HUBB",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HUM",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "HWM",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "IBKR",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "IBM",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ICE",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "IDXX",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "IEX",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "IFF",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ILMN",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "INCY",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "INTC",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "INTU",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "INVH",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "IP",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "IQV",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "IR",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "IRM",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ISRG",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "IT",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ITW",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "IVZ",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "J",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "JBHT",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "JBL",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "JCI",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "JKHY",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "JNJ",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "JPM",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "KDP",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "KEY",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "KEYS",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "KHC",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "KIM",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "KKR",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "KLAC",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "KMB",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "KMI",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "KO",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "KR",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "KVUE",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "L",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LDOS",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LEN",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LH",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LHX",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LII",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LIN",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "LITE",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "LLY",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LMT",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LNT",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LOW",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LRCX",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "LULU",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LUV",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LVS",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LYB",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "LYV",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MA",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MAA",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MAR",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "MAS",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MCD",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MCHP",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "MCK",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MCO",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MDLZ",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "MDT",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MET",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "META",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "MGM",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MKC",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MLM",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MMM",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MNST",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "MO",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MOS",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MPC",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MPWR",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "MRK",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MRNA",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "MRSH",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MRVL",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "MS",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MSCI",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MSFT",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "MSI",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MTB",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MTD",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "MU",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "NCLH",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NDAQ",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NDSN",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NEE",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NEM",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NFLX",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "NI",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NKE",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NOC",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NOW",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NRG",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NSC",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NTAP",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NTRS",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NUE",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NVDA",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "NVR",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NWS",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NWSA",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "NXPI",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "O",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ODFL",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "OKE",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "OMC",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ON",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ORCL",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ORLY",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "OTIS",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "OXY",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "P",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PANW",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "PAYX",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "PCAR",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "PCG",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PEG",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PEP",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "PFE",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PFG",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PG",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PGR",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PH",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PHM",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PKG",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PLD",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PLTR",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "PM",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PNC",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PNR",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PNW",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PODD",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PPG",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PPL",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PRU",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PSA",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PSX",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PTC",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PWR",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "PYPL",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "Q",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "QCOM",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "RCL",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "RDDT",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "REG",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "REGN",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "RF",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "RJF",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "RL",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "RMD",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ROK",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ROL",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ROP",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "ROST",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "RSG",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "RTX",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "RVTY",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SBAC",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SBUX",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "SCHW",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SHW",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SJM",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SKYD",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SLB",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SMCI",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SNA",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SNDK",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "SNPS",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "SO",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SOLV",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SPG",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SPGI",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SRE",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "STE",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "STLD",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "STT",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "STX",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "STZ",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SW",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SWK",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SWKS",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SYF",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SYK",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "SYY",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "T",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TDG",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TDY",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TECH",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TEL",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TER",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "TFC",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TGT",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TJX",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TKO",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TMO",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TMUS",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "TPL",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TPR",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TRGP",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TRMB",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TROW",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TRV",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TSCO",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TSLA",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "TSN",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TT",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TTWO",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "TWLO",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TXN",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "TXT",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "TYL",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "UAL",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "UBER",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "UDR",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "UHS",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ULTA",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "UNH",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "UNP",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "UPS",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "URI",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "USB",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "V",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VEEV",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VICI",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VLO",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VLTO",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VMC",
+			"sector": "Materials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VMRK",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VRSK",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VRSN",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VRT",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VRTX",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "VST",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VTR",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VTRS",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VYLR",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "VZ",
+			"sector": "Communication Services",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WAB",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WAT",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WDAY",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "WDC",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "WEC",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WELL",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WFC",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WM",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WMB",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WMT",
+			"sector": "Consumer Staples",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "WRB",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WSM",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WST",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WTW",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WY",
+			"sector": "Real Estate",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "WYNN",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "XEL",
+			"sector": "Utilities",
+			"asset_class": "equity",
+			"source": "sp500+ndx100"
+		},
+		{
+			"ticker": "XOM",
+			"sector": "Energy",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "XYL",
+			"sector": "Industrials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "XYZ",
+			"sector": "Financials",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "YUM",
+			"sector": "Consumer Discretionary",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ZBH",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ZBRA",
+			"sector": "Information Technology",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ZTS",
+			"sector": "Health Care",
+			"asset_class": "equity",
+			"source": "sp500"
+		},
+		{
+			"ticker": "ALAB",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "ALNY",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "ARM",
+			"sector": "Technology",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "ASML",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "CCEP",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "CRWV",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "FER",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "MELI",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "MSTR",
+			"sector": "Technology",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "NBIS",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "PDD",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "RKLB",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "SHOP",
+			"sector": "Technology",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "SPCX",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "TRI",
+			"sector": "Unknown",
+			"asset_class": "equity",
+			"source": "ndx100"
+		},
+		{
+			"ticker": "DIA",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IJH",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IJR",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "ITOT",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IVV",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IWB",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IWM",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IWV",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "MDY",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "ONEQ",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "QQQ",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "RSP",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SCHB",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SCHX",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SPLG",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SPMD",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SPY",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "VOO",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "VTI",
+			"sector": "Index",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLB",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLC",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLE",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLF",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLI",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLK",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLP",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLRE",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLU",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLV",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XLY",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "AGG",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "AIQ",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "ARKG",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "ARKK",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "ARKQ",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "ARKW",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "BITO",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "BND",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "BOTZ",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "BUG",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "CIBR",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "CLOU",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "DGRO",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "EEM",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "FDN",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "FXI",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "GDX",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "GDXJ",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "GLD",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "GNOM",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "HACK",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "HYG",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IAI",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IBB",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "ICLN",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IEF",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IGV",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IHF",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IHI",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "ITA",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IYR",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IYT",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "IYZ",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "JETS",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "KBE",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "KRE",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "KWEB",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "LABU",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "LIT",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "LQD",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "MOAT",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "MTUM",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "OIH",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "PAVE",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "PNQI",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "PPA",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "PSI",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "PSJ",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "PTF",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "QQQM",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "QUAL",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "REMX",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "ROBO",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SCHD",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SDY",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SHY",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SIL",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SILJ",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SIZE",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SKYY",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SLV",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SMH",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SOXX",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SPHB",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SPHQ",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SPLV",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "SVXY",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "TAN",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "TLT",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "UNG",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "URA",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "URNM",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "USMV",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "USO",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "VIG",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "VIXY",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "VLUE",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "VNQ",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "VWO",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "WCLD",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XAR",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XBI",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XES",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XHB",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XHS",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XME",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XOP",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XPH",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XRT",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XSD",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		},
+		{
+			"ticker": "XSW",
+			"sector": "ETF",
+			"asset_class": "etf",
+			"source": "universe.json"
+		}
+	]
+}
