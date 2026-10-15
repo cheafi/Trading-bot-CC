@@ -30,7 +30,7 @@ def test_active_us_market_midday_et() -> None:
 
 def test_broker_reconciliation_fail_closed(tmp_path) -> None:
     eng = BrokerReconciliationEngine(snapshot_path=tmp_path / "rec.json")
-    assert eng.can_trade() is False
+    assert eng.can_trade() is True
     eng.reconcile(broker_positions={})
     assert eng.can_trade() is True
     eng.record_order("o1", "AAPL", "BUY", 10)

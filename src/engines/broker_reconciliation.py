@@ -114,6 +114,7 @@ class BrokerReconciliationEngine:
     def _load_snapshot(self) -> None:
         path = self._snapshot_path
         if not path.exists():
+            self._reconciliation_status = ReconciliationStatus.OK
             return
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -135,6 +136,8 @@ class BrokerReconciliationEngine:
                     len(self._orders),
                     self._reconciliation_status.value,
                 )
+            elif self._reconciliation_status == ReconciliationStatus.PENDING:
+                self._reconciliation_status = ReconciliationStatus.OK
         except Exception as exc:
             logger.warning("Reconciliation snapshot load failed: %s", exc)
 

@@ -96,6 +96,19 @@ class TradeGate:
         multiplier = 1.0
 
         # ── Hard gates ──────────────────────────────────────────────
+        try:
+            from src.engines.broker_reconciliation import broker_reconciliation
+
+            gate = broker_reconciliation.recovery_gate()
+            if gate.get("requires_broker_reconcile"):
+                hard.append(
+                    "Broker reconciliation not OK — "
+                    f"status={gate.get('reconciliation_status')} "
+                    f"open_orders={gate.get('open_count')}"
+                )
+        except Exception:
+            hard.append("Broker reconciliation unavailable — fail closed")
+
         if current_drawdown_pct >= self.max_drawdown_pct:
             hard.append(
                 f"Drawdown {current_drawdown_pct:.1%} exceeds "
