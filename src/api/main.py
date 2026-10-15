@@ -1120,6 +1120,19 @@ async def _startup_prewarm():
     except Exception as exc:
         logger.warning("[Prewarm] Scanner warm failed (non-fatal): %s", exc)
 
+    if os.getenv("CC_BROKER_RECON_SYNC", "").lower() in ("1", "true", "yes"):
+        try:
+            from src.services.broker_reconciliation_ibkr import sync_reconciliation_from_ibkr
+
+            recon = await sync_reconciliation_from_ibkr()
+            logger.info(
+                "[Prewarm] Broker reconciliation sync ok=%s can_trade=%s",
+                recon.get("ok"),
+                recon.get("can_trade"),
+            )
+        except Exception as exc:
+            logger.warning("[Prewarm] Broker reconciliation sync failed: %s", exc)
+
 
 @asynccontextmanager
 async def _lifespan(app):  # noqa: ARG001
