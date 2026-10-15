@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 from src.core.config import get_settings
-from src.core.database import get_session
 from src.ingestors.base import BaseIngestor
 
 settings = get_settings()
@@ -253,6 +252,8 @@ class MarketDataIngestor(BaseIngestor):
         """Store OHLCV records in database."""
         if not records:
             return 0
+
+        from src.core.database import get_session
 
         stored_count = 0
 

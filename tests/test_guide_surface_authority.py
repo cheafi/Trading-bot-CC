@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from _dashboard_js_runtime import run_dashboard_js
+
 from src.services.surface_authority import (
     AUTHORITY_SUSPENDED,
     GUIDE_AUTHORITY_STRIP,
@@ -15,7 +17,9 @@ from src.services.surface_authority import (
     resolve_authority_for_ui_tab,
 )
 
-_INDEX_HTML = Path(__file__).resolve().parents[1] / "src" / "api" / "templates" / "index.html"
+_ROOT = Path(__file__).resolve().parents[1]
+_INDEX_HTML = _ROOT / "src" / "api" / "templates" / "index.html"
+_GUIDE_PARTIAL = _ROOT / "src" / "api" / "templates" / "cc" / "partials" / "guide.html"
 
 
 def test_guide_tab_resolves_suspended_authority():
@@ -58,7 +62,10 @@ def test_guide_mode_strip_passive_status_only():
 
 
 def test_guide_authority_strip_constant_is_canonical():
-    assert GUIDE_AUTHORITY_STRIP == "GUIDE MODE · Reference only · Decision surfaces suspended"
+    assert (
+        GUIDE_AUTHORITY_STRIP
+        == "GUIDE MODE · Reference only · Decision surfaces suspended"
+    )
     assert "Decision surfaces suspended" in GUIDE_AUTHORITY_STRIP
 
 
@@ -72,57 +79,60 @@ def test_guide_header_bindings_no_duplicate_authority_strip():
     )
     assert guide_trust is not None
     trust_block = guide_trust.group(0)
-    assert trust_block.count("Decision surfaces suspended") == 1
+    assert trust_block.lower().count("decision surfaces suspended") == 1
     assert "Engine ·" not in trust_block
     assert "guideStatusNote()" in trust_block
-    # Removed duplicate Guide-only Authority bar (GUIDE MODE pill + suspended copy)
-    assert 'tab===\'guide\'" style="background:var(--s0)' not in html
+    # No duplicate Guide-only Authority bar.
+    assert "tab==='guide'\" style=\"background:var(--s0)" not in html
     assert html.count("Decision surfaces suspended in Guide") == 0
+    run_dashboard_js("""
+        app.tab = 'guide';
+        app.today7.tradeability = 'STRONG_TRADE';
+        app.today7.system_state = {
+            deploy_open: true, global_strip_active: true};
+        app.decisionHub = {decision_bar: {verdict: 'DEPLOY'}};
+        assert.equal(app.tabAuthorityChip().authority, 'suspended');
+        assert.equal(app.contextDecisionBar(), null);
+        assert.equal(app.normalizedContextDecisionBar(), null);
+        assert.equal(app.globalSystemStripVisible(), false);
+        assert.equal(app.dataContractStripVisible(), false);
+        assert.equal(app.pageOperatorCompactVisible(), false);
+        assert.equal(app.headerSummary().show_decision_chips, false);
+        assert.equal(app.headerSummary().show_regime_strip, false);
+        assert.match(app.guideStatusNote(), /Runtime|執行時|運行|評估/);
+    """)
 
 
 def test_guide_layer1_usability_polish():
-    """Layer 1: capital checklist label, mistakes block, compressed checklist."""
+    """Quickstart: three plain-language rules + capital when/blocked summary."""
     html = _INDEX_HTML.read_text(encoding="utf-8")
-    assert "Layer 1 — Quick Start" in html
-    assert "When capital is allowed / blocked" in html
-    assert "Capital allowed when" in html
-    assert "Capital blocked when" in html
-    assert "When you can / cannot act" not in html
-    assert "Most common mistakes" in html
-    assert "Don't size from fallback cards" in html
-    assert "Don't treat IBKR LOGIN as execution-ready" in html
-    assert "Don't treat Discovery / Flow / RS as deploy permission" in html
-    assert "Don't treat Backtest Lab as live evidence" in html
-    assert "4 rules that prevent most mistakes" not in html
-    # Compressed checklist — three essentials only
+    assert "三條鐵律" in html
+    assert "幾時可以動錢" in html
+    assert "Random Walk — Global Principles" not in html
     checklist = re.search(
         r'id="cc-operator-checklist"[\s\S]{0,1200}',
         html,
     )
     assert checklist is not None
     block = checklist.group(0)
-    assert "Page gate beats card rank" in block
-    assert "Research ≠ permission" in block
-    assert "Dashboard first" in block
+    assert "今日大環境" in block
+    assert "研究頁" in block
+    assert "止蝕" in block
 
 
 def test_guide_signal_card_degraded_examples():
-    """Layer 2 signal card section shows ideal + degraded illustrative examples."""
-    html = _INDEX_HTML.read_text(encoding="utf-8")
-    assert "Reading a signal card" in html
-    assert "Illustrative examples only" in html
-    assert "Ideal — deploy-grade" in html
-    assert "Degraded — fallback watch" in html
-    assert "FALLBACK WATCH" in html
-    assert "Degraded — confirm-only dossier" in html
-    assert "Confirm-only — no IBKR handoff or sizing" in html
-    assert "No sizing guidance in confirm-only mode" in html
+    """Advanced section: one illustrative card + short legend (no degraded clutter)."""
+    guide = _GUIDE_PARTIAL.read_text(encoding="utf-8")
+    assert "Reading a signal card" in guide
+    assert "完整卡" in guide
+    assert "Degraded — fallback watch" not in guide
+    assert "FALLBACK WATCH" not in guide
 
 
 def test_guide_copy_aligned_with_product_wording():
-    """Guide copy matches live Command, Dossier, IBKR, Backtest Lab surfaces."""
+    """Guide glossary still aligns with IBKR LOGIN vs READY and research-only tabs."""
     html = _INDEX_HTML.read_text(encoding="utf-8")
     assert "advanced aggregate — not deploy gate" in html.lower()
     assert "GATEWAY UP · LOGIN REQUIRED" in html
-    assert "backtest research only; not deployment authority" in html.lower()
-    assert "Confirm-only — no IBKR handoff or sizing" in html
+    assert "回測" in html or "backtest" in html.lower()
+    assert "LOGIN ≠ READY" in html or "淨係 LOGIN" in html

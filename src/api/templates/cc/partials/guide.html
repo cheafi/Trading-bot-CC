@@ -1,14 +1,14 @@
       <!-- Hero -->
       <div class="guide-hero" style="position:relative;overflow:hidden;margin-bottom:16px">
         <div style="position:absolute;right:20px;top:20px;font-size:64px;opacity:.07;line-height:1">📊</div>
-        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:6px">CC · Clarity Console · 操盤手手冊</div>
-        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:8px;line-height:1.3">使用手冊 · Operator Manual</div>
-        <div style="font-size:12px;color:var(--t2);line-height:1.7;max-width:520px">
-          <strong style="color:var(--t1)">第 1 層</strong>（30 秒上手）· <strong style="color:var(--t1)">第 2 層</strong>（讀版面）· <strong style="color:var(--t1)">第 3 層</strong>（參考手冊）。Reference-only；即時盤面以 Dashboard 為準。
+        <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:6px">CC · 使用指南</div>
+        <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:8px;line-height:1.3">新手也能跟得上 · Operator Manual</div>
+        <div style="font-size:12px;color:var(--t2);line-height:1.7;max-width:540px">
+          這一頁是<strong style="color:var(--t1)">說明書</strong>，不是下單畫面。<strong style="color:var(--t1)">Reference-only</strong> — 真正報價同「今日可唔可以買」以 <strong style="color:var(--t1)">Dashboard</strong> 為準。
         </div>
         <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
-          <button @click="switchTab('today')" class="btn-p" style="font-size:13px;padding:10px 24px">開啟儀表板 · Dashboard</button>
-          <button @click="switchTab('signals');fetchRanked()" class="btn-s" style="font-size:12px">開啟 Playbook</button>
+          <button @click="switchTab('today')" class="btn-p" style="font-size:13px;padding:10px 24px">去 Dashboard（今日總覽）</button>
+          <button @click="switchTab('signals');fetchRanked()" class="btn-s" style="font-size:12px">去 Playbook（候選名單）</button>
         </div>
       </div>
 
@@ -21,132 +21,52 @@
         </template>
       </div>
 
-      <!-- ══ CURRENT BUILD REALITY CHECK (collapsible) ══ -->
-      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--amber)" x-show="guideSection==='advanced'" open>
-        <summary style="padding:10px 16px;background:rgba(251,191,36,.06);display:flex;align-items:center;gap:8px">
-          <span style="font-size:16px">⚠️</span>
-          <span class="guide-layer-hdr" style="color:var(--amber)">目前版本實況 · Current Build Reality Check</span>
-          <span style="font-size:10px;color:var(--t3);margin-left:auto">展開 · Expand</span>
-        </summary>
-        <div style="padding:14px 16px;font-size:12px;color:var(--t2);line-height:1.75">
-          Platform state varies: <strong style="color:var(--t1)">live</strong>, <strong style="color:var(--t1)">fallback</strong>, <strong style="color:var(--t1)">mock</strong>, <strong style="color:var(--t1)">partial-sync</strong>, or <strong style="color:var(--t1)">diagnostics-first</strong>.
-          <div style="margin-top:10px;font-size:11px;display:flex;flex-direction:column;gap:4px">
-            <div>• <strong style="color:var(--t1)">Ranked</strong> ≠ deployable · <strong style="color:var(--t1)">Connected</strong> ≠ execution-ready</div>
-            <div>• <strong style="color:var(--t1)">Broker truth</strong> may differ from local research book</div>
-            <div>• <strong style="color:var(--t1)">Probe health</strong> ≠ runtime health · <strong style="color:var(--t1)">Research</strong> ≠ trade permission</div>
-          </div>
-        </div>
-      </details>
-
-      <!-- ══ RANDOM WALK — GLOBAL PRINCIPLES (collapsible) ══ -->
-      <details class="card guide-layer" style="overflow:visible;border-left:3px solid var(--purple)" x-show="guideSection==='advanced'" open>
-        <summary style="padding:10px 16px;background:rgba(168,85,247,.06);display:flex;align-items:center;gap:8px">
-          <span style="font-size:16px">📘</span>
-          <span class="guide-layer-hdr" style="color:var(--purple)">隨機漫步原則 (8) · Random Walk — Global Principles</span>
-          <span style="font-size:10px;color:var(--t3);margin-left:auto">展開 · Expand</span>
-        </summary>
-        <div style="padding:14px 16px;font-size:11px;color:var(--t2);line-height:1.75">
-          <div style="font-size:10px;color:var(--t3);margin-bottom:10px">Constitution layer — apply on every surface (Dashboard, Playbook, Dossier, Portfolio, Funds). Read net edge after cost; humility labels are supportive, not excuses to trade.</div>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <div><strong style="color:var(--t1)">1.</strong> Markets are noisy in the short run — favor regime and process over daily noise.</div>
-            <div><strong style="color:var(--t1)">2.</strong> Page-level regime overrides single-name temptation — board gate beats a pretty card.</div>
-            <div><strong style="color:var(--t1)">3.</strong> Research relevance does not equal deploy permission — Discovery/Flow/Funds/RS inform only.</div>
-            <div><strong style="color:var(--t1)">4.</strong> Cost-adjusted edge matters more than raw signal strength — read Raw · Net after cost.</div>
-            <div><strong style="color:var(--t1)">5.</strong> Portfolio construction matters more than isolated ideas — correlated stories are one bet.</div>
-            <div><strong style="color:var(--t1)">6.</strong> Cash is a valid allocation — patience when edge is unclear is risk management.</div>
-            <div><strong style="color:var(--t1)">7.</strong> Avoid overconfidence in forecasting — scenarios and invalidation beat point predictions.</div>
-            <div><strong style="color:var(--t1)">8.</strong> Bubble conditions require extra skepticism — crowding and extension need explicit discount.</div>
-          </div>
-          <div style="margin-top:12px;padding:10px 12px;background:var(--s2);border-radius:8px;font-size:10px;color:var(--t3)">
-            <strong style="color:var(--t2)">Humility labels:</strong> supportive only · likely priced in · evidence incomplete · monitoring only · not enough advantage over passive baseline · research signal only · narrative-rich, evidence-light · cost drag may erase weak edge · high structure, low predictive certainty
-          </div>
-          <div style="margin-top:10px;padding:10px 12px;background:rgba(20,184,166,.06);border:1px solid rgba(20,184,166,.22);border-radius:8px;font-size:10px;color:var(--t2);line-height:1.65">
-            <strong style="color:var(--teal,#14b8a6)">Naval principles (signal-light):</strong>
-            specific knowledge beats borrowed conviction · preserve mental bandwidth · suppress false urgency ·
-            process leverage over labor churn · compounding patience when board says WAIT —
-            see <code style="font-size:9px">docs/archive/NAVAL_ALMANAC_UPGRADE.md</code>
-          </div>
-          <div style="margin-top:10px;padding:10px 12px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.22);border-radius:8px;font-size:10px;color:var(--t2);line-height:1.65">
-            <strong style="color:var(--amber)">Buffett principles (owner judgment):</strong>
-            understand the business · economic quality and moat · honest capital allocation ·
-            stay inside circle of competence · patience when board says WAIT —
-            see <code style="font-size:9px">docs/archive/BUFFETT_BIOGRAPHY_UPGRADE.md</code>
-          </div>
-        </div>
-      </details>
-
-      <!-- ══ DAILY OPERATOR FLOW (always visible) ══ -->
-      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--green)">
+      <!-- ══ DAILY FLOW (quickstart) ══ -->
+      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--green)" x-show="guideSection==='quickstart'">
         <div style="padding:10px 14px">
-          <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;text-transform:uppercase">Daily operator flow · 每日操盤順序</div>
-          <ol style="font-size:11px;color:var(--t2);line-height:1.7;padding-left:18px;margin:0">
-            <li><strong style="color:var(--t1)">Dashboard</strong> — 今日狀態、monitor queue、repair priority</li>
-            <li><strong style="color:var(--t1)">Playbook</strong> — ranked board、near-miss upgrades</li>
-            <li><strong style="color:var(--t1)">Dossier</strong> — 單一標的結構確認</li>
-            <li><strong style="color:var(--t1)">Portfolio</strong> — book / risk layer</li>
-            <li><strong style="color:var(--t1)">IBKR / Ops</strong> — 只在需要 execution 時打開</li>
+          <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px">每日 5 步 · Daily flow</div>
+          <ol style="font-size:12px;color:var(--t2);line-height:1.75;padding-left:18px;margin:0">
+            <li><strong style="color:var(--t1)">Dashboard</strong> — 今日適唔適合買股？（WAIT = 先休息）</li>
+            <li><strong style="color:var(--t1)">Playbook</strong> — 系統排好嘅候選名單</li>
+            <li><strong style="color:var(--t1)">Dossier</strong> — 睇一隻：買入區、止蝕、理由</li>
+            <li><strong style="color:var(--t1)">Portfolio</strong> — 倉位會唔會太重？</li>
+            <li><strong style="color:var(--t1)">IBKR</strong> — 真係要落單先開</li>
           </ol>
         </div>
       </div>
 
-      <!-- ══ LAYER 1 — QUICK START (collapsed by default) ══ -->
-      <details class="card guide-layer" style="margin-bottom:16px;overflow:visible;border-left:4px solid var(--green)" x-show="guideSection==='quickstart'" open>
-        <summary style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px;cursor:pointer">
+      <!-- ══ LAYER 1 — QUICK START ══ -->
+      <div class="card guide-layer" style="margin-bottom:16px;overflow:visible;border-left:4px solid var(--green)" x-show="guideSection==='quickstart'">
+        <div style="padding:12px 16px;background:var(--s2);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">⚡</span>
-          <span class="guide-layer-hdr" style="color:var(--green)">第 1 層 · Quick Start</span>
-          <span style="font-size:10px;color:var(--t3);margin-left:auto;font-weight:600">~30 秒 · Expand</span>
-        </summary>
+          <span class="guide-layer-hdr" style="color:var(--green)">三條鐵律 · Three rules</span>
+        </div>
         <div style="padding:14px 16px">
           <div class="guide-operator-checklist" id="cc-operator-checklist">
-            <div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px">操盤手檢查清單 · Operator checklist</div>
-            <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0">
-              <li><strong style="color:var(--t1)">Page gate beats card rank</strong> — WAIT / NO_TRADE 先於任何靚卡。</li>
-              <li><strong style="color:var(--t1)">Research ≠ permission</strong> — Discovery、Flow、Funds、RS 只供研究。</li>
-              <li><strong style="color:var(--t1)">Dashboard first</strong> — 即時盤面同部署權限以 Dashboard / Playbook 為準。</li>
+            <ul style="font-size:12px;color:var(--t2);line-height:1.75;padding-left:16px;margin:0">
+              <li><strong style="color:var(--t1)">今日大環境 &gt; 單一靚卡</strong> — Dashboard 話 WAIT，就唔好因為一隻股高分而硬買。</li>
+              <li><strong style="color:var(--t1)">研究頁 ≠ 准買證</strong> — 探索、資金流、基金、策略實驗室只係做功課。</li>
+              <li><strong style="color:var(--t1)">要有止蝕先算計劃</strong> — 冇清晰買入區 + 止蝕，當「觀察」，唔好計倉位。</li>
             </ul>
           </div>
-
-          <div style="font-size:11px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px">最常見錯誤 · Most common mistakes</div>
-          <ul style="font-size:11px;color:var(--t2);line-height:1.65;padding-left:16px;margin:0 0 12px">
-            <li><strong style="color:var(--t1)">不要用 fallback 卡做 sizing</strong> — brief / fallback 只供 monitor。</li>
-            <li><strong style="color:var(--t1)">不要把 IBKR LOGIN 當 READY</strong> — transport up 仍未等於可 handoff。</li>
-            <li><strong style="color:var(--t1)">不要把 Discovery / Flow / RS 當部署權限</strong> — research-only 永遠先去 Playbook / Dashboard 確認。</li>
-            <li><strong style="color:var(--t1)">不要把 Backtest Lab 當 live evidence</strong> — 只係 historical simulation。</li>
-          </ul>
-
-          <details style="margin-top:4px">
-            <summary style="font-size:11px;font-weight:700;color:var(--t1);cursor:pointer;padding:4px 0">何時允許／禁止動用資金 · When capital is allowed / blocked</summary>
-            <div style="margin-top:8px">
-              <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">允許動用資金的條件 · Capital allowed when</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;margin-bottom:10px">
-                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Data fresh</strong> — no STALE/CRITICAL; trust strip not synthetic</span></div>
-                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Engine confirmed</strong> — header + Ops agree; badge alone ≠ fresh cycle</span></div>
-                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">IBKR READY</strong> — session active, not LOGIN-only; bracket aligned</span></div>
-                <div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--green);font-weight:700">☑</span><span style="color:var(--t2)"><strong style="color:var(--t1)">Board gate open</strong> — not WAIT/NO_TRADE; entry + stop + execution_ready</span></div>
-              </div>
-              <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px">禁止動用資金的條件 · Capital blocked when</div>
-              <div style="font-size:11px;color:var(--t2);line-height:1.6">
-                Engine OFF/stale · board WAIT/NO_TRADE · IBKR LOGIN-only or disconnected · bracket missing · fallback / confirm-only dossier · research-only / mock surfaces
-                <span style="color:var(--t3)"> — full list in Layer 3.</span>
-              </div>
+          <details style="margin-top:12px">
+            <summary style="font-size:11px;font-weight:700;color:var(--t1);cursor:pointer">幾時可以動錢？幾時要停？</summary>
+            <div style="margin-top:8px;font-size:11px;color:var(--t2);line-height:1.7">
+              <div style="color:var(--green);font-weight:700;margin-bottom:4px">可以考慮</div>
+              Dashboard 非 WAIT · 數據正常 · Playbook 標示 TRADE 且有止蝕 · IBKR 已 READY（唔係淨係 LOGIN）
+              <div style="color:var(--red);font-weight:700;margin:10px 0 4px">要停</div>
+              WAIT / NO_TRADE · 數據過期 · 券商未連好 · 只有研究分、冇完整價位
             </div>
           </details>
-
-          <div style="font-size:10px;color:var(--t3);line-height:1.6;padding-top:10px;margin-top:10px;border-top:1px solid var(--bd)">
-            <strong style="color:var(--t2)">Surfaces:</strong>
-            <span class="guide-badge pg" style="font-size:8px">Core</span> decides ·
-            <span class="guide-badge pb" style="font-size:8px">Research-only</span> supports ·
-            <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> / <span class="guide-badge pa" style="font-size:8px">Execution-dependent</span> confirms — details in Layer 3.
-          </div>
         </div>
-      </details>
+      </div>
 
       <!-- ══ LAYER 2 — HOW TO READ THE PLATFORM ══ -->
-      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)" x-show="guideSection==='advanced'" open>
+      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--blue)" x-show="guideSection==='advanced'">
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📖</span>
-          <span class="guide-layer-hdr" style="color:var(--t1)">第 2 層 — 如何解讀平台 · Layer 2 — How to Read the Platform</span>
-          <span style="font-size:10px;color:var(--t3);margin-left:auto">展開 · Expand</span>
+          <span class="guide-layer-hdr" style="color:var(--t1)">各頁做乜 · What each tab does</span>
+          <span style="font-size:10px;color:var(--t3);margin-left:auto">展開</span>
         </summary>
         <div style="padding:0">
 
@@ -157,7 +77,7 @@
           <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Header bar — 4 layers</span>
         </div>
         <div style="padding:14px 16px">
-          <div style="font-size:12px;color:var(--t2);line-height:1.8;margin-bottom:12px">Status is four layers, not just LIVE/PAPER/SYNTHETIC. Check all four before trusting any card:</div>
+          <div style="font-size:12px;color:var(--t2);line-height:1.8;margin-bottom:12px">頂部狀態睇四樣：數據新唔新、引擎有冇跑、券商連唔連到、今日允唔允許買。</div>
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
             <div style="background:var(--s2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
               <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:4px">① Market data status</div>
@@ -223,7 +143,7 @@
                 <span style="font-size:9px;background:rgba(0,212,170,.1);color:var(--green);padding:2px 6px;border-radius:4px;font-weight:700">START HERE</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Morning posture: regime, VIX, breadth, tradeability (WAIT/TRADE/NO_TRADE), best TRADE/WATCH/PILOT, execution readiness, and AI narrative. Legacy name: <em>Overview</em>. Pre-market brief content may appear here — there is no separate Brief tab in primary nav.
+                今日總覽：大市氣氛、波動（VIX）、可唔可以買（WAIT / TRADE）、同重點提示。先睇呢度，再睇個股。
               </div>
             </div>
           </div>
@@ -236,8 +156,7 @@
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Ranked signal book with TRADE / PILOT / WATCH / AVOID filters. Legacy name: <em>Ranked</em>. Each row shows action badge, score, entry/stop/target, R:R, and execution_ready when bracket math is complete.
-                <span style="color:var(--amber);display:block;margin-top:4px">As a default operating rule, prefer TRADE + execution_ready for full size; use PILOT for half-size probes; treat WATCH as monitor-only unless Dossier upgrades the verdict.</span>
+                候選名單：TRADE（可認真睇）、PILOT（小注試）、WATCH（只觀察）。每行有分數、買入區、止蝕、目標。
               </div>
             </div>
           </div>
@@ -250,15 +169,7 @@
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Per-ticker decision card — confirm before entry. Check in order:<br>
-                <div style="margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:11px">
-                  <span style="color:var(--green);font-weight:700">Entry Zone</span><span style="color:var(--t2)">Expected clean entry range. Wider zone often means BUY_ON_DIP or PILOT sizing.</span>
-                  <span style="color:var(--red);font-weight:700">Hard Stop</span><span style="color:var(--t2)">Structural exit level. Confirm-only dossier shows <em>No sizing guidance in confirm-only mode</em> — no IBKR handoff until live fetch succeeds.</span>
-                  <span style="color:var(--blue);font-weight:700">Target 1 / 2</span><span style="color:var(--t2)">Reward anchors at ~2R and ~3R — guidance, not guaranteed fills.</span>
-                  <span style="color:var(--amber);font-weight:700">Factor Chips</span><span style="color:var(--t2)">Green = tailwind, red = headwind. Weigh against regime and Playbook action.</span>
-                  <span style="color:var(--purple);font-weight:700">Sector Peers</span><span style="color:var(--t2)">Peer confirmation adds context; absence is not auto-reject.</span>
-                  <span style="color:var(--t2);font-weight:700">Why Now</span><span style="color:var(--t2)">AI thesis — supporting narrative, not a standalone trigger.</span>
-                </div>
+                一隻股票嘅檔案：<strong style="color:var(--green)">買入區</strong>、<strong style="color:var(--red)">止蝕</strong>、<strong style="color:var(--blue)">目標</strong>、同簡短理由。AI 文字係輔助，唔係單獨買入信號。
               </div>
             </div>
           </div>
@@ -271,7 +182,7 @@
                 <span class="guide-badge pg" style="font-size:8px">Core</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Capacity check before adding risk: open positions, sector exposure, correlation, heat gauge, drawdown alerts. Legacy name: <em>Portfolio</em>. REBALANCE suggestions here are advisory — confirm against Playbook and broker state.
+                你而家持倉同風險：會唔會太集中、太熱。加倉前先對一對實戶口。
               </div>
             </div>
           </div>
@@ -284,7 +195,7 @@
                 <span class="guide-badge pb" style="font-size:8px">Research-only</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                Scanner hub for Leaders / Breakouts / Pullbacks / Flow hits. Legacy name: <em>Scanners</em>. Useful for idea generation; may return 0 hits on WAIT/NO_TRADE days or while warming. Cross-check any name in Playbook before acting.
+                搵靈感用，唔係准買清單。WAIT 日可能 0 結果 — 正常。有興趣嘅名去 Playbook 再核。
               </div>
             </div>
           </div>
@@ -297,13 +208,9 @@
                 <span class="guide-badge pw" style="font-size:8px">Conditional</span>
               </div>
               <div style="font-size:12px;color:var(--t2);line-height:1.7">
-                <strong style="color:var(--t1)">Funds</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> · sleeve/backtest context, not live order source<br>
-                <strong style="color:var(--t1)">Flow</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> · options/dark-pool colour; mock flow is non-decision<br>
-                <strong style="color:var(--t1)">RS</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> · relative strength context vs SPY<br>
-                <strong style="color:var(--t1)">Rejections</strong> <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> · why names failed gates<br>
-                <strong style="color:var(--t1)">Command</strong> <span class="guide-badge pb" style="font-size:8px">Research-only</span> · advanced aggregate — not deploy gate; use Dashboard + Playbook for deploy authority<br>
-                <strong style="color:var(--t1)">IBKR</strong> <span class="guide-badge pa" style="font-size:8px">Execution-dependent</span> · LOGIN ≠ READY — handoff only when session active + bracket aligned<br>
-                <strong style="color:var(--t1)">Ops</strong> <span class="guide-badge pw" style="font-size:8px">Diagnostic</span> · engine health, updates, error log
+                <strong style="color:var(--t1)">基金 / 資金流 / RS</strong> — 研究用 ·
+                <strong style="color:var(--t1)">IBKR</strong> — 落單 ·
+                <strong style="color:var(--t1)">Ops</strong> — 系統健康
               </div>
             </div>
           </div>
@@ -318,9 +225,8 @@
           <span style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px">Reading a signal card</span>
         </div>
         <div style="padding:14px 16px">
-          <div style="font-size:10px;color:var(--t3);margin-bottom:10px;font-style:italic">Illustrative examples only — reference surface, not live board data.</div>
-          <!-- Ideal signal card -->
-          <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Ideal — deploy-grade (when board gate open)</div>
+          <div style="font-size:10px;color:var(--t3);margin-bottom:10px">示例（唔係即時盤面）</div>
+          <div style="font-size:10px;font-weight:700;color:var(--green);margin-bottom:6px">完整卡 — 有買入、止蝕、目標</div>
           <div style="background:var(--s2);border:1px solid rgba(0,212,170,.3);border-radius:8px;padding:12px;margin-bottom:14px;border-left:3px solid var(--green)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <div style="display:flex;align-items:center;gap:8px">
@@ -343,65 +249,9 @@
               <span style="background:rgba(59,130,246,.1);color:var(--blue);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">execution_ready</span>
             </div>
           </div>
-          <!-- Degraded: fallback watch -->
-          <div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Degraded — fallback watch (monitor-only)</div>
-          <div style="background:var(--s2);border:1px solid rgba(251,191,36,.35);border-radius:8px;padding:12px;margin-bottom:14px;border-left:3px solid var(--amber);opacity:.95">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <span style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:var(--amber)">SMCI</span>
-                <span class="guide-badge pa" style="font-size:9px">FALLBACK WATCH</span>
-                <span style="background:rgba(251,191,36,.12);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">Brief fallback</span>
-              </div>
-              <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:800;color:var(--t3)">6.2<span style="font-size:11px;color:var(--t3)">/10</span></div>
-            </div>
-            <div style="height:6px;background:var(--bd);border-radius:3px;margin-bottom:10px;overflow:hidden"><div style="height:100%;width:62%;background:var(--amber);border-radius:3px"></div></div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:11px;margin-bottom:8px">
-              <div style="background:var(--bg);border-radius:5px;padding:6px;text-align:center"><div style="color:var(--t3);font-size:9px;margin-bottom:2px">ENTRY</div><div style="font-family:'JetBrains Mono',monospace;color:var(--t3);font-weight:700">indicative</div></div>
-              <div style="background:var(--bg);border-radius:5px;padding:6px;text-align:center"><div style="color:var(--t3);font-size:9px;margin-bottom:2px">STOP</div><div style="font-family:'JetBrains Mono',monospace;color:var(--t3);font-weight:700">—</div></div>
-              <div style="background:var(--bg);border-radius:5px;padding:6px;text-align:center"><div style="color:var(--t3);font-size:9px;margin-bottom:2px">TARGET</div><div style="font-family:'JetBrains Mono',monospace;color:var(--t3);font-weight:700">—</div></div>
-            </div>
-            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
-              <span style="background:rgba(251,191,36,.12);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">Sizing suspended in fallback mode</span>
-              <span style="background:rgba(127,29,29,.2);color:#fca5a5;font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">no execution_ready</span>
-            </div>
-            <div style="font-size:10px;color:var(--amber);line-height:1.5">Ranked for monitoring, not deployment — confirm in Playbook when live API recovers.</div>
-          </div>
-          <!-- Degraded: confirm-only dossier -->
-          <div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Degraded — confirm-only dossier</div>
-          <div style="background:var(--s2);border:1px solid rgba(251,191,36,.35);border-radius:8px;padding:12px;margin-bottom:14px;border-left:3px solid var(--amber);opacity:.95">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <span style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;color:var(--t1)">AMD</span>
-                <span class="guide-badge pa" style="font-size:9px">CONFIRM ONLY</span>
-              </div>
-              <div style="font-size:10px;color:var(--amber);font-weight:700">Research incomplete</div>
-            </div>
-            <div style="font-size:11px;color:var(--t2);line-height:1.6;margin-bottom:6px">
-              <strong style="color:var(--amber)">Confirm-only — no IBKR handoff or sizing</strong><br>
-              <span style="color:var(--t3)">No sizing guidance in confirm-only mode · levels indicative until live dossier loads</span>
-            </div>
-            <div style="display:flex;gap:4px;flex-wrap:wrap">
-              <span style="background:rgba(251,191,36,.12);color:var(--amber);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">Use cached dossier (confirm-only)</span>
-            </div>
-          </div>
-          <!-- Annotations -->
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
-              <span style="background:var(--green);color:#000;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">TRADE 8.7</span>
-              <span style="color:var(--t2);line-height:1.6">Score 8.7/10 with TRADE action. Green border = deploy-grade candidate. PILOT (blue) = half-size probe. WATCH/AVOID = monitor or skip.</span>
-            </div>
-            <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
-              <span style="background:var(--red);color:#fff;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">STOP</span>
-              <span style="color:var(--t2);line-height:1.6">$127.20 is the engine's structural stop anchor. Risk = entry − stop = 1R. As a default operating rule, plan exits around this level — your broker bracket may differ slightly.</span>
-            </div>
-            <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
-              <span style="background:var(--amber);color:#000;font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">R:R</span>
-              <span style="color:var(--t2);line-height:1.6">Reward-to-risk ratio shown on card. Platform typically favours ≥2.5 for full TRADE and ≥2.0 for WATCH — thresholds vary by regime and timing confidence, not a fixed law.</span>
-            </div>
-            <div style="display:flex;gap:10px;align-items:flex-start;font-size:11px">
-              <span style="background:rgba(59,130,246,.2);color:var(--blue);font-weight:800;padding:2px 7px;border-radius:12px;font-size:10px;white-space:nowrap">READY</span>
-              <span style="color:var(--t2);line-height:1.6">execution_ready means entry, stop, and bracket handoff math are present. Without it, treat the card as ANALYSIS ONLY until Dossier and IBKR confirm.</span>
-            </div>
+          <div style="font-size:11px;color:var(--t2);line-height:1.65;margin-top:8px">
+            <strong style="color:var(--t1)">TRADE</strong> = 認真候選 · <strong style="color:var(--red)">STOP</strong> = 蝕幾多就要走 ·
+            冇止蝕或寫「觀察」= 唔好計倉位。
           </div>
         </div>
       </div>
@@ -410,7 +260,7 @@
       </details>
 
       <!-- ══ LAYER 3 — REFERENCE MANUAL ══ -->
-      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)" x-show="guideSection==='reference'" open>
+      <details class="card guide-layer" style="margin-bottom:20px;overflow:visible;border-left:4px solid var(--t3)" x-show="guideSection==='reference'">
         <summary style="padding:12px 16px;background:var(--s2);display:flex;align-items:center;gap:8px">
           <span style="font-size:18px">📚</span>
           <span class="guide-layer-hdr" style="color:var(--t3)" x-text="guideSection==='glossary'?'Glossary 詞彙表':'Layer 3 — Reference Manual'"></span>
@@ -438,29 +288,14 @@
       </div>
 
       <div style="padding:14px 16px;border-bottom:1px solid var(--bd)" x-show="guideSection==='reference'">
-        <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">🛑 When NOT to act — full list</div>
-        <div style="display:flex;flex-direction:column;gap:6px;font-size:11px">
-          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Engine OFF</span><span style="color:var(--t2)">Mode pill grey or Ops shows no fresh cycle — decisions stale or absent.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Board gate closed</span><span style="color:var(--t2)">WAIT/NO_TRADE tradeability — patience is the active decision.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Broker not ready</span><span style="color:var(--t2)">LOGIN-only (GATEWAY UP · LOGIN REQUIRED), disconnected, or portfolio/bracket misaligned.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--red);font-weight:700;min-width:120px">Bracket not ready</span><span style="color:var(--t2)">Card lacks entry/stop or execution_ready flag.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Mock flow</span><span style="color:var(--t2)">Flow surface in synthetic/mock mode — colour only.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Backtest funds</span><span style="color:var(--t2)">Funds sleeves marked research/backtest — not live capital.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">Dossier confirm-only</span><span style="color:var(--t2)">Confirm-only — no IBKR handoff or sizing; levels indicative until live dossier loads.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--amber);font-weight:700;min-width:120px">No live validation</span><span style="color:var(--t2)">DATA STALE/CRITICAL or SYNTHETIC trust strip.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Scanner warming</span><span style="color:var(--t2)">Discovery loading or 0 hits on WAIT day — often correct, not a miss.</span></div>
-          <div style="display:flex;gap:8px"><span style="color:var(--t2);font-weight:700;min-width:120px">Manual sync pending</span><span style="color:var(--t2)">Portfolio or broker positions not reconciled after last session.</span></div>
-        </div>
-      </div>
-
-      <div style="padding:14px 16px;border-bottom:1px solid var(--bd);font-size:11px;color:var(--t2);line-height:1.8" x-show="guideSection==='reference'">
-        <div style="font-size:11px;font-weight:800;color:var(--t1);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">💬 Non-decision triggers (context only)</div>
-        These inform judgment but <strong style="color:var(--t1)">do not</strong> justify an entry alone:<br>
-        • <strong style="color:var(--t1)">AI commentary</strong> — Dashboard narrative and Dossier "Why Now"<br>
-        • <strong style="color:var(--t1)">Mock / synthetic flow</strong> — options prints without live validation<br>
-        • <strong style="color:var(--t1)">Insider / 13F filings</strong> — lagged supporting intel in Dossier<br>
-        • <strong style="color:var(--t1)">Funds / Backtest Lab</strong> — backtest research only; not deployment authority<br>
-        • <strong style="color:var(--t1)">RS leaderboard alone</strong> — must align with Playbook action, regime, and board gate
+        <div style="font-size:11px;font-weight:800;color:var(--t1);margin-bottom:8px">🛑 幾時唔好買</div>
+        <ul style="font-size:11px;color:var(--t2);line-height:1.7;padding-left:16px;margin:0">
+          <li>Dashboard 話 WAIT / NO_TRADE</li>
+          <li>數據過期或引擎未跑</li>
+          <li>IBKR 未 READY（淨係 LOGIN 唔算）</li>
+          <li>冇止蝕 / 只有研究分</li>
+          <li>回測、資金流、AI 故事 — 唔可以單獨做買入理由</li>
+        </ul>
       </div>
       </div>
 
@@ -493,6 +328,9 @@
             </div>
           </div>
 
+          <details style="grid-column:1/-1;border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
+            <summary style="font-size:10px;font-weight:700;color:var(--t1);cursor:pointer">更多標籤（進階）</summary>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
           <div style="border:1px solid var(--bd);border-radius:8px;padding:10px 12px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);margin-bottom:6px">Action Badges (card level)</div>
             <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
@@ -531,6 +369,8 @@
               <div style="display:flex;align-items:center;gap:8px"><span style="background:rgba(230,237,243,.06);color:var(--t3);font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px">Neutral</span><span style="color:var(--t2)">No directional signal from this factor</span></div>
             </div>
           </div>
+            </div>
+          </details>
 
         </div>
       </div>
@@ -575,6 +415,6 @@
       <!-- Bottom CTA -->
       <div style="text-align:center;padding:20px 0 8px">
         <button @click="switchTab('today')" class="btn-p" style="font-size:14px;padding:12px 32px">Open Dashboard</button>
-        <div style="font-size:11px;color:var(--t3);margin-top:10px">Return here anytime: 📖 Guide tab (below separator — reference manual)</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:10px">隨時返嚟 📖 指南分頁查字表</div>
       </div>
     

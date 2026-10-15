@@ -259,7 +259,9 @@ class BrokerManager:
             paper = self._brokers.get(BrokerType.PAPER) or target_broker
             return await paper.place_order(order, dry_run=True)
 
-        assert_live_order_permitted(dry_run=False, account=account)
+        # Only the in-process simulator is exempt; broker mode env is not proof.
+        if not isinstance(target_broker, PaperBroker):
+            assert_live_order_permitted(dry_run=False, account=account)
         result = await target_broker.place_order(order, dry_run=False)
 
         # Notify callbacks

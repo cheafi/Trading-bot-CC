@@ -6,6 +6,7 @@ with mock data. No broker, no GPT, no yfinance calls.
 
 Run: python -m pytest tests/test_pipeline_integration.py -v
 """
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
@@ -14,17 +15,29 @@ from unittest.mock import patch
 import pytest
 
 from src.core.models import (
-    Signal, Direction, Horizon, Invalidation, Target,
-    StopType, MarketRegime, VolatilityRegime, TrendRegime, RiskRegime,
+    Signal,
+    Direction,
+    Horizon,
+    Invalidation,
+    Target,
+    StopType,
+    MarketRegime,
+    VolatilityRegime,
+    TrendRegime,
+    RiskRegime,
     TradeRecommendation,
 )
 from src.engines.signal_engine import (
-    SignalEngine, UniverseFilter, ScoreUnifier, SignalDedup,
-    SignalCooldown, RiskModel, RegimeDetector,
+    SignalEngine,
+    UniverseFilter,
+    ScoreUnifier,
+    SignalDedup,
+    SignalCooldown,
+    RiskModel,
+    RegimeDetector,
 )
 from src.engines.opportunity_ensembler import OpportunityEnsembler
 from src.engines.regime_router import RegimeRouter, RegimeState
-
 
 # ── Fixtures ──────────────────────────────────────────────────────
 
@@ -96,8 +109,11 @@ def _make_regime() -> MarketRegime:
         trend=TrendRegime.UPTREND,
         risk=RiskRegime.RISK_ON,
         active_strategies=[
-            "momentum_breakout", "trend_following", "vcp",
-            "mean_reversion", "classic_swing",
+            "momentum_breakout",
+            "trend_following",
+            "vcp",
+            "mean_reversion",
+            "classic_swing",
         ],
         strategy_weights={
             "momentum_breakout": 0.9,
@@ -162,18 +178,32 @@ class TestSignalDedup:
     def test_resolves_direction_conflict(self):
         dedup = SignalDedup()
         sig_a = Signal(
-            ticker="AAPL", direction=Direction.LONG, horizon=Horizon.SWING_1_5D,
-            entry_price=150, invalidation=Invalidation(stop_price=145, stop_type=StopType.HARD),
+            ticker="AAPL",
+            direction=Direction.LONG,
+            horizon=Horizon.SWING_1_5D,
+            entry_price=150,
+            invalidation=Invalidation(stop_price=145, stop_type=StopType.HARD),
             targets=[Target(price=160, pct_position=100)],
-            entry_logic="test", catalyst="test", key_risks=["test"],
-            confidence=80, rationale="test", strategy_id="momentum_breakout",
+            entry_logic="test",
+            catalyst="test",
+            key_risks=["test"],
+            confidence=80,
+            rationale="test",
+            strategy_id="momentum_breakout",
         )
         sig_b = Signal(
-            ticker="AAPL", direction=Direction.SHORT, horizon=Horizon.SWING_1_5D,
-            entry_price=150, invalidation=Invalidation(stop_price=155, stop_type=StopType.HARD),
+            ticker="AAPL",
+            direction=Direction.SHORT,
+            horizon=Horizon.SWING_1_5D,
+            entry_price=150,
+            invalidation=Invalidation(stop_price=155, stop_type=StopType.HARD),
             targets=[Target(price=140, pct_position=100)],
-            entry_logic="test", catalyst="test", key_risks=["test"],
-            confidence=60, rationale="test", strategy_id="mean_reversion",
+            entry_logic="test",
+            catalyst="test",
+            key_risks=["test"],
+            confidence=60,
+            rationale="test",
+            strategy_id="mean_reversion",
         )
         kept, resolutions = dedup.resolve_conflicts([sig_a, sig_b])
         assert len(kept) == 1
@@ -210,40 +240,46 @@ class TestRegimeRouter:
 
     def test_low_vix_bullish(self):
         router = RegimeRouter()
-        state = router.classify({
-            "vix": 14.0,
-            "spy_return_20d": 0.05,
-            "breadth_pct": 0.65,
-            "hy_spread": 0.0,
-            "realized_vol_20d": 0.12,
-            "vix_term_slope": 0.0,
-        })
+        state = router.classify(
+            {
+                "vix": 14.0,
+                "spy_return_20d": 0.05,
+                "breadth_pct": 0.65,
+                "hy_spread": 0.0,
+                "realized_vol_20d": 0.12,
+                "vix_term_slope": 0.0,
+            }
+        )
         assert isinstance(state, RegimeState)
         assert state.risk_on_uptrend > state.risk_off_downtrend
 
     def test_high_vix_bearish(self):
         router = RegimeRouter()
-        state = router.classify({
-            "vix": 35.0,
-            "spy_return_20d": -0.08,
-            "breadth_pct": 0.25,
-            "hy_spread": 5.0,
-            "realized_vol_20d": 0.35,
-            "vix_term_slope": 0.0,
-        })
+        state = router.classify(
+            {
+                "vix": 35.0,
+                "spy_return_20d": -0.08,
+                "breadth_pct": 0.25,
+                "hy_spread": 5.0,
+                "realized_vol_20d": 0.35,
+                "vix_term_slope": 0.0,
+            }
+        )
         assert state.risk_off_downtrend > state.risk_on_uptrend
         assert not state.should_trade  # VIX crisis
 
     def test_entropy_bounded(self):
         router = RegimeRouter()
-        state = router.classify({
-            "vix": 20.0,
-            "spy_return_20d": 0.0,
-            "breadth_pct": 0.50,
-            "hy_spread": 3.5,
-            "realized_vol_20d": 0.15,
-            "vix_term_slope": 0.0,
-        })
+        state = router.classify(
+            {
+                "vix": 20.0,
+                "spy_return_20d": 0.0,
+                "breadth_pct": 0.50,
+                "hy_spread": 3.5,
+                "realized_vol_20d": 0.15,
+                "vix_term_slope": 0.0,
+            }
+        )
         assert 0 <= state.entropy <= 1.2  # ln(3) ≈ 1.10
 
 
@@ -280,8 +316,11 @@ class TestOpportunityEnsembler:
     def test_suppresses_when_no_trade(self):
         ensembler = OpportunityEnsembler()
         rec = TradeRecommendation(
-            ticker="AAPL", direction="LONG", strategy_id="momentum",
-            signal_confidence=80, score=0.80,
+            ticker="AAPL",
+            direction="LONG",
+            strategy_id="momentum",
+            signal_confidence=80,
+            score=0.80,
         )
         regime = {"should_trade": False, "no_trade_reason": "VIX crisis"}
         scored = ensembler.rank_opportunities([rec], regime)
@@ -292,8 +331,11 @@ class TestOpportunityEnsembler:
         """Verify _apply_suppression works with TradeRecommendation objects."""
         ensembler = OpportunityEnsembler()
         rec = TradeRecommendation(
-            ticker="AAPL", direction="LONG", strategy_id="momentum",
-            signal_confidence=80, score=0.80,
+            ticker="AAPL",
+            direction="LONG",
+            strategy_id="momentum",
+            signal_confidence=80,
+            score=0.80,
             composite_score=0.20,  # below min_score
             components={"pwin": 0.6, "risk_reward": 0.3},
             penalties={},
@@ -301,7 +343,11 @@ class TestOpportunityEnsembler:
         regime = {"should_trade": True, "entropy": 0.5}
         result = ensembler._apply_suppression([rec], regime)
         assert not result[0].trade_decision
-        assert "below" in result[0].why_not_trade
+        assert result[0].suppression_reason == "below_min_score"
+        assert result[0].composite_score < ensembler.min_score
+        assert result[0].why_not_trade == (
+            f"Composite {rec.composite_score:.3f} < {ensembler.min_score:.3f}"
+        )
 
 
 class TestRiskModel:
@@ -310,11 +356,17 @@ class TestRiskModel:
     def test_filters_below_min_confidence(self):
         rm = RiskModel()
         sig = Signal(
-            ticker="AAPL", direction=Direction.LONG, horizon=Horizon.SWING_1_5D,
-            entry_price=150, invalidation=Invalidation(stop_price=145, stop_type=StopType.HARD),
+            ticker="AAPL",
+            direction=Direction.LONG,
+            horizon=Horizon.SWING_1_5D,
+            entry_price=150,
+            invalidation=Invalidation(stop_price=145, stop_type=StopType.HARD),
             targets=[Target(price=160, pct_position=100)],
-            entry_logic="test", catalyst="test", key_risks=["test"],
-            confidence=30, rationale="test",
+            entry_logic="test",
+            catalyst="test",
+            key_risks=["test"],
+            confidence=30,
+            rationale="test",
         )
         result = rm.filter_and_size([sig])
         assert len(result) == 0  # below min_confidence (50)
@@ -322,18 +374,32 @@ class TestRiskModel:
     def test_deduplicates_tickers(self):
         rm = RiskModel()
         sig_a = Signal(
-            ticker="AAPL", direction=Direction.LONG, horizon=Horizon.SWING_1_5D,
-            entry_price=150, invalidation=Invalidation(stop_price=145, stop_type=StopType.HARD),
+            ticker="AAPL",
+            direction=Direction.LONG,
+            horizon=Horizon.SWING_1_5D,
+            entry_price=150,
+            invalidation=Invalidation(stop_price=145, stop_type=StopType.HARD),
             targets=[Target(price=160, pct_position=100)],
-            entry_logic="test", catalyst="test", key_risks=["test"],
-            confidence=80, rationale="test", strategy_id="momentum",
+            entry_logic="test",
+            catalyst="test",
+            key_risks=["test"],
+            confidence=80,
+            rationale="test",
+            strategy_id="momentum",
         )
         sig_b = Signal(
-            ticker="AAPL", direction=Direction.LONG, horizon=Horizon.SWING_1_5D,
-            entry_price=150, invalidation=Invalidation(stop_price=145, stop_type=StopType.HARD),
+            ticker="AAPL",
+            direction=Direction.LONG,
+            horizon=Horizon.SWING_1_5D,
+            entry_price=150,
+            invalidation=Invalidation(stop_price=145, stop_type=StopType.HARD),
             targets=[Target(price=160, pct_position=100)],
-            entry_logic="test", catalyst="test", key_risks=["test"],
-            confidence=70, rationale="test", strategy_id="mean_reversion",
+            entry_logic="test",
+            catalyst="test",
+            key_risks=["test"],
+            confidence=70,
+            rationale="test",
+            strategy_id="mean_reversion",
         )
         result = rm.filter_and_size([sig_a, sig_b])
         assert len(result) == 1  # deduplicated
@@ -363,15 +429,22 @@ class TestFullPipeline:
     def test_pipeline_produces_trade_recommendations(self):
         """Test Signal → TradeRecommendation conversion."""
         sig = Signal(
-            ticker="AAPL", direction=Direction.LONG, horizon=Horizon.SWING_1_5D,
-            entry_price=150, invalidation=Invalidation(stop_price=145, stop_type=StopType.HARD),
+            ticker="AAPL",
+            direction=Direction.LONG,
+            horizon=Horizon.SWING_1_5D,
+            entry_price=150,
+            invalidation=Invalidation(stop_price=145, stop_type=StopType.HARD),
             targets=[Target(price=160, pct_position=100)],
-            entry_logic="Breakout above resistance", catalyst="Earnings beat",
-            key_risks=["Market pullback"], confidence=75,
+            entry_logic="Breakout above resistance",
+            catalyst="Earnings beat",
+            key_risks=["Market pullback"],
+            confidence=75,
             rationale="Strong momentum with volume confirmation",
             strategy_id="momentum_breakout",
         )
-        rec = TradeRecommendation.from_signal(sig, regime_state={"regime": "RISK_ON", "vix": 18})
+        rec = TradeRecommendation.from_signal(
+            sig, regime_state={"regime": "RISK_ON", "vix": 18}
+        )
         assert rec.ticker == "AAPL"
         assert rec.direction == "LONG"
         assert rec.signal_confidence == 75
@@ -383,19 +456,32 @@ class TestFullPipeline:
         ensembler = OpportunityEnsembler()
         recs = [
             TradeRecommendation(
-                ticker="AAPL", direction="LONG", strategy_id="momentum",
-                signal_confidence=80, score=0.80, edge_p_t1=0.65,
-                risk_reward_ratio=2.5, edge_ev=0.04,
+                ticker="AAPL",
+                direction="LONG",
+                strategy_id="momentum",
+                signal_confidence=80,
+                score=0.80,
+                edge_p_t1=0.65,
+                risk_reward_ratio=2.5,
+                edge_ev=0.04,
             ),
             TradeRecommendation(
-                ticker="MSFT", direction="LONG", strategy_id="mean_reversion",
-                signal_confidence=60, score=0.60, edge_p_t1=0.55,
-                risk_reward_ratio=1.8, edge_ev=0.02,
+                ticker="MSFT",
+                direction="LONG",
+                strategy_id="mean_reversion",
+                signal_confidence=60,
+                score=0.60,
+                edge_p_t1=0.55,
+                risk_reward_ratio=1.8,
+                edge_ev=0.02,
             ),
         ]
         regime = {
-            "risk_on_uptrend": 0.6, "neutral_range": 0.3,
-            "risk_off_downtrend": 0.1, "entropy": 0.5, "should_trade": True,
+            "risk_on_uptrend": 0.6,
+            "neutral_range": 0.3,
+            "risk_off_downtrend": 0.1,
+            "entropy": 0.5,
+            "should_trade": True,
         }
         ranked = ensembler.rank_opportunities(recs, regime)
         assert len(ranked) == 2

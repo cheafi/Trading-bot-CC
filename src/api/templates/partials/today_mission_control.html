@@ -1,0 +1,84 @@
+      <!-- ── Mission Control (IDOS Four Questions — operator landing) ── -->
+      <template x-if="tab==='today'">
+        <section data-cc="mission-control-card" class="cc-surface-pad" aria-label="Today investment mission">
+          <div class="card mc-card">
+            <div class="mc-header">
+              <h2 class="text-sm font-bold">Today · Investment mission</h2>
+              <div class="mc-header-left">
+                <span class="pill pw text-[9px]" x-text="'Evidence · '+todayPresentationState()"></span>
+                <span class="pill text-[9px]" :class="tradeabilityBadgeClass(canonicalTradeability())" x-text="'Regime gate · '+canonicalTradeability()"></span>
+                <span class="pill pw text-[9px]" x-text="workflowStage().label"></span>
+              </div>
+            </div>
+            <div class="mission-overview-grid">
+              <div class="mission-evidence">
+                <div class="text-[11px] font-semibold" data-cc="today-evidence-status" role="status" aria-live="polite">
+                  <span x-show="missionControlLoading()" class="spin mr-1"></span>
+                  <span x-text="todayPresentationQuestions().know"></span>
+                </div>
+                <div class="text-[10px] mt-2 mono" style="color:var(--t2)" x-text="todayMarketEvidenceLine()"></div>
+                <div class="text-[10px] mt-1 mono" style="color:var(--t2)" x-text="todayEvidenceModeLabel()+' · '+todayEvidenceSourceLine()"></div>
+                <div data-cc="today-research-monitors" class="mt-3">
+                  <div class="text-[10px] font-bold" style="color:var(--amber)">Research monitors · no deploy authority</div>
+                  <div class="flex flex-wrap gap-2 mt-1">
+                    <template x-for="ticker in todayResearchNames()" :key="'mission-research-'+ticker">
+                      <button type="button" class="btn-s mono" @click="openDossier(ticker)" x-text="ticker" :aria-label="'Research dossier for '+ticker"></button>
+                    </template>
+                  </div>
+                  <div x-show="!todayResearchNames().length" class="text-[10px] mt-1" style="color:var(--t2)" x-text="todayPresentationState()==='ready'?'No research names returned in this batch.':'Research names unavailable or pending.'"></div>
+                  <div class="text-[9px] mt-1" style="color:var(--t3)">Conviction tiers and R:R remain on the ranked cards below; rank never overrides the regime gate.</div>
+                  <div x-show="todayBoardHeroSynthesisLine()" class="text-[10px] mt-1" style="color:var(--t2)" x-text="todayBoardHeroSynthesisLine()"></div>
+                  <div x-show="todayMissionPanel().quant_cluster_lines.length" class="text-[10px] mt-1" style="color:var(--t2)">
+                    <span class="mc-footer-label">Quant clusters (monitor)</span>
+                    <template x-for="line in todayMissionQuantClusterLines()" :key="'mission-quant-'+line"><div x-text="line"></div></template>
+                  </div>
+                </div>
+              </div>
+              <aside data-cc="today-portfolio-risk" class="mission-book" aria-label="Existing portfolio risk">
+                <div class="text-[11px] font-bold">Existing book · risk before allocation</div>
+                <div class="text-[10px] mt-1" style="color:var(--amber)" x-text="todayPortfolioPresentation().status"></div>
+                <dl class="grid grid-cols-2 gap-2 mt-3 text-[11px]">
+                  <div><dt class="mc-footer-label">Positions</dt><dd class="mono" x-text="todayPortfolioPresentation().positions"></dd></div>
+                  <div><dt class="mc-footer-label">Market value</dt><dd class="mono" x-text="todayPortfolioPresentation().value"></dd></div>
+                  <div><dt class="mc-footer-label">Unrealized P&amp;L</dt><dd class="mono" x-text="todayPortfolioPresentation().pnl"></dd></div>
+                  <div><dt class="mc-footer-label">Measured heat</dt><dd class="mono" x-text="todayPortfolioPresentation().heat"></dd></div>
+                </dl>
+                <div class="text-[10px] mt-2" style="color:var(--t2)" x-text="todayPortfolioPresentation().source+' · '+todayPortfolioPresentation().sync"></div>
+                <template x-for="warning in todayPortfolioPresentation().warnings" :key="'mission-book-'+warning">
+                  <div class="text-[10px] mt-1" style="color:var(--amber)" x-text="'⚠ '+warning"></div>
+                </template>
+                <button type="button" class="btn-s mt-2" @click="switchTab('portfolio')">Review portfolio →</button>
+              </aside>
+            </div>
+            <div data-cc="four-questions-block" class="idos-grid mt-3">
+              <div class="idos-cell"><div class="idos-label">KNOW</div><div class="idos-value" x-text="todayPresentationQuestions().know"></div></div>
+              <div class="idos-cell"><div class="idos-label">BELIEVE · thesis, not permission</div><div class="idos-value" x-text="todayPresentationQuestions().believe"></div></div>
+              <div class="idos-cell"><div class="idos-label">DOUBT · evidence / vetoes</div><div class="idos-value idos-doubt" x-text="todayPresentationQuestions().doubt"></div></div>
+              <div class="idos-cell"><div class="idos-label">ACT · human decision</div><div class="idos-value" x-text="todayPresentationQuestions().act"></div></div>
+            </div>
+            <div data-cc="today-mission-blockers" class="mc-detail" x-show="todayPresentationBlockers().length">
+              <span class="mc-footer-label">Unresolved blockers · always visible</span>
+              <template x-for="line in todayPresentationBlockers()" :key="'mission-blocker-'+line"><div class="text-[10px]" style="color:var(--amber)" x-text="'• '+line"></div></template>
+            </div>
+            <div class="mc-detail" x-show="pmDecisionTickerLine()" data-cc="pm-board-ssot-strip"><span class="mc-footer-label">Board SSOT · page gate still applies</span><span x-text="pmDecisionTickerLine()"></span></div>
+            <details data-cc="today-mission-context" class="mt-2" :open="todayContextExpanded">
+              <summary class="text-[10px] cursor-pointer" style="color:var(--t2)">Committee context · cadence / journal / research</summary>
+              <div class="mc-footer-row mt-2">
+                <div class="mc-footer-item" data-cc="firm-cadence-strip"><span class="mc-footer-label">Cadence</span><span x-text="firmCadenceNextLine()"></span></div>
+                <div class="mc-footer-item" data-cc="marginal-roc-strip"><span class="mc-footer-label">Marginal ROC</span><span x-text="marginalRocLadderLine()"></span></div>
+                <div class="mc-footer-item" data-cc="decision-readiness-strip"><span class="mc-footer-label">Pre-decision</span><span x-text="decisionReadinessLine()"></span></div>
+                <div class="mc-footer-item" data-cc="daily-ic-strip">
+                  <span class="mc-footer-label">Daily IC</span><span x-text="dailyIcLine()"></span>
+                  <div data-cc="daily-ic-one-pager"><template x-for="sec in dailyIcOnePagerLines()" :key="'mission-ic-'+sec.key"><div class="mt-1"><strong x-text="sec.label+': '"></strong><span x-text="sec.line"></span></div></template></div>
+                </div>
+                <div class="mc-footer-item" data-cc="deploy-intent-journal-strip" x-show="deployIntentJournalVisible()"><span class="mc-footer-label">Journal</span><span x-text="deployIntentJournalLine()"></span><div x-show="deployIntentJournal.data?.readiness_path" x-text="'Readiness: '+deployIntentJournal.data?.readiness_path+' · POST: '+deployIntentJournal.data?.journal_post_path"></div></div>
+                <div class="mc-footer-item" data-cc="attention-budget-strip"><span class="mc-footer-label">Attention</span><span x-text="attentionBudgetLine()"></span></div>
+              </div>
+              <div class="mc-detail mt-2" x-text="'Candidate '+missionControl().best_trade+' · Near-miss '+missionControl().near_miss_top+' · Sleeve '+missionControl().sleeve_gate_status"></div>
+              <template x-for="action in missionControl().next_actions" :key="'mission-action-'+action"><div class="text-[10px]" x-text="'→ '+action"></div></template>
+            </details>
+            <div x-show="dailyIc.err" class="text-[10px] text-red-400 mt-1" x-text="dailyIc.err"></div>
+            <div x-show="attentionBudgetExceeded()" class="text-[10px] mt-1" style="color:var(--amber)" x-text="attentionBudgetLine()"></div>
+          </div>
+        </section>
+      </template>

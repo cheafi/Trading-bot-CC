@@ -56,7 +56,9 @@ def test_regime_service_default_fallback():
 
     d = RegimeService._default_regime()
     assert d["trend"] == "SIDEWAYS"
-    assert d["should_trade"] is True
+    assert d["should_trade"] is False
+    assert d["synthetic"] is True
+    assert d["data_status"] == "unavailable"
     assert d["source"] == "default"
 
 

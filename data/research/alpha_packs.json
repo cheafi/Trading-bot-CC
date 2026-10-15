@@ -1,0 +1,12 @@
+{
+	"schema": "cc.alpha_packs.v1",
+	"total_alphas": 478,
+	"packs": [
+		{ "id": "qlib158", "label": "Qlib 158", "count": 158, "pit_safe_fundamental": true },
+		{ "id": "kakushadze101", "label": "Kakushadze 101", "count": 101 },
+		{ "id": "gtja191", "label": "GTJA 191", "count": 191 },
+		{ "id": "academic", "label": "Academic extras", "count": 20 },
+		{ "id": "pit_fundamental", "label": "PIT-safe fundamental", "count": 8 }
+	],
+	"online_compute_note": "Full zoo runs via sample/limit; expand local factor library incrementally."
+}

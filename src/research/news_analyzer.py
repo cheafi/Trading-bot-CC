@@ -282,12 +282,12 @@ class NewsAnalyzer:
 
     async def _analyze_single(self, raw: Dict) -> NewsItem:
         """Analyze a single news item."""
-        title = raw.get("title", "")
-        summary = raw.get("summary", raw.get("description", ""))
+        title = str(raw.get("title") or "")
+        summary = str(raw.get("summary") or raw.get("description") or "")
         content = f"{title} {summary}".lower()
 
         # Extract tickers
-        tickers = self._extract_tickers(title + " " + summary)
+        tickers = self._extract_tickers(f"{title} {summary}")
 
         # Classify category
         category = self._classify_category(content)

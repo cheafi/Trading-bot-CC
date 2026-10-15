@@ -151,18 +151,20 @@ class BenchmarkPortfolioEngine:
         result.active_return = result.portfolio_return - benchmark_return
 
         # Sector contributions
-        sector_returns: Dict[str, List[float]] = {}
+        sector_contributions: Dict[str, float] = {}
         sector_weights: Dict[str, float] = {}
         for p in positions:
             sector = p.sector or "Unknown"
-            sector_returns.setdefault(sector, []).append(p.return_pct)
+            sector_contributions[sector] = (
+                sector_contributions.get(sector, 0) + p.weight * p.return_pct
+            )
             sector_weights[sector] = sector_weights.get(sector, 0) + p.weight
 
         result.sector_weights = sector_weights
-        for sector, rets in sector_returns.items():
-            avg_ret = np.mean(rets)
-            w = sector_weights[sector]
-            result.sector_contributions[sector] = round(w * avg_ret, 2)
+        result.sector_contributions = {
+            sector: round(contribution, 2)
+            for sector, contribution in sector_contributions.items()
+        }
 
         # Factor exposures
         result.factor_exposures = self._compute_factor_exposures(positions)

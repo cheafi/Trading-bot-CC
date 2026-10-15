@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from src.services.market_data import extract_close_series
+
 logger = logging.getLogger(__name__)
 
 from src.core.state_paths import yfinance_cache_dir
@@ -81,28 +83,19 @@ def fetch_closes_batch(
             )
 
             if data is not None and len(data) > 0:
-                if len(needed) == 1:
-                    # Single ticker: yf.download returns flat columns
-                    t = needed[0]
-                    col = "Close" if "Close" in data.columns else "close"
-                    if col in data.columns:
-                        series = data[col].dropna()
-                        _CLOSES_CACHE[t] = (now, series)
-                        result[t] = series
-                else:
-                    # Multiple tickers: grouped by ticker
-                    for t in needed:
-                        try:
-                            if t in data.columns.get_level_values(0):
-                                sub = data[t]
-                                col = "Close" if "Close" in sub.columns else "close"
-                                if col in sub.columns:
-                                    series = sub[col].dropna()
-                                    if len(series) >= 22:
-                                        _CLOSES_CACHE[t] = (now, series)
-                                        result[t] = series
-                        except Exception:
-                            logger.debug("[RSData] skip %s from batch", t)
+                for t in needed:
+                    try:
+                        # Flat columns identify only a single requested ticker.
+                        if len(needed) > 1 and data.columns.nlevels == 1:
+                            continue
+                        series = extract_close_series(data, t)
+                        if series is not None and (
+                            len(needed) == 1 or len(series) >= 22
+                        ):
+                            _CLOSES_CACHE[t] = (now, series)
+                            result[t] = series
+                    except Exception as exc:
+                        logger.debug("[RSData] skip %s from batch: %s", t, exc)
 
         except Exception as e:
             logger.warning("[RSData] batch download failed: %s", e)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from _dashboard_js_runtime import run_dashboard_js
+
 from src.engines.scanner_matrix import ScannerCategory, ScannerHit, ScannerMatrix
 from src.services.surface_authority import AUTHORITY_RESEARCH, resolve_authority
 from src.utils.ui_render_safety import (
@@ -31,24 +33,53 @@ def test_index_html_passes_render_safe_guard():
     assert_template_render_safe([INDEX_HTML])
 
 
-def test_format_fallback_score_helpers_in_template():
+def test_fallback_score_and_research_bindings():
     text = INDEX_HTML.read_text(encoding="utf-8")
-    assert "formatFallbackScore(row)" in text
-    assert "discoveryHeaderMode()" in text
-    assert "!discoveryHeaderMode() && decisionHub" in text
-    assert "Candidates for monitoring only" in text
-    assert "discoveryFallbackBannerLine()" in text
-    assert "discoveryVerdictQualityLabel()" in text
-    assert "scannerDiscoveryHitsLabel()" in text
-    assert "discoveryConfidenceLabel(row)" in text
-    assert "cardScoreLabel(row)" in text
-    assert "surfaceEmptyState(tab" in text
-    assert "Dashboard gate:" in text
-    assert "Live fetch failed — showing fallback watchlist samples. Research-only fallback results — not live scanner output. Confirm in Playbook before sizing." in text
-    assert text.count(
-        "Live fetch failed — showing fallback watchlist samples. Research-only fallback results — not live scanner output. Confirm in Playbook before sizing."
-    ) == 1
-    assert "Board WAIT" not in text
+    start = text.index('data-cc="discovery-surface"')
+    discovery = text[start : text.index("</main>", start)]
+    for binding in (
+        'x-text="scannerScoreLabel(h)"',
+        'x-text="discoveryVerdictQualityLabel()"',
+        "scannerDiscoveryHitsLabel()",
+        'x-text="discoveryConfidenceLine(h)"',
+        'x-text="discoveryPrimaryHeadline()"',
+        'x-text="discoveryPrimaryBlockerLine()"',
+        'x-text="discoveryPrimaryNextActionLine()"',
+        'x-text="discoveryEmptyState().badge"',
+        'x-text="scannerPageGateLabel()"',
+    ):
+        assert binding in discovery
+    assert 'x-text="researchOnlyBannerLine()"' in text
+    assert 'src="/static/cc-helpers.js"' in text
+    run_dashboard_js("""
+        app.tab = 'scanners';
+        app.today7.tradeability = 'WAIT';
+        assert.equal(app.discoveryHeaderMode(), true);
+        for (const [score, tier] of [[7.5, 'high'], [7.49, 'medium'],
+            [6, 'medium'], [5.99, 'low']]) {
+            const row = {score, score_display_mode: 'fallback_rank'};
+            assert.equal(app.formatFallbackScore(row),
+                'Fallback rank · ' + tier);
+            assert.equal(app.scannerScoreLabel(row),
+                'Fallback rank · ' + tier);
+            assert.equal(app.discoveryConfidenceLabel(row),
+                'estimated confidence');
+        }
+        const missingScore = {score_display_mode: 'fallback_rank'};
+        assert.equal(app.formatFallbackScore(missingScore),
+            'Indicative rank (fallback)');
+        assert.equal(app.scannerScoreLabel({score: 8}), 'Score 8');
+        app.scannerHub.error = 'HTTP 503';
+        app.scannerHub.data = {hits: [{ticker: 'QCOM'}]};
+        assert.equal(app.scannerDiscoveryHasFallbackRows(), true);
+        assert.equal(app.discoveryVerdictQualityLabel(),
+            'FETCH FAILED · heuristic');
+        assert.equal(app.scannerDiscoveryFetchHintLine(), '');
+        assert.match(app.discoveryFallbackBannerLine(),
+            /Research-only fallback/);
+        app.scannerHub.data = null;
+        assert.equal(app.surfaceEmptyState('scanners').kind, 'FETCH_FAILED');
+    """)
 
 
 def test_enrich_hit_fallback_rank_uses_tier_not_deploy_score():

@@ -456,6 +456,36 @@ class MarketDataService:
 # ── frame validation (module-level, stateless) ───────────────────────────────
 
 
+def extract_close_series(df: Any, ticker: str) -> Optional[pd.Series]:
+    """Select one ticker's Close without mixing symbols or flattening values.
+
+    Supports flat OHLCV and both yfinance MultiIndex column orders. Missing
+    or ambiguous columns are unavailable, never another ticker's prices.
+    The date index is preserved for downstream RS alignment.
+    """
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return None
+    if isinstance(df.columns, pd.MultiIndex):
+        matches = [
+            column
+            for column in df.columns
+            if any(str(part).strip().lower() == "close" for part in column)
+            and any(str(part).strip().upper() == ticker.upper() for part in column)
+        ]
+    else:
+        matches = [
+            column for column in df.columns if str(column).strip().lower() == "close"
+        ]
+    if len(matches) != 1:
+        return None
+    close = df[matches[0]]
+    if not isinstance(close, pd.Series):
+        return None
+    close = pd.to_numeric(close, errors="coerce")
+    close = close.replace([float("inf"), float("-inf")], float("nan")).dropna()
+    return None if close.empty else close
+
+
 def _validate_frame(
     df: Any, ticker: str, interval: str, period: str = "1y"
 ) -> Optional[pd.DataFrame]:

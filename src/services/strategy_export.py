@@ -81,6 +81,37 @@ def export_python_pseudo(draft: Dict[str, Any]) -> str:
     return header + "\n".join(body) + "\n"
 
 
+def export_tdx_formula(draft: Dict[str, Any]) -> str:
+    """Tongdaxin (TDX) research formula draft — comments only, no live hooks."""
+    name = str(draft.get("hypothesis") or "CC_Research")[:40]
+    lines = [
+        "{CC X — research only; not deploy authority}",
+        f"{{Strategy: {name}}}",
+        "MA5:MA(C,5);",
+        "MA20:MA(C,20);",
+        "ENTRY: CROSS(MA5, MA20);",
+        "EXIT: CROSS(MA20, MA5);",
+    ]
+    for rule in (draft.get("entryRules") or [])[:5]:
+        lines.append(f"{{Entry note: {rule}}}")
+    return "\n".join(lines) + "\n"
+
+
+def export_mt5_mql5_stub(draft: Dict[str, Any]) -> str:
+    """MetaTrader 5 MQL5 research stub — OnTick skeleton without OrderSend."""
+    name = str(draft.get("hypothesis") or "CCResearch").replace('"', "'")[:60]
+    return (
+        "//+------------------------------------------------------------------+\n"
+        f"//| {name} — RESEARCH ONLY (no OrderSend)                           |\n"
+        "//+------------------------------------------------------------------+\n"
+        "#property strict\n"
+        "void OnTick() {\n"
+        "  // Map validated rules from CC Strategy Lab before any live EA\n"
+        "  // double fast = iMA(_Symbol, PERIOD_D1, 10, 0, MODE_SMA, PRICE_CLOSE, 0);\n"
+        "}\n"
+    )
+
+
 def export_watch_rules_csv(rules: List[Dict[str, Any]]) -> str:
     lines = ["asset,ruleType,condition,action,authorityEffect,expiry"]
     for r in rules:

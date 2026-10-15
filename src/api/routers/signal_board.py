@@ -27,6 +27,15 @@ def _kick_refresh(source: str) -> bool:
 @router.get("/api/v7/signal-board")
 async def get_signal_board() -> dict[str, Any]:
     board = sb.get_latest()
+    headline = (board or {}).get("headline") or {}
+    empty_signals = (
+        bool(board)
+        and not sb.is_refreshing()
+        and int(headline.get("buy_count") or 0) + int(headline.get("sell_count") or 0) == 0
+        and int((board.get("universe") or {}).get("liquid") or 0) == 0
+    )
+    if empty_signals:
+        _kick_refresh("empty_board_recovery")
     if not board:
         started = _kick_refresh("first_request")
         return {
@@ -35,7 +44,7 @@ async def get_signal_board() -> dict[str, Any]:
             "started": started,
             "authority": sb.AUTHORITY,
             "method": sb.METHOD,
-            "detail": "First scan of ~640 names takes about a minute — retry shortly.",
+            "detail": "First scan of ~700 names (incl. crypto) takes 1–2 minutes — retry shortly.",
         }
     return {**board, "refreshing": sb.is_refreshing()}
 

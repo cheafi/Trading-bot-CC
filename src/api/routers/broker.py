@@ -20,11 +20,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from src.api.deps import verify_api_key
+from src.api.deps import validate_ticker, verify_api_key
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/broker", tags=["broker"])
+
+# Upper bound on a single order; guards against a fat-finger or injected size.
+MAX_ORDER_QUANTITY = 1_000_000
 
 
 @router.get("/status")
@@ -213,6 +216,8 @@ async def place_order(
     from src.brokers.broker_manager import get_broker_manager
 
     try:
+        symbol = validate_ticker(ticker)
+
         try:
             order_side = OrderSide(side.lower())
         except ValueError:
@@ -223,6 +228,31 @@ async def place_order(
         except ValueError:
             raise HTTPException(
                 status_code=400, detail=f"Invalid order type: {order_type}"
+            )
+
+        # Unvalidated quantity/price reach the broker adapters verbatim, where a
+        # zero, negative, or absurd size is undefined behaviour.
+        if quantity < 1 or quantity > MAX_ORDER_QUANTITY:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"quantity must be between 1 and {MAX_ORDER_QUANTITY}, "
+                    f"got {quantity}"
+                ),
+            )
+        for label, price in (("limit_price", limit_price), ("stop_price", stop_price)):
+            if price is not None and price <= 0:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{label} must be positive, got {price}",
+                )
+        if order_type_enum is OrderType.LIMIT and limit_price is None:
+            raise HTTPException(
+                status_code=422, detail="limit_price is required for limit orders"
+            )
+        if order_type_enum is OrderType.STOP and stop_price is None:
+            raise HTTPException(
+                status_code=422, detail="stop_price is required for stop orders"
             )
 
         from src.core.live_trading_gate import authorize_live_order
@@ -237,7 +267,7 @@ async def place_order(
         dry_run = not authorize_live_order(account).live_allowed
 
         result = await manager.place_order(
-            ticker=ticker.upper(),
+            ticker=symbol,
             side=order_side,
             quantity=quantity,
             order_type=order_type_enum,

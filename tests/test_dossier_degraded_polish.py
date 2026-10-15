@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from _dashboard_js_runtime import run_dashboard_js
+
 from src.services.fetch_surface_state import (
     DOSSIER_CONFIRM_ONLY_SIZING,
     dossier_change_pct_display,
@@ -18,7 +20,6 @@ from src.services.fetch_surface_state import (
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
-CC_HELPERS = ROOT / "src" / "api" / "static" / "cc-helpers.js"
 
 
 def test_dossier_quote_unavailable_not_zero_dollar():
@@ -62,16 +63,44 @@ def test_index_html_dossier_polish_wired():
     assert "dosPriceDisplay()" in text
     assert "dosChangePctDisplay()" in text
     assert "dosSizeExplanationVisible()" in text
-    assert "dosTradePlanNoteValue()" in text
+    assert "dosTradePlanRows()" in text
+    assert 'x-text="row.value"' in text
     assert "institutionalSponsorshipLabel" in text
+    run_dashboard_js("""
+        app.dos.status = 'loaded';
+        app.dos.data = {symbol: 'QCOM', price: 0, quote_pending: true};
+        app.dos.intel = {unified_decision: {label: 'CONFIRM ONLY'}};
+        assert.equal(app.dosPriceDisplay(), 'Quote unavailable');
+        assert.equal(app.dosChangePctDisplay(), '—');
+        assert.equal(app.dosSizeDisplay(), '—');
+        assert.equal(app.dosSizeExplanationVisible(), true);
+        assert.notEqual(app.dosSizeExplanation(), app.dosSizeDisplay());
+        const note = app.dosTradePlanRows().find(row => row.label === 'Note');
+        assert.equal(note.value,
+            'Live structure unavailable - confirm-only dossier');
+        app.dos.data = {symbol: 'QCOM', price: 187.42, change_pct: -1.25};
+        assert.equal(app.dosPriceDisplay(), '$187.42');
+        assert.equal(app.dosChangePctDisplay(), '-1.25%');
+    """)
 
 
 def test_cc_helpers_exports_dossier_polish():
-    js = CC_HELPERS.read_text(encoding="utf-8")
-    for fn in (
-        "dossierPriceDisplay",
-        "dossierSizingExplanation",
-        "dossierTradePlanNote",
-        "institutionalSponsorshipLabel",
-    ):
-        assert fn in js
+    run_dashboard_js("""
+        const mock = {degraded: true, data_tier: 'mock'};
+        assert.equal(H.dossierPriceDisplay({price: 0}), 'Quote unavailable');
+        assert.equal(H.dossierPriceDisplay({price: 10}), '$10.00');
+        assert.equal(H.dossierSizingExplanation(true, 'confirm_only'),
+            'Confirm-only - no sizing or IBKR handoff');
+        assert.equal(H.dossierSizingDisplay(true, 'confirm_only'), '—');
+        assert.equal(H.dossierSizingExplanation(false), '');
+        assert.equal(H.dossierTradePlanNote({setup_type: 'Pullback'}),
+            'Pullback');
+        assert.match(H.insiderContextLabel('notable_accumulation', mock),
+            /mock/);
+        assert.equal(H.institutionalSponsorshipLabel(
+            'Added sponsorship (lagged)', mock),
+            'Illustrative added sponsorship (mock/lagged)');
+        assert.equal(H.institutionalSponsorshipLabel(
+            'Added sponsorship (lagged)', {}),
+            'Added sponsorship (lagged)');
+    """)

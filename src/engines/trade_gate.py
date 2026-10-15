@@ -41,7 +41,11 @@ class GateResult:
 
     def __post_init__(self):
         if not self.gate_timestamp:
-            self.gate_timestamp = datetime.now(timezone.utc).isoformat() + "Z"
+            # isoformat() already emits "+00:00"; appending "Z" makes the audit
+            # timestamp unparseable by datetime.fromisoformat and JS Date.
+            self.gate_timestamp = (
+                datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            )
 
     def to_dict(self) -> dict:
         return {

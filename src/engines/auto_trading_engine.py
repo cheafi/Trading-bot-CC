@@ -110,7 +110,9 @@ class RiskCircuitBreaker:
         self.triggered: bool = False
         self.trigger_reason: str = ""
         self.trigger_time: Optional[datetime] = None
-        self.today: date = date.today()
+        # UTC, not local: a local-midnight rollover would reset the daily loss
+        # limit mid-session for any non-UTC host and re-enable trading.
+        self.today: date = datetime.now(timezone.utc).date()
         # Restore cross-session peak_equity so drawdown tracking survives restarts
         _stored_peak: float = 0.0
         try:
@@ -125,7 +127,7 @@ class RiskCircuitBreaker:
 
     def reset_daily(self):
         self.daily_pnl = 0.0
-        self.today = date.today()
+        self.today = datetime.now(timezone.utc).date()
 
     def update(
         self,
@@ -135,7 +137,7 @@ class RiskCircuitBreaker:
     ) -> bool:
         """Update and check circuit breaker. Returns True if trading is allowed."""
         # Reset daily if new day
-        if date.today() != self.today:
+        if datetime.now(timezone.utc).date() != self.today:
             self.reset_daily()
 
         # Update peak equity — persist to SQLite so restarts don't lose history
@@ -679,11 +681,6 @@ class AutoTradingEngine:
                     # Store grade for sizing layer
                     rec.ml_grade = _ml_grade
 
-                    if size_mult < 1.0 and rec.position_size_shares:
-                        rec.position_size_shares = max(
-                            1, int(rec.position_size_shares * size_mult)
-                        )
-
                     if self.dry_run:
                         logger.info(
                             "[DRY RUN] Would execute: %s %s (score=%.3f)",
@@ -692,7 +689,10 @@ class AutoTradingEngine:
                             rec.composite_score,
                         )
                     else:
-                        result = await self._execute_recommendation(rec)
+                        result = await self._execute_recommendation(
+                            rec,
+                            gate_size_mult=size_mult,
+                        )
                         if result:
                             result["composite_score"] = rec.composite_score
                             self._trades_today.append(result)
@@ -1146,11 +1146,15 @@ class AutoTradingEngine:
     async def _execute_recommendation(
         self,
         rec: "TradeRecommendation",
+        gate_size_mult: float = 1.0,
     ) -> Optional[Dict[str, Any]]:
         """Execute a TradeRecommendation through the broker manager.
 
         All data (edge, strategy, sizing params) is read from the
         canonical TradeRecommendation object — no ad-hoc dicts.
+
+        ``gate_size_mult`` carries TradeGate's soft-gate size reduction; it must
+        be applied here because sizing happens after the gate is evaluated.
         """
         try:
             from src.brokers.base import OrderSide, OrderType
@@ -1162,23 +1166,30 @@ class AutoTradingEngine:
                 if rec.direction == Direction.LONG.value
                 else OrderSide.SELL_SHORT
             )
-            qty = max(
-                1,
-                self._calculate_position_size(
-                    rec,
-                    edge_pwin=rec.edge_p_t1,
-                    edge_rr=rec.risk_reward_ratio,
-                    strategy_name=rec.strategy_id,
-                ),
+            qty = self._calculate_position_size(
+                rec,
+                edge_pwin=rec.edge_p_t1,
+                edge_rr=rec.risk_reward_ratio,
+                strategy_name=rec.strategy_id,
             )
+            if qty <= 0:
+                logger.info(
+                    "Sizing vetoed entry for %s (risk budget / missing price data)",
+                    rec.ticker,
+                )
+                return None
             # Sprint 90: apply MetaLabel size_multiplier (0.5=BUY_SMALL, 1.0=STRONG_BUY)
             _size_mult = getattr(rec, "size_multiplier", 1.0) or 1.0
-            if _size_mult != 1.0:
-                qty = max(1, int(qty * _size_mult))
+            _gate_mult = max(0.0, min(1.0, float(gate_size_mult or 1.0)))
+            _combined_mult = _size_mult * _gate_mult
+            if _combined_mult != 1.0:
+                qty = max(1, int(qty * _combined_mult))
                 logger.info(
-                    "%s: size_multiplier=%.1f → qty adjusted to %d",
+                    "%s: size_mult=%.2f (meta=%.2f gate=%.2f) → qty=%d",
                     rec.ticker,
+                    _combined_mult,
                     _size_mult,
+                    _gate_mult,
                     qty,
                 )
             rec.position_size_shares = qty
@@ -2405,7 +2416,7 @@ class AutoTradingEngine:
             or getattr(signal, "close", 0)
         )
         if not price or price <= 0:
-            return 1
+            return 0  # unknown price → caller must skip, never guess a size
 
         # Compute stop from signal or config default
         # Sprint 27: direction-aware default stop
@@ -2448,7 +2459,7 @@ class AutoTradingEngine:
             risk_per_trade = equity * 0.01
             stop_distance = abs(price - stop_price)
             if stop_distance <= 0:
-                return 1
+                return 0  # no stop distance → risk per share is undefined
             base_shares = int(risk_per_trade / stop_distance)
             max_shares = int((equity * 0.05) / price)
             base_shares = max(1, min(base_shares, max_shares))
@@ -2546,7 +2557,7 @@ class AutoTradingEngine:
                     _ticker,
                     budget.get("violations", []),
                 )
-                return 1  # minimum 1 share
+                return 0  # hard budget violation is a veto, not a 1-share entry
         except Exception as e:
             logger.debug("Risk budget check fallback: %s", e)
 

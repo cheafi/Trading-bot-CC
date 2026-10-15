@@ -12,6 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const INDEX = path.join(ROOT, 'src/api/templates/index.html');
 const GZIP_DASHBOARD = path.join(ROOT, 'src/api/static/cc-dashboard.html.gz');
+const INSTANT_GZIP_DASHBOARD = path.join(ROOT, '.dashboard.html.gz');
+const TODAY_MISSION = path.join(ROOT, 'src/api/templates/partials/today_mission_control.html');
 const PARTIALS = {
   degraded_banners: path.join(
     ROOT,
@@ -50,7 +52,16 @@ function escapeRe(s) {
 function build() {
   let html = fs.readFileSync(INDEX, 'utf8');
   for (const [name, partialPath] of Object.entries(PARTIALS)) {
-    const body = fs.readFileSync(partialPath, 'utf8');
+    let body = fs.readFileSync(partialPath, 'utf8');
+    // Override only Mission Control; preserve the legacy deploy partial and its warnings.
+    if (name === 'deploy_surfaces') {
+      const start = '<!-- ── Mission Control (IDOS Four Questions — operator landing) ── -->';
+      const end = '<!-- Pre-Decision Gate (display-only — deploy_open + top row) -->';
+      const from = body.indexOf(start);
+      const to = body.indexOf(end, from);
+      if (from < 0 || to < 0) throw new Error('Missing Today mission boundaries');
+      body = body.slice(0, from) + fs.readFileSync(TODAY_MISSION, 'utf8').trimEnd() + '\n      ' + body.slice(to);
+    }
     html = injectPartial(name, html, body);
   }
   return html;
@@ -63,6 +74,7 @@ const current = fs.readFileSync(INDEX, 'utf8');
 function writeDashboardGzip(html) {
   const gz = zlib.gzipSync(Buffer.from(html, 'utf8'), { level: 9 });
   fs.writeFileSync(GZIP_DASHBOARD, gz);
+  fs.writeFileSync(INSTANT_GZIP_DASHBOARD, gz);
 }
 
 if (check) {
@@ -72,19 +84,11 @@ if (check) {
     );
     process.exit(1);
   }
-  if (!fs.existsSync(GZIP_DASHBOARD)) {
-    console.error(
-      'cc-dashboard.html.gz missing — run: node scripts/build-cc-template.mjs',
-    );
-    process.exit(1);
-  }
-  const gzMtime = fs.statSync(GZIP_DASHBOARD).mtimeMs;
-  const htmlMtime = fs.statSync(INDEX).mtimeMs;
-  if (gzMtime < htmlMtime) {
-    console.error(
-      'cc-dashboard.html.gz stale — run: node scripts/build-cc-template.mjs',
-    );
-    process.exit(1);
+  for (const file of [GZIP_DASHBOARD, INSTANT_GZIP_DASHBOARD]) {
+    if (!fs.existsSync(file) || zlib.gunzipSync(fs.readFileSync(file)).toString('utf8') !== current) {
+      console.error(`${path.basename(file)} missing or mismatched — run: node scripts/build-cc-template.mjs`);
+      process.exit(1);
+    }
   }
   console.log('CC template partials match index.html');
   process.exit(0);

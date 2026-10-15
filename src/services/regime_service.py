@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from copy import deepcopy
 from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ class RegimeService:
     _cache: Dict[str, Any] = {}
     _cache_time: float = 0
     CACHE_TTL = 4 * 3600  # 4 hours
+    REQUIRED_BENCHMARKS = ("SPY", "QQQ", "^VIX", "IWM", "HYG")
     _refresh_lock: asyncio.Lock = (
         asyncio.Lock()
     )  # prevents duplicate concurrent fetches
@@ -47,7 +49,21 @@ class RegimeService:
         except Exception as e:
             logger.error("RegimeService fetch failed: %s", e)
             if cls._cache:
-                return cls._cache
+                # Historical observations remain useful, but are not a current
+                # trading gate. Never rewrite the cached observation itself.
+                stale = deepcopy(cls._cache)
+                stale.update(
+                    should_trade=False,
+                    stale=True,
+                    data_status="stale",
+                    source="regime_service_cache_stale",
+                    confidence=0.0,
+                    trade_block_reason="Expired regime cache; refresh failed",
+                )
+                stale["signals"] = list(stale.get("signals", [])) + [
+                    stale["trade_block_reason"]
+                ]
+                return stale
             return cls._default_regime()
 
     @classmethod
@@ -90,18 +106,46 @@ class RegimeService:
         )
 
         regime = result.to_dict()
+        synthetic = getattr(cls, "_is_synthetic", False)
+        missing = [t for t in cls.REQUIRED_BENCHMARKS if not closes.get(t)]
+        if synthetic:
+            # The fallback has all five arrays, but none of those replacement
+            # values restores a missing live observation.
+            missing = list(getattr(cls, "_missing_benchmarks", cls.REQUIRED_BENCHMARKS))
+            reason = (
+                "Synthetic fallback is research-only; " "no live trading permission"
+            )
+            if missing:
+                reason += "; missing benchmarks: " + ", ".join(missing)
+        elif missing:
+            reason = "Missing required benchmarks: " + ", ".join(missing)
+        else:
+            reason = "Risk score blocks trading" if result.risk_score >= 75 else None
         # Add pipeline-compatible fields
-        regime["should_trade"] = result.risk_score < 75
+        regime["should_trade"] = (
+            not synthetic and not missing and result.risk_score < 75
+        )
         regime["vix"] = result.vix_level
         regime["source"] = "regime_service"
-        regime["synthetic"] = getattr(cls, "_is_synthetic", False)
+        regime["synthetic"] = synthetic
+        regime["stale"] = False
+        regime["data_status"] = (
+            "synthetic" if synthetic else "incomplete" if missing else "live"
+        )
+        regime["missing_benchmarks"] = missing
+        regime["trade_block_reason"] = reason
+        if synthetic or missing:
+            regime["signals"] = list(regime.get("signals", [])) + [reason]
+            logger.warning("RegimeService trading denied: %s", reason)
         return regime
 
     @classmethod
     def _fetch_closes(cls) -> Dict[str, list]:
         """Fetch 60-day closes for benchmarks via yfinance (sync, thread-safe)."""
 
-        tickers = ["SPY", "QQQ", "^VIX", "IWM", "HYG"]
+        from src.services.market_data import extract_close_series
+
+        tickers = cls.REQUIRED_BENCHMARKS
         closes: Dict[str, list] = {}
 
         # Direct yfinance fetch (synchronous — RegimeService.get() is always called sync).
@@ -117,14 +161,16 @@ class RegimeService:
                         progress=False,
                         auto_adjust=True,
                     )
-                    if data is not None and len(data) > 0:
-                        c_col = "Close" if "Close" in data.columns else "close"
-                        closes[t] = data[c_col].dropna().tolist()
+                    close = extract_close_series(data, t)
+                    if close is not None:
+                        closes[t] = close.tolist()
                 except Exception as exc:
                     logger.debug("yfinance fetch %s failed: %s", t, exc)
         except ImportError:
             logger.warning("yfinance not installed")
 
+        # Record missing live observations before synthetic replacement.
+        cls._missing_benchmarks = [t for t in tickers if not closes.get(t)]
         # Final fallback: synthetic
         if not closes.get("SPY"):
             logger.warning("No market data — using synthetic")
@@ -149,7 +195,7 @@ class RegimeService:
 
     @classmethod
     def _default_regime(cls) -> Dict[str, Any]:
-        """Default regime when everything fails."""
+        """Synthetic compatibility defaults, never observed market metrics."""
         return {
             "trend": "SIDEWAYS",
             "risk_score": 50.0,
@@ -158,11 +204,18 @@ class RegimeService:
             "spy_trend": "FLAT",
             "breadth": "neutral",
             "confidence": 0.3,
-            "signals": ["no data available"],
+            "signals": ["no data available; synthetic defaults are research-only"],
             "should_trade": False,
             "vix": 18.0,
             "source": "default",
             "synthetic": True,
+            "stale": False,
+            "data_status": "unavailable",
+            "missing_benchmarks": list(cls.REQUIRED_BENCHMARKS),
+            "trade_block_reason": (
+                "No market data; synthetic defaults; missing benchmarks: "
+                + ", ".join(cls.REQUIRED_BENCHMARKS)
+            ),
         }
 
 

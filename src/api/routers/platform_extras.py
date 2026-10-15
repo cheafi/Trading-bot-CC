@@ -234,12 +234,19 @@ async def ops_console(request: Request):
     from src.services.ibkr_service import get_ibkr_service
 
     ibkr_st = get_ibkr_service().status()
-    exec_ready = build_execution_readiness(
-        ibkr_connected=bool(ibkr_st.get("connected")),
-        ibkr_mode=ibkr_st.get("mode") or "paper",
-        engine_running=eng_snap["running"],
-        circuit_breaker=eng_snap["circuit_breaker"],
-    )
+    if isinstance(ibkr_st, dict) and ibkr_st:
+        exec_ready = build_execution_readiness(
+            ibkr_connected=bool(ibkr_st.get("connected")),
+            ibkr_mode=ibkr_st.get("mode") or "paper",
+            engine_running=eng_snap["running"],
+            circuit_breaker=eng_snap["circuit_breaker"],
+        )
+    else:
+        logger.warning("ops-console: broker status snapshot unavailable")
+        exec_ready = {
+            "available": False,
+            "health_label": "Broker status snapshot unavailable",
+        }
 
     if not eng_snap["running"]:
         try:

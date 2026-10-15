@@ -591,6 +591,26 @@ async def remove_position(ticker: str):
     return {"status": "removed", "ticker": t}
 
 
+def _signal_board_trailing_stops() -> dict:
+    """Suggested stops only; never treated as a defined risk anchor."""
+    try:
+        from src.services.signal_board import get_latest  # noqa: PLC0415
+
+        rows = (get_latest() or {}).get("holdings") or []
+    except Exception as exc:
+        logger.debug("signal board trailing stops unavailable: %s", exc)
+        return {}
+    out = {}
+    for row in rows:
+        try:
+            stop = float(row.get("trailing_stop") or 0)
+        except (TypeError, ValueError):
+            continue
+        if row.get("ticker") and stop > 0:
+            out[str(row["ticker"]).upper()] = round(stop, 2)
+    return out
+
+
 @router.get("/api/portfolio/monitor", tags=["portfolio"])
 async def portfolio_monitor(request: Request):
     """Monitor all positions: live price, PnL, R-multiple, stop/target alerts."""
@@ -601,6 +621,7 @@ async def portfolio_monitor(request: Request):
     mds = request.app.state.market_data
     alerts = []
     enriched = []
+    suggested_stops = _signal_board_trailing_stops()
 
     for h in holdings:
         t = h.get("ticker", "")
@@ -615,8 +636,10 @@ async def portfolio_monitor(request: Request):
         # Fetch current price
         price = h.get("current_price")
         change_pct = 0
+        hist = None
+        suggested_stop_source = None
         try:
-            hist = await mds.get_history(t, period="5d", interval="1d")
+            hist = await mds.get_history(t, period="3mo", interval="1d")
             if hist is not None and not hist.empty:
                 c_col = "Close" if "Close" in hist.columns else "close"
                 price = float(hist[c_col].iloc[-1])
@@ -648,9 +671,38 @@ async def portfolio_monitor(request: Request):
             else None
         )
         unrealized_r = r_multiple if stop_defined else None
+        suggested_stop = None if stop_defined else suggested_stops.get(str(t).upper())
+        if suggested_stop:
+            suggested_stop_source = "signal_board_trailing"
+        elif (
+            not stop_defined
+            and price
+            and hist is not None
+            and len(hist) >= 15
+        ):
+            try:
+                h_col = "High" if "High" in hist.columns else "high"
+                l_col = "Low" if "Low" in hist.columns else "low"
+                c_col = "Close" if "Close" in hist.columns else "close"
+                trs = []
+                for i in range(-14, 0):
+                    hi = float(hist[h_col].iloc[i])
+                    lo = float(hist[l_col].iloc[i])
+                    prev_c = float(hist[c_col].iloc[i - 1])
+                    trs.append(max(hi - lo, abs(hi - prev_c), abs(lo - prev_c)))
+                atr = sum(trs) / len(trs) if trs else 0.0
+                if atr > 0:
+                    suggested_stop = round(max(price - 2.0 * atr, 0.01), 2)
+                    suggested_stop_source = "atr_estimate_2x"
+            except (TypeError, ValueError, IndexError):
+                pass
         if not stop_defined:
             risk_status = "RISK ANCHOR MISSING"
-            next_action = "SET STOP"
+            next_action = (
+                f"SET STOP (suggested ${suggested_stop:.2f})"
+                if suggested_stop
+                else "SET STOP"
+            )
         elif price and stop and price <= stop:
             risk_status = "STOP BREACHED"
             next_action = "EXIT NOW"
@@ -683,6 +735,8 @@ async def portfolio_monitor(request: Request):
             "unrealized_r": unrealized_r,
             "risk_status": risk_status,
             "next_action": next_action,
+            "suggested_stop": suggested_stop,
+            "suggested_stop_source": suggested_stop_source,
             "heat_included": stop_defined,
             "quote_pending": h.get("quote_pending", False) and not price,
             "cost_basis": round(entry * shares, 2) if entry and shares else None,

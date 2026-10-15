@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from _dashboard_js_runtime import run_dashboard_js
+
 from src.services.fetch_surface_state import (
     operator_loading_safe_line,
     today_mission_wait_subtitle,
@@ -11,7 +13,6 @@ from src.services.fetch_surface_state import (
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
-CC_HELPERS = ROOT / "src" / "api" / "static" / "cc-helpers.js"
 PARTIAL = ROOT / "src/api/templates/cc/partials/degraded_banners.html"
 BUILD_SCRIPT = ROOT / "scripts/build-cc-template.mjs"
 
@@ -34,13 +35,35 @@ def test_index_html_fourth_pass_wiring():
     assert "operatorLoadingSafeLine()" in raw
     assert "todayMissionWaitSubtitle()" in raw
     assert 'data-cc="portfolio-stop-blockers"' in raw
-    assert "CCHelpers.operatorLoadingSafeLine" in raw
 
 
 def test_cc_helpers_fourth_pass_exports():
-    js = CC_HELPERS.read_text(encoding="utf-8")
-    assert "operatorLoadingSafeLine" in js
-    assert "todayMissionWaitSubtitle" in js
+    run_dashboard_js("""
+        assert.match(H.operatorLoadingSafeLine({healthMode: 'loading'}),
+            /core-only/);
+        assert.equal(H.operatorLoadingSafeLine({healthMode: 'full',
+            waitDay: false}), '');
+        assert.match(app.operatorLoadingSafeLine(), /core-only/);
+        app.healthMode = 'full';
+        app.live = true;
+        app.ccHeader.page_authority_mode = 'active';
+        assert.match(app.operatorLoadingSafeLine(), /WAIT/);
+        // Display is Traditional Chinese, not an English default.
+        assert.equal(app.todayMissionWaitSubtitle(),
+            H.localizeUiText('Deploy blocked — use monitors and ' +
+                'Playbook ranking only'));
+        assert.match(app.todayMissionWaitSubtitle(), /部署已阻/);
+        assert.equal(app.deployOpen(), false);
+        assert.equal(app.playbookCanSendToIbkr({execution_ready: true,
+            action: 'TRADE', entry_price: 100, stop_price: 95}), false);
+        app.today7.tradeability = 'SELECTIVE';
+        app.today7.system_state = {deploy_open: true};
+        app.live = true;
+        app.ccHeader.page_authority_mode = 'active';
+        assert.equal(app.operatorLoadingSafeLine(), '');
+        assert.equal(app.todayMissionWaitSubtitle(), '');
+        assert.equal(H.todayMissionWaitSubtitle({waitDay: false}), '');
+    """)
 
 
 def test_degraded_banners_partial_exists():

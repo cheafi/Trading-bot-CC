@@ -40,7 +40,9 @@ def test_coverage_universe_includes_indices_and_sectors():
 
 
 def test_asset_class_helpers():
-    assert asset_class_for("SPY") == "index"
+    # Tradable ETF proxy, not the non-tradable underlying index.
+    assert asset_class_for("SPY") == "index_proxy"
+    assert asset_class_for("QQQ") == "index_proxy"
     assert asset_class_for("XLK") == "etf"
     assert asset_class_for("NVDA") == "equity"
     assert is_index_or_etf("QQQ") is True
@@ -76,9 +78,7 @@ def test_load_playbook_signals_applies_coverage_pad(monkeypatch):
 
     import asyncio
 
-    signals, meta = asyncio.run(
-        load_playbook_signals(scan_fn=None, target=10)
-    )
+    signals, meta = asyncio.run(load_playbook_signals(scan_fn=None, target=10))
     assert meta["coverage_pad_count"] >= 9
     assert len(signals) == 10
     assert all(s.get("source") == "coverage_pad" for s in signals)

@@ -64,10 +64,19 @@ def test_build_cc_template_includes_ops_recovery():
 def test_index_html_guide_partial_markers():
     raw = INDEX_HTML.read_text(encoding="utf-8")
     assert "<!-- @cc-partial guide -->" in raw
-    assert "CC · Clarity Console — Operator Guide" in raw
+    assert "CC · Clarity Console · 操盤手手冊" in raw
 
 
 def test_index_html_bottom_nav_data_cc_nav():
     raw = INDEX_HTML.read_text(encoding="utf-8")
-    for tab in ("guide", "today", "signals", "scanners", "portfolio", "ibkr", "dossier", "ops"):
+    for tab in (
+        "guide",
+        "today",
+        "signals",
+        "scanners",
+        "portfolio",
+        "ibkr",
+        "dossier",
+        "ops",
+    ):
         assert f'data-cc-nav="{tab}"' in raw

@@ -136,6 +136,88 @@ async def ops_engine_run_cycle(request: Request, _: bool = Depends(verify_api_ke
     return sanitize_for_json(await _run_engine_cycle_once(request.app))
 
 
+@router.post("/research/alpha-zoo-refresh")
+async def ops_alpha_zoo_refresh(
+    request: Request,
+    ticker: str = Query("SPY"),
+    compute_limit: int = Query(478, ge=10, le=478),
+    _: bool = Depends(verify_api_key),
+):
+    """Operator: refresh cached 478-alpha zoo bench (nightly job uses same path)."""
+    from src.api.deps import validate_ticker
+    from src.services.alpha_zoo_cache import refresh_alpha_zoo_cache
+
+    sym = validate_ticker(ticker)
+    mds = request.app.state.market_data
+    return sanitize_for_json(
+        await refresh_alpha_zoo_cache(mds, ticker=sym, compute_limit=compute_limit)
+    )
+
+
+@router.post("/engine/mock-test")
+async def ops_engine_mock_test(request: Request, _: bool = Depends(verify_api_key)):
+    """Paper mock test: one engine cycle + lightweight backtest sanity (no live orders)."""
+    engine = get_engine(request.app)
+    if not engine:
+        return sanitize_for_json(
+            {"ok": False, "authority": "paper_mock", "error": "engine_unavailable"}
+        )
+
+    if bool(getattr(engine, "_running", False)):
+        cycle = await engine.run_one_cycle()
+        cycle_payload = {
+            "ok": True,
+            "cycle": cycle,
+            "engine": _engine_snapshot(engine),
+            "note": "cycle_while_loop_running",
+        }
+    else:
+        cycle_payload = await _run_engine_cycle_once(request.app)
+    if not cycle_payload.get("ok"):
+        return sanitize_for_json(
+            {
+                "ok": False,
+                "phase": "engine_cycle",
+                "authority": "paper_mock",
+                **cycle_payload,
+            }
+        )
+
+    backtest: Dict[str, Any] = {"ok": False, "skipped": True}
+    try:
+        from src.api.routers.live_backtest import live_backtest
+
+        backtest = await live_backtest(
+            request,
+            ticker="SPY",
+            strategy="all",
+            period="6mo",
+            start_date=None,
+            end_date=None,
+        )
+        backtest = {
+            "ok": bool(backtest.get("best_strategy")),
+            "ticker": "SPY",
+            "best_strategy": backtest.get("best_strategy"),
+            "total_trades": backtest.get("total_trades"),
+            "trust": backtest.get("trust"),
+        }
+    except Exception as exc:
+        logger.warning("mock-test backtest leg failed: %s", exc)
+        backtest = {"ok": False, "error": type(exc).__name__}
+
+    return sanitize_for_json(
+        {
+            "ok": True,
+            "authority": "paper_mock",
+            "dry_run": True,
+            "engine_cycle": cycle_payload.get("cycle"),
+            "backtest": backtest,
+            "engine": cycle_payload.get("engine"),
+        }
+    )
+
+
 @router.get("/intelligence/daily")
 async def ops_intelligence_daily(request: Request, _: bool = Depends(verify_api_key)):
     """Intelligence Engine CEO daily report — research_only."""

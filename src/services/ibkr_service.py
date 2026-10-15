@@ -1244,7 +1244,8 @@ class IBKRService:
 
         assert_live_order_permitted(
             dry_run=False,
-            account=account or getattr(self._app, "account", ""),
+            account=account or self._account_id or getattr(self._app, "account", ""),
+            paper_port=self._port if self._mode == "paper" else None,
         )
 
         if not self.is_connected:
@@ -1366,7 +1367,8 @@ class IBKRService:
 
         assert_live_order_permitted(
             dry_run=False,
-            account=account or getattr(self._app, "account", ""),
+            account=account or self._account_id or getattr(self._app, "account", ""),
+            paper_port=self._port if self._mode == "paper" else None,
         )
 
         if not self.is_connected:
@@ -1715,9 +1717,11 @@ class IBKRService:
                 authenticated,
                 category="critical",
                 partial=connected and not authenticated,
-                reason="API handshake complete"
-                if authenticated
-                else "Connect session to authenticate",
+                reason=(
+                    "API handshake complete"
+                    if authenticated
+                    else "Connect session to authenticate"
+                ),
             ),
             _row(
                 "account",
@@ -1815,11 +1819,11 @@ class IBKRService:
                 "state": (
                     "ready"
                     if hmds_ok
-                    else "partial"
-                    if hmds_dormant
-                    else "unavailable"
-                    if hmds_status == "degraded"
-                    else "partial"
+                    else (
+                        "partial"
+                        if hmds_dormant
+                        else "unavailable" if hmds_status == "degraded" else "partial"
+                    )
                 ),
                 "ok": hmds_ok or hmds_dormant,
                 "reason": (

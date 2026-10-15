@@ -269,7 +269,9 @@ class IBBroker(BaseBroker):
             )
 
         assert_live_order_permitted(
-            dry_run=False, account=self.account or getattr(self, "account_id", "")
+            dry_run=False,
+            account=self.account or getattr(self, "account_id", ""),
+            paper_port=self.port,
         )
 
         if not self.is_connected or not self._ib:

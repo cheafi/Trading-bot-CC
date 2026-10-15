@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import os
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
+
+from _synthetic_brief_fixture import isolated_brief_dir  # noqa: F401
 
 from src.services.playbook_board_fallback import (
     BOARD_MODE_COMPRESSED,
@@ -22,8 +25,8 @@ from src.services.playbook_board_fallback import (
     save_playbook_snapshot,
 )
 
-
 SAMPLE_BRIEF = {
+    "synthetic": True,  # SYNTHETIC test-only rows, never trading data.
     "actionable": [
         {
             "ticker": "NVDA",
@@ -84,13 +87,19 @@ def test_build_compressed_fallback_from_brief():
     funnel = payload["filter_funnel"]
     assert funnel["universe_scanned"] >= funnel["watch_qualified_setups"]
     assert funnel["deploy_qualified_setups"] == 0
-    assert funnel["watch_qualified_setups"] == len(payload["opportunities"]) or funnel[
-        "watch_qualified_setups"
-    ] >= 1
-    board = next(c for c in payload["unlock_deploy"]["conditions"] if c["key"] == "board")
+    assert (
+        funnel["watch_qualified_setups"] == len(payload["opportunities"])
+        or funnel["watch_qualified_setups"] >= 1
+    )
+    board = next(
+        c for c in payload["unlock_deploy"]["conditions"] if c["key"] == "board"
+    )
     assert "watch-qualified" in board["detail"] or "scan-ranked" in board["detail"]
     assert "validated" not in board["detail"]
-    assert "(watch-qualified)" not in board["detail"] or "not watch-qualified" in board["detail"]
+    assert (
+        "(watch-qualified)" not in board["detail"]
+        or "not watch-qualified" in board["detail"]
+    )
     assert payload["board_mode_label"] == _COMPRESSED_LABEL
     first = payload["opportunities"][0]
     assert first.get("score_display_mode") == "fallback_rank"
@@ -122,7 +131,9 @@ def test_annotate_board_mode_snapshot_label():
 
 def test_resolve_board_mode_label_fallback():
     assert resolve_board_mode_label({"compressed": True}) == _COMPRESSED_LABEL
-    assert resolve_board_mode_label({"source": "compressed_fallback"}) == _COMPRESSED_LABEL
+    assert (
+        resolve_board_mode_label({"source": "compressed_fallback"}) == _COMPRESSED_LABEL
+    )
 
 
 def test_snapshot_roundtrip():
@@ -169,7 +180,29 @@ def test_supplement_zero_deploy_from_all_avoid_scan():
     assert board_has_content(out)
 
 
-def test_supplement_zero_deploy_uses_brief_when_scan_empty():
+def test_supplement_zero_deploy_uses_brief_when_scan_empty(isolated_brief_dir):
+    from src.services.playbook_board_fallback import supplement_zero_deploy_board
+
+    (isolated_brief_dir / "brief-2026-01-01.json").write_text(
+        json.dumps(SAMPLE_BRIEF), encoding="utf-8"
+    )
+    empty = {
+        "source": "ranked_pipeline",
+        "opportunities": [],
+        "filter_funnel": {"execution_ready_setups": 0},
+    }
+    out = supplement_zero_deploy_board(empty, 30)
+    assert out["wait_day_supplement"] is True
+    assert out["source"] == "ranked_pipeline"
+    assert {r["ticker"] for r in out["opportunities"]} == {"NVDA", "META", "AMD"}
+    assert all(r["action"] == "WATCH" for r in out["opportunities"])
+    assert all(r["deploy_authority"] is False for r in out["opportunities"])
+    assert out["unlock_deploy"]["unlocked"] is False
+    assert out["filter_funnel"]["execution_ready_setups"] == 0
+    assert "brief watch supplement" in out["board_mode_label"]
+
+
+def test_supplement_without_brief_does_not_invent_names(isolated_brief_dir):
     from src.services.playbook_board_fallback import supplement_zero_deploy_board
 
     empty = {
@@ -177,12 +210,13 @@ def test_supplement_zero_deploy_uses_brief_when_scan_empty():
         "opportunities": [],
         "filter_funnel": {"execution_ready_setups": 0},
     }
-    out = supplement_zero_deploy_board(empty, 30)
-    assert out.get("board_mode") == BOARD_MODE_COMPRESSED or out.get("near_miss")
+    assert supplement_zero_deploy_board(empty, 30) == empty
 
 
 def test_index_html_legacy_opps_wired_to_effective_card_action():
-    index = Path(__file__).resolve().parents[1] / "src" / "api" / "templates" / "index.html"
+    index = (
+        Path(__file__).resolve().parents[1] / "src" / "api" / "templates" / "index.html"
+    )
     raw = index.read_text(encoding="utf-8")
     idx = raw.index("Fallback to legacy opps")
     block = raw[idx : idx + 900]

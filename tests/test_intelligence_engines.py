@@ -7,6 +7,7 @@ Tests for the new intelligence engines:
 
 Run: python -m pytest tests/test_intelligence_engines.py -v
 """
+
 import numpy as np
 import pytest
 
@@ -27,7 +28,6 @@ from src.engines.self_learning import (
     RuleAdjustment,
     TUNABLE_RULES,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────
 
@@ -65,7 +65,28 @@ class TestBenchmarkPortfolioEngine:
         result = engine.compute_attribution(positions, 3.0)
         assert "Technology" in result.sector_contributions
         assert "Healthcare" in result.sector_contributions
-        assert abs(result.portfolio_return - 4.2) < 0.01
+        # 0.6 * 5% + 0.4 * 2% = 3.8 percentage points.
+        assert result.portfolio_return == pytest.approx(3.8)
+        assert result.sector_contributions == pytest.approx(
+            {"Technology": 3.0, "Healthcare": 0.8}
+        )
+        assert result.active_return == pytest.approx(0.8)
+
+    def test_unequal_weights_within_sector_reconcile(self):
+        """SYNTHETIC positions: sum weighted sector returns."""
+        engine = BenchmarkPortfolioEngine()
+        positions = [
+            PositionSnapshot("TEST_A", 0.6, 5.0, "Technology"),
+            PositionSnapshot("TEST_B", 0.2, -2.0, "Technology"),
+            PositionSnapshot("TEST_C", 0.2, 2.0, "Healthcare"),
+        ]
+        result = engine.compute_attribution(positions, 3.0)
+        assert result.sector_contributions == pytest.approx(
+            {"Technology": 2.6, "Healthcare": 0.4}
+        )
+        assert sum(result.sector_contributions.values()) == pytest.approx(
+            result.portfolio_return
+        )
 
     def test_factor_exposures(self):
         engine = BenchmarkPortfolioEngine()
@@ -81,7 +102,8 @@ class TestBenchmarkPortfolioEngine:
         bench_returns = _make_returns(100, seed=2)
         positions = [PositionSnapshot("AAPL", 1.0, 5.0, "Technology")]
         result = engine.compute_attribution(
-            positions, 3.0,
+            positions,
+            3.0,
             benchmark_returns_series=bench_returns.tolist(),
             portfolio_returns_series=port_returns.tolist(),
         )
@@ -111,11 +133,23 @@ class TestSymbolComparisonEngine:
 
     def test_underperforming_stock(self):
         engine = SymbolComparisonEngine()
-        ticker = _make_returns(100, seed=1) - 0.3  # underperformance
-        benchmark = _make_returns(100, seed=2)
+        # SYNTHETIC matched paths: negative excess return in every window.
+        benchmark = np.tile([-0.1, 0.2], 50)
+        ticker = benchmark - 0.3
         result = engine.compare_vs_benchmark(ticker, benchmark, "AAPL", "SPY", "index")
-        assert result.rs_composite < 100
+        assert result.rs_composite < 95
+        assert result.win_rate_vs_benchmark == 0
         assert result.verdict in ("WEAK", "LAGGARD")
+
+    def test_mild_underperformance_remains_neutral(self):
+        """SYNTHETIC mild underperformance must not weaken verdict policy."""
+        engine = SymbolComparisonEngine()
+        benchmark = np.tile([-0.1, 0.2], 50)
+        result = engine.compare_vs_benchmark(
+            benchmark - 0.01, benchmark, "TEST", "SPY", "index"
+        )
+        assert 95 <= result.rs_composite < 100
+        assert result.verdict == "NEUTRAL"
 
     def test_peer_comparison(self):
         engine = SymbolComparisonEngine()
@@ -158,14 +192,24 @@ class TestRejectionAnalysisEngine:
 
     def test_categorization(self):
         engine = RejectionAnalysisEngine()
-        engine.record_rejection(RejectionRecord(
-            "AAPL", "momentum", "LONG", 72,
-            rejection_reasons=["timing: extended, overbought"],
-        ))
-        engine.record_rejection(RejectionRecord(
-            "TSLA", "breakout", "LONG", 65,
-            rejection_reasons=["earnings in 1 day"],
-        ))
+        engine.record_rejection(
+            RejectionRecord(
+                "AAPL",
+                "momentum",
+                "LONG",
+                72,
+                rejection_reasons=["timing: extended, overbought"],
+            )
+        )
+        engine.record_rejection(
+            RejectionRecord(
+                "TSLA",
+                "breakout",
+                "LONG",
+                65,
+                rejection_reasons=["earnings in 1 day"],
+            )
+        )
         result = engine.analyze()
         assert result.total_rejections == 2
         assert "timing" in result.rejection_categories
@@ -173,33 +217,65 @@ class TestRejectionAnalysisEngine:
 
     def test_false_negative_detection(self):
         engine = RejectionAnalysisEngine()
-        engine.record_rejection(RejectionRecord(
-            "AAPL", "momentum", "LONG", 72,
-            rejection_reasons=["weak setup"],
-            actual_return_5d=5.0,
-            was_false_negative=True,
-        ))
+        engine.record_rejection(
+            RejectionRecord(
+                "AAPL",
+                "momentum",
+                "LONG",
+                72,
+                rejection_reasons=["weak setup"],
+                actual_return_5d=5.0,
+                was_false_negative=True,
+            )
+        )
         result = engine.analyze()
         assert result.false_negative_rate == 100.0
         assert result.false_negative_cost == 5.0
 
-    def test_confidence_disagreement(self):
+    @pytest.mark.parametrize("with_rejection", [False, True])
+    def test_confidence_disagreement(self, with_rejection):
         engine = RejectionAnalysisEngine()
-        engine.record_disagreement(ConfidenceDisagreement(
-            "AAPL", 85, 62, explanation="strategy overconfident"
-        ))
+        if with_rejection:
+            engine.record_rejection(
+                RejectionRecord(
+                    "AAPL", "momentum", "LONG", 72, rejection_reasons=["weak"]
+                )
+            )
+        engine.record_disagreement(
+            ConfidenceDisagreement("AAPL", 85, 62, explanation="strategy overconfident")
+        )
         result = engine.analyze()
         assert len(result.confidence_disagreements) == 1
+        assert (
+            result.confidence_disagreements[0]["explanation"]
+            == "strategy overconfident"
+        )
+        assert result.total_rejections == int(with_rejection)
+
+    def test_disagreement_only_history_is_capped(self):
+        engine = RejectionAnalysisEngine()
+        for i in range(25):
+            engine.record_disagreement(ConfidenceDisagreement(f"TEST{i}", 85, 62))
+        result = engine.analyze()
+        assert result.total_rejections == 0
+        assert len(result.confidence_disagreements) == 20
+        assert result.confidence_disagreements[0]["ticker"] == "TEST5"
+        assert result.confidence_disagreements[-1]["ticker"] == "TEST24"
 
     def test_high_fn_rate_recommendation(self):
         engine = RejectionAnalysisEngine()
         for i in range(15):
-            engine.record_rejection(RejectionRecord(
-                f"T{i}", "momentum", "LONG", 70,
-                rejection_reasons=["weak"],
-                was_false_negative=True,
-                actual_return_5d=3.0,
-            ))
+            engine.record_rejection(
+                RejectionRecord(
+                    f"T{i}",
+                    "momentum",
+                    "LONG",
+                    70,
+                    rejection_reasons=["weak"],
+                    was_false_negative=True,
+                    actual_return_5d=3.0,
+                )
+            )
         result = engine.analyze()
         assert any("FALSE NEGATIVE" in r for r in result.rule_recommendations)
 
@@ -237,9 +313,13 @@ class TestSelfLearningEngine:
         engine = SelfLearningEngine()
         engine.state.max_adjustment_pct = 0.05  # 5% max
         adj = RuleAdjustment(
-            rule_name="test", parameter="stop_loss_pct",
-            old_value=0.03, new_value=0.10,  # 233% change
-            reason="test", confidence=0.5, sample_size=50,
+            rule_name="test",
+            parameter="stop_loss_pct",
+            old_value=0.03,
+            new_value=0.10,  # 233% change
+            reason="test",
+            confidence=0.5,
+            sample_size=50,
         )
         approved = engine._apply_guardrails([adj])
         if approved:
@@ -267,9 +347,13 @@ class TestSelfLearningEngine:
         engine._audit_path = audit_file
         engine.enable()
         adj = RuleAdjustment(
-            rule_name="test", parameter="stop_loss_pct",
-            old_value=0.03, new_value=0.035,
-            reason="test", confidence=0.5, sample_size=30,
+            rule_name="test",
+            parameter="stop_loss_pct",
+            old_value=0.03,
+            new_value=0.035,
+            reason="test",
+            confidence=0.5,
+            sample_size=30,
         )
         applied = engine.apply_adjustments([adj])
         assert len(applied) == 1
@@ -280,7 +364,9 @@ class TestSelfLearningEngine:
     def test_tunable_rules_bounds(self):
         for name, rule in TUNABLE_RULES.items():
             assert rule["min"] < rule["max"], f"{name}: min >= max"
-            assert rule["min"] <= rule["default"] <= rule["max"], f"{name}: default out of bounds"
+            assert (
+                rule["min"] <= rule["default"] <= rule["max"]
+            ), f"{name}: default out of bounds"
 
 
 if __name__ == "__main__":

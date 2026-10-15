@@ -7,6 +7,7 @@ Routers import from here instead of from main.py.
 
 from __future__ import annotations
 
+import hmac
 import math
 import re
 from typing import Any
@@ -60,8 +61,13 @@ async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> bo
     """
     try:
         from src.core.config import settings  # noqa: PLC0415
-    except Exception:
-        return True
+    except Exception as e:
+        # Fail closed: an unreadable config must not grant access to every
+        # authenticated endpoint.
+        raise HTTPException(
+            status_code=503,
+            detail="Auth configuration unavailable.",
+        ) from e
 
     if not settings.api_secret_key:
         if getattr(settings, "environment", "development") == "production":
@@ -71,7 +77,11 @@ async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> bo
             )
         return True  # dev/staging: open access
 
-    if not x_api_key or x_api_key != settings.api_secret_key:
+    # compare_digest, not ==: a plain comparison leaks the key byte-by-byte
+    # through response timing.
+    if not x_api_key or not hmac.compare_digest(
+        str(x_api_key), str(settings.api_secret_key)
+    ):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     return True
 
@@ -81,7 +91,10 @@ async def optional_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
     try:
         from src.core.config import settings  # noqa: PLC0415
     except Exception:
-        return x_api_key
-    if settings.api_secret_key and x_api_key != settings.api_secret_key:
+        return None  # fail closed — treat as unauthenticated
+    if settings.api_secret_key and (
+        not x_api_key
+        or not hmac.compare_digest(str(x_api_key), str(settings.api_secret_key))
+    ):
         return None
     return x_api_key

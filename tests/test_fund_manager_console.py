@@ -7,6 +7,7 @@ from src.services.fund_manager_console import (
     build_allocation_recommendation,
     build_fund_console_payload,
     enrich_fund_card,
+    resolve_fund_regime,
 )
 
 
@@ -27,11 +28,21 @@ class TestFundManagerConsole(unittest.TestCase):
     def test_allocation_when_active(self):
         cards = [
             enrich_fund_card(
-                {"id": "A", "display_name": "Tactical", "gate_status": "ACTIVE", "regime_fit": 65},
+                {
+                    "id": "A",
+                    "display_name": "Tactical",
+                    "gate_status": "ACTIVE",
+                    "regime_fit": 65,
+                },
                 "BULL",
             ),
             enrich_fund_card(
-                {"id": "B", "display_name": "Leader", "gate_status": "PAUSED", "regime_fit": 15},
+                {
+                    "id": "B",
+                    "display_name": "Leader",
+                    "gate_status": "PAUSED",
+                    "regime_fit": 15,
+                },
                 "BULL",
             ),
         ]
@@ -86,8 +97,21 @@ class TestFundManagerConsole(unittest.TestCase):
             benchmark="SPY",
             market_regime_label="UPTREND · WAIT",
         )
-        self.assertEqual(payload["regime_display"], "UPTREND · WAIT")
+        self.assertEqual(payload["regime_display"], "UPTREND")
+        self.assertEqual(payload["today_regime_label"], "UPTREND · WAIT")
+        self.assertEqual(payload["regime_source"], "fund_lab_with_today")
+        self.assertFalse(payload["using_today_fallback"])
+        self.assertIn("Today: UPTREND · WAIT", payload["regime_note"])
         self.assertTrue(payload["comparison_table"])
+
+    def test_unknown_sleeve_uses_today_without_claiming_freshness(self):
+        ctx = resolve_fund_regime(
+            sleeve_regime="UNKNOWN", today_trend="UPTREND", today_tradeability="WAIT"
+        )
+        self.assertEqual(ctx["regime_display"], "UPTREND · WAIT")
+        self.assertEqual(ctx["regime_source"], "today_fallback")
+        self.assertTrue(ctx["using_today_fallback"])
+        self.assertTrue(ctx["regime_stale"])
 
 
 if __name__ == "__main__":

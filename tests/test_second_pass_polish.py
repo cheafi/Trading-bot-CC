@@ -1,8 +1,11 @@
-"""Second-pass CC polish — duplicate copy, severity vocabulary, helper wiring."""
+"""Second-pass polish: duplicate copy, severity vocabulary, helper wiring."""
 
 from __future__ import annotations
 
 from pathlib import Path
+
+from _dashboard_html_contract import bindings
+from _dashboard_js_runtime import run_dashboard_js
 
 from src.services.fetch_surface_state import (
     STATE_EXECUTION_BLOCKED,
@@ -16,7 +19,6 @@ from src.services.fetch_surface_state import (
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
-CC_HELPERS = ROOT / "src" / "api" / "static" / "cc-helpers.js"
 
 API_STILL_LOADING = "API still loading — retry in a few seconds."
 
@@ -40,8 +42,32 @@ def test_instant_banner_and_warmup_strip_do_not_duplicate_warming_line():
     raw = INDEX_HTML.read_text(encoding="utf-8")
     assert "warmupContextStripVisible()" in raw
     assert 'x-show="warmupStatusLine()" class="text-[8px] mt-1"' not in raw
-    assert "CCHelpers.warmupContextStripVisible" in raw
-    assert "instantBannerVisible" in raw
+    assert "warmupContextStripVisible()" in bindings(INDEX_HTML, "x-show")
+    run_dashboard_js("""
+        for (const tab of ['today', 'signals', 'guide', 'ops']) {
+            for (const instant of [true, false]) {
+                for (const contract of [true, false]) {
+                    for (const hasContext of [true, false]) {
+                        const opts = {tab, instantBannerVisible: instant,
+                            dataContractStripVisible: contract,
+                            warmupStatusLine: hasContext ? 'WARMING' : '',
+                            warmupUpgradeQueue: ''};
+                        const expected = tab !== 'guide' && !instant &&
+                            contract && hasContext;
+                        assert.equal(H.warmupContextStripVisible(opts),
+                            expected);
+                        app.tab = tab;
+                        app.instantDegradedBannerVisible = () => instant;
+                        app.dataContractStripVisible = () => contract;
+                        app.warmupStatusLine = () => opts.warmupStatusLine;
+                        app.warmupUpgradeQueue = () => '';
+                        assert.equal(app.warmupContextStripVisible(),
+                            expected);
+                    }
+                }
+            }
+        }
+    """)
 
 
 def test_severity_vocabulary_consistent_in_fetch_surface_state():
@@ -69,7 +95,18 @@ def test_cc_helpers_wired_in_template():
 
 
 def test_cc_helpers_js_exports_severity_and_warmup():
-    js = CC_HELPERS.read_text(encoding="utf-8")
-    assert "severityBadgeClass" in js
-    assert "surfaceWarmupLoadingLine" in js
-    assert "Retry shortly" not in js
+    run_dashboard_js("""
+        for (const [state, expected] of [
+            ['failed_fetch', 'pr'], ['execution_blocked', 'pr'],
+            ['failed_fetch_fallback', 'pr'], ['loading', 'pa'],
+            ['stale', 'pa'], ['fallback', 'pa'], ['partial', 'pa'],
+            ['ok', 'pg'], ['unknown_state', 'pw']
+        ]) {
+            assert.equal(H.severityBadgeClass(state), expected);
+            assert.equal(app.severityBadgeClass(state), expected);
+        }
+        assert.match(app.surfaceWarmupLoadingLine('ops_diagnostic'),
+            /^Ops warming/);
+        assert.ok(!app.surfaceWarmupLoadingLine('ops_diagnostic')
+            .includes('Retry shortly'));
+    """)

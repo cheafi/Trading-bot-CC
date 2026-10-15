@@ -14,6 +14,7 @@ Tests all modules created/modified from the institutional review:
 import asyncio
 import os
 import sys
+from unittest.mock import AsyncMock
 
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -520,16 +521,26 @@ class TestEventDataLayer:
         svc.configure_fred("test_key")
         assert "fred" in svc.available_providers()
 
-    def test_get_ticker_events(self):
-        from src.services.event_data import EventDataService
+    def test_get_ticker_events(self, monkeypatch):
+        from src.services.event_data import (
+            EventDataService,
+            SECFiling,
+            InsiderTransaction,
+        )
 
         svc = EventDataService()
-        result = asyncio.get_event_loop().run_until_complete(
-            svc.get_ticker_events("AAPL")
-        )
-        assert result["ticker"] == "AAPL"
-        assert "filings" in result
-        assert "insider_transactions" in result
+        # SYNTHETIC provider results: test aggregation, never external SEC I/O.
+        filings = AsyncMock(return_value=[SECFiling(form_type="10-K")])
+        insiders = AsyncMock(return_value=[InsiderTransaction(transaction_type="P")])
+        monkeypatch.setattr(svc._sec, "get_recent_filings", filings)
+        monkeypatch.setattr(svc._sec, "get_insider_transactions", insiders)
+        result = asyncio.run(svc.get_ticker_events("TEST"))
+        assert result["ticker"] == "TEST"
+        assert result["filings"][0]["form_type"] == "10-K"
+        assert result["insider_transactions"][0]["type"] == "P"
+        assert result["insider_sentiment"]["buys"] == 1
+        filings.assert_awaited_once_with("TEST")
+        insiders.assert_awaited_once_with("TEST")
 
     def test_fred_regime_series(self):
         from src.services.event_data import FREDProvider

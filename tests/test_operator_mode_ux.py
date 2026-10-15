@@ -287,7 +287,10 @@ def test_export_review_pack_settings_button():
     assert "Export review pack · 匯出審查包" in html
     assert "exportReviewPack()" in html
     assert "async exportReviewPack()" in js
+    assert "async exportUiLayoutPack()" in js
+    assert "export-ui-layout" in html
     assert "reviewPackLoading" in js
+    assert "openHtmlExport" in helpers
     assert "buildReviewPackDocument" in helpers
     assert "stripReviewPackSecrets" in helpers
     assert "@media print" in html

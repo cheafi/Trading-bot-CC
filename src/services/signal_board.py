@@ -1,5 +1,5 @@
 """
-Signal Board — hourly BUY / SELL paper signals across S&P 500 + Nasdaq-100 + ETFs.
+Signal Board — hourly BUY / SELL paper signals across S&P 500 + Nasdaq-100 + ETFs + crypto.
 
 Four Questions (AGENTS.md):
   Know    — one ranked list of triggered long/short setups with entry/stop/targets.
@@ -45,6 +45,9 @@ BENCHMARK = "SPY"
 MIN_BARS = 130
 MIN_PRICE = 5.0
 MIN_DOLLAR_VOLUME = 20_000_000.0
+CRYPTO_MIN_PRICE = 0.01
+CRYPTO_MIN_DOLLAR_VOLUME = 5_000_000.0
+CRYPTO_MIN_ATR_PCT = 0.35
 MIN_ATR_PCT = 0.6  # below this the price is pinned (e.g. pending cash takeover)
 DOWNLOAD_CHUNK = 100
 BUCKET_CAP = 10
@@ -67,8 +70,9 @@ AUTHORITY = {
 }
 METHOD = {
     "universe": (
-        "S&P 500 + Nasdaq-100 + liquid ETFs (price >= $5, 20d $ volume >= $20M, "
-        f"daily range >= {MIN_ATR_PCT}% so pinned takeover targets are skipped)"
+        "S&P 500 + Nasdaq-100 + liquid ETFs + major crypto (*-USD on yfinance); "
+        f"equities: price >= ${MIN_PRICE:.0f}, 20d $ vol >= ${MIN_DOLLAR_VOLUME / 1e6:.0f}M; "
+        f"crypto: price >= ${CRYPTO_MIN_PRICE}, 20d $ vol >= ${CRYPTO_MIN_DOLLAR_VOLUME / 1e6:.0f}M"
     ),
     "score": (
         "0-100 = trend (40) + relative strength vs SPY percentile (25) + "
@@ -219,11 +223,19 @@ def compute_features(
     )
 
 
-def is_liquid(f: Features) -> bool:
+def is_crypto_ticker(ticker: str) -> bool:
+    return str(ticker or "").upper().endswith("-USD")
+
+
+def is_liquid(f: Features, sector: str = "") -> bool:
+    crypto = is_crypto_ticker(f.ticker) or sector == "Crypto"
+    min_price = CRYPTO_MIN_PRICE if crypto else MIN_PRICE
+    min_dv = CRYPTO_MIN_DOLLAR_VOLUME if crypto else MIN_DOLLAR_VOLUME
+    min_atr = CRYPTO_MIN_ATR_PCT if crypto else MIN_ATR_PCT
     return (
-        f.close >= MIN_PRICE
-        and f.dollar_volume >= MIN_DOLLAR_VOLUME
-        and f.atr / f.close * 100 >= MIN_ATR_PCT
+        f.close >= min_price
+        and f.dollar_volume >= min_dv
+        and f.atr / f.close * 100 >= min_atr
     )
 
 
@@ -537,7 +549,11 @@ def _cap_by_sector(
 
 def build_board(inputs: BoardInputs) -> dict[str, Any]:
     """Rank all liquid names into BUY/SELL buckets + watchlists + holding alerts."""
-    liquid = {t: f for t, f in inputs.features.items() if is_liquid(f)}
+    liquid = {
+        t: f
+        for t, f in inputs.features.items()
+        if is_liquid(f, inputs.sectors.get(t, ""))
+    }
     rs_pct = percentile_ranks({t: f.rs_raw for t, f in liquid.items()})
     regime = classify_regime(inputs.benchmark)
 
@@ -722,13 +738,35 @@ def market_session(now: datetime | None = None) -> dict[str, Any]:
 # ── IO: universe, holdings, download, persistence ────────────────────────────
 
 
+def _crypto_universe_symbols() -> dict[str, str]:
+    """Major *-USD pairs from the shared scanner list (yfinance)."""
+    try:
+        from src.scanners.intl_universe import CRYPTO_TICKERS  # noqa: PLC0415
+    except ImportError:
+        return {}
+    out: dict[str, str] = {}
+    for raw in CRYPTO_TICKERS:
+        sym = str(raw).upper().strip()
+        if not sym:
+            continue
+        if not sym.endswith("-USD"):
+            sym = f"{sym}-USD"
+        out[sym] = "Crypto"
+    for etf in ("IBIT", "FBTC", "BITB", "ARKB", "ETHA", "ETHE", "GBTC"):
+        out.setdefault(etf, "Crypto ETF")
+    return out
+
+
 def load_universe(path: Path = UNIVERSE_PATH) -> dict[str, str]:
     data = json.loads(path.read_text(encoding="utf-8"))
-    return {
+    out = {
         s["ticker"]: s.get("sector") or "Unknown"
         for s in data.get("symbols", [])
         if s.get("ticker")
     }
+    for sym, sector in _crypto_universe_symbols().items():
+        out.setdefault(sym, sector)
+    return out
 
 
 def load_holdings(path: Path = HOLDINGS_PATH) -> list[dict[str, Any]]:
@@ -900,6 +938,7 @@ async def refresh_signal_board(source: str = "manual") -> dict[str, Any]:
         bench_close = bench["close"] if bench else None
         feats: dict[str, Features] = {}
         for t, fr in frames.items():
+            scale = 1.0 if is_crypto_ticker(t) else vol_scale
             f = compute_features(
                 t,
                 fr["high"],
@@ -907,7 +946,7 @@ async def refresh_signal_board(source: str = "manual") -> dict[str, Any]:
                 fr["close"],
                 fr["volume"],
                 bench_close=bench_close,
-                volume_scale=vol_scale,
+                volume_scale=scale,
                 last_bar=fr["dates"][-1] if fr["dates"] else "",
             )
             if f is not None:
@@ -963,13 +1002,21 @@ async def refresh_signal_board(source: str = "manual") -> dict[str, Any]:
         return board
 
 
+_LATEST_DISK_MTIME: float = 0.0
+
+
 def get_latest() -> dict[str, Any]:
-    global _LATEST
-    if not _LATEST and LATEST_PATH.exists():
-        try:
-            _LATEST = json.loads(LATEST_PATH.read_text(encoding="utf-8"))
-            _LATEST["source"] = "disk_cache"
-        except (OSError, ValueError):
+    """Return in-memory board; reload from disk when the file is newer."""
+    global _LATEST, _LATEST_DISK_MTIME
+    try:
+        if LATEST_PATH.exists():
+            mtime = LATEST_PATH.stat().st_mtime
+            if not _LATEST or mtime > _LATEST_DISK_MTIME:
+                _LATEST = json.loads(LATEST_PATH.read_text(encoding="utf-8"))
+                _LATEST["source"] = "disk_cache"
+                _LATEST_DISK_MTIME = mtime
+    except (OSError, ValueError):
+        if not _LATEST:
             _LATEST = {}
     return _LATEST
 

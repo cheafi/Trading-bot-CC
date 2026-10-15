@@ -25,6 +25,12 @@ _REQUIRED_MODES = frozenset(
         "ops_diagnostic",
         "ibkr_execution",
         "backtest_research",
+        "command_research",
+        "strategy_lab_research",
+        "agent_monitoring",
+        "shadow_diagnostic",
+        "reports_library",
+        "settings_reference",
         "guide_reference",
     }
 )
@@ -51,6 +57,11 @@ def test_resolve_surface_mode_aliases():
     assert resolve_surface_mode("rejections") == "rejections_diagnostic"
     assert resolve_surface_mode("backtest") == "backtest_research"
     assert resolve_surface_mode("command") == "command_research"
+    assert resolve_surface_mode("strategy-lab") == "strategy_lab_research"
+    assert resolve_surface_mode("agent") == "agent_monitoring"
+    assert resolve_surface_mode("shadow") == "shadow_diagnostic"
+    assert resolve_surface_mode("reports") == "reports_library"
+    assert resolve_surface_mode("settings") == "settings_reference"
 
 
 def test_guide_header_has_no_deploy_chips():
@@ -60,6 +71,16 @@ def test_guide_header_has_no_deploy_chips():
     assert summary["show_decision_chips"] is False
     assert not any("Idea" in c["label"] for c in summary["chips"])
     assert "QCOM" not in str(summary["chips"])
+
+
+def test_strategy_lab_header_research_only():
+    summary = header_summary_for_tab(
+        "strategy-lab",
+        {"tradeability": "TRADE", "best_idea_ticker": "NVDA", "deploy_label": "BUY"},
+    )
+    assert summary["surface_mode"] == "strategy_lab_research"
+    assert summary["show_decision_chips"] is False
+    assert "NVDA" not in str(summary["chips"])
 
 
 def test_funds_header_research_only_not_playbook():

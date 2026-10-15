@@ -80,6 +80,57 @@ def resolve_llm_provider() -> LLMProvider:
     return LLMProvider.STUB
 
 
+def chat_with_vision(*, content_b64: str, prompt: str) -> str:
+    """Vision analysis via OpenAI-compatible API when configured."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not key:
+        raise ImportError("OPENAI_API_KEY not set")
+    model = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini")
+    url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/") + "/chat/completions"
+    raw = str(content_b64 or "").strip()
+    if raw.startswith("data:") and "," in raw:
+        raw = raw.split(",", 1)[1]
+    image_url = raw if raw.startswith("http") else f"data:image/png;base64,{raw}"
+    body = json.dumps(
+        {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": str(prompt)[:4000]},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ],
+                }
+            ],
+            "max_tokens": 800,
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"vision_http_{exc.code}") from exc
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError("vision_empty_response")
+    msg = choices[0].get("message") or {}
+    return str(msg.get("content") or "").strip()
+
+
 def provider_status() -> dict[str, Any]:
     provider = resolve_llm_provider()
     return {

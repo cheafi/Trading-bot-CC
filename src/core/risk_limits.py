@@ -18,16 +18,44 @@ Env-var overrides: set RISK_MAX_POSITION_PCT=0.03 to override 5% default.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 
 
+logger = logging.getLogger(__name__)
+
+
 def _env_float(key: str, default: float) -> float:
-    return float(os.environ.get(key, default))
+    """Parse a float override, falling back to the default on bad input.
+
+    These dataclasses are constructed at import time, so an unparseable value
+    (including the empty string docker-compose emits for a declared-but-unset
+    variable) would otherwise raise and make every importer of this module fail.
+    """
+    raw = os.environ.get(key)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Ignoring invalid %s=%r — using default %s", key, raw, default
+        )
+        return default
 
 
 def _env_int(key: str, default: int) -> int:
-    return int(os.environ.get(key, default))
+    raw = os.environ.get(key)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Ignoring invalid %s=%r — using default %s", key, raw, default
+        )
+        return default
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -36,6 +36,9 @@ PINE_DISCLAIMER = (
 
 
 def research_safety_contract(*, surface: str = "research") -> Dict[str, Any]:
+    from src.services.surface_rule_maps import research_overlay_for_surface
+
+    overlay = research_overlay_for_surface(surface)
     return {
         "surface_type": "research_monitoring",
         "surface": surface,
@@ -51,7 +54,10 @@ def research_safety_contract(*, surface: str = "research") -> Dict[str, Any]:
         "can_override_dashboard": False,
         "can_override_playbook": False,
         "authority_notice": list(DEFAULT_AUTHORITY_NOTICE),
-        "pipeline_stops_at": "watch_rule_or_playbook_review",
+        "pipeline_stops_at": overlay.get(
+            "pipeline_stops_at", "watch_rule_or_playbook_review"
+        ),
+        "idos": dict(overlay.get("idos") or {}),
     }
 
 

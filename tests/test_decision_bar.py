@@ -20,11 +20,33 @@ class TestDecisionBar(unittest.TestCase):
     def test_bar_from_today_warming(self):
         bar = bar_from_today({}, None)
         self.assertEqual(bar["surface"], "today")
-        self.assertIn(bar["verdict"], ("WAIT", "DEPLOY", "REDUCE"))
+        self.assertEqual(bar["verdict"], "MONITOR ONLY")
+        self.assertEqual(bar["next_action"], "MONITOR ONLY")
+        self.assertEqual(bar["evidence_quality"]["freshness"], "warming")
+        self.assertEqual(bar["why_not"], "No deploy-grade ideas in funnel")
+
+    def test_bar_from_today_deploy_requires_open_regime(self):
+        for tradeability in ("WAIT", "NO_TRADE"):
+            with self.subTest(tradeability=tradeability):
+                bar = bar_from_today(
+                    {"market_regime": {"tradeability": tradeability}},
+                    {"deploy_reduce_wait": "DEPLOY"},
+                )
+                self.assertEqual(bar["verdict"], "MONITOR ONLY")
+        bar = bar_from_today(
+            {"market_regime": {"tradeability": "SELECTIVE"}},
+            {"deploy_reduce_wait": "DEPLOY"},
+        )
+        self.assertEqual(bar["verdict"], "DEPLOY")
 
     def test_bar_from_portfolio(self):
         bar = bar_from_portfolio(
-            {"stance": "REBALANCE", "recommended_action": "Trim NVDA", "evidence_quality": "manual", "confidence": "medium"},
+            {
+                "stance": "REBALANCE",
+                "recommended_action": "Trim NVDA",
+                "evidence_quality": "manual",
+                "confidence": "medium",
+            },
             {"aligned_with_regime": False, "position_count": 3, "note": "Misaligned"},
             rebalance_urgency=True,
         )
@@ -45,7 +67,10 @@ class TestDecisionBar(unittest.TestCase):
 
     def test_confluence_minimal(self):
         c = build_confluence(
-            dossier={"technicals": {"above_sma50": True, "rsi": 55}, "regime": {"should_trade": True}},
+            dossier={
+                "technicals": {"above_sma50": True, "rsi": 55},
+                "regime": {"should_trade": True},
+            },
             unified={"label": "WATCH", "confidence": 0.5, "reason": "test"},
             smart_money={"insider": "neutral", "options_flow": "no_data"},
             pm_answer={"action_now": "WAIT"},

@@ -14,6 +14,7 @@ import asyncio
 import logging
 import math
 import os
+import re
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
@@ -1131,6 +1132,21 @@ async def _startup_prewarm():
     except Exception as exc:
         logger.warning("[Prewarm] Scanner warm failed (non-fatal): %s", exc)
 
+    if os.getenv("CC_RESEARCH_WARM_ALPHA", "").lower() in ("1", "true", "yes"):
+        try:
+            from src.services.alpha_zoo_cache import (
+                cached_zoo_fresh,
+                refresh_alpha_zoo_cache,
+            )
+
+            if not cached_zoo_fresh(max_age_sec=86400):
+                await refresh_alpha_zoo_cache(mds, compute_limit=478)
+                logger.info("[Prewarm] Alpha zoo cache refreshed (CC_RESEARCH_WARM_ALPHA)")
+            else:
+                logger.info("[Prewarm] Alpha zoo cache already fresh — skip refresh")
+        except Exception as exc:
+            logger.warning("[Prewarm] Alpha zoo warm failed (non-fatal): %s", exc)
+
 
 @asynccontextmanager
 async def _lifespan(app):  # noqa: ARG001
@@ -1190,13 +1206,17 @@ async def _lifespan(app):  # noqa: ARG001
         logger.info("[startup] Signal Board loop started (hourly in market hours)")
     except Exception as exc:
         logger.warning("[startup] Signal Board loop skipped: %s", exc)
-    if os.getenv("CC_AUTO_START_ENGINE", "").lower() in ("1", "true", "yes"):
+    auto_env = os.getenv("CC_AUTO_START_ENGINE", "").lower()
+    if not auto_env and os.getenv("TRADING_ENV", "paper").lower() == "paper":
+        auto_env = "1"
+    if auto_env in ("1", "true", "yes"):
         try:
             eng = _get_engine()
             if eng and not eng.running:
-                asyncio.create_task(eng.run())
+                task = asyncio.create_task(eng.run())
+                app.state.engine_task = task
                 logger.info(
-                    "[startup] AutoTradingEngine loop started (CC_AUTO_START_ENGINE)"
+                    "[startup] AutoTradingEngine loop started (paper auto-start)"
                 )
         except Exception as exc:
             logger.warning("[startup] engine auto-start skipped: %s", exc)
@@ -1745,7 +1765,44 @@ async def broker_reconciliation_status():
 # ===== Signal Endpoints =====
 
 
-@app.get("/signals", response_model=SignalListResponse)
+def _signal_board_as_signals(
+    ticker: Optional[str], direction: Optional[str], min_confidence: float, limit: int
+) -> list[dict]:
+    from src.services.signal_board import get_latest
+
+    board = get_latest() or {}
+    buckets = board.get("buckets") or {}
+    out = []
+    for bucket in ("strong_buy", "buy", "strong_sell", "sell"):
+        for row in buckets.get(bucket) or []:
+            side = "LONG" if row.get("side") == "BUY" else "SHORT"
+            confidence = round(float(row.get("score") or 0) / 100.0, 3)
+            if ticker and row.get("ticker") != ticker.upper():
+                continue
+            if direction and side != direction.upper():
+                continue
+            if confidence < (min_confidence or 0):
+                continue
+            out.append(
+                {
+                    "id": f"signal-board:{board.get('generated_at')}:{row.get('ticker')}:{side}",
+                    "ticker": row.get("ticker"),
+                    "direction": side,
+                    "strategy": row.get("setup"),
+                    "entry_price": row.get("entry"),
+                    "take_profit": row.get("target1"),
+                    "stop_loss": row.get("stop"),
+                    "confidence": confidence,
+                    "bucket": bucket,
+                    "authority": row.get("authority") or "Paper signal",
+                    "generated_at": board.get("generated_at"),
+                }
+            )
+    out.sort(key=lambda s: s["confidence"], reverse=True)
+    return out[:limit]
+
+
+@app.get("/signals")
 async def get_signals(
     date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format"),
     ticker: Optional[str] = Query(None, description="Filter by ticker symbol"),
@@ -1760,11 +1817,16 @@ async def get_signals(
     Get trading signals.
 
     Returns latest signals filtered by date, ticker, direction, and confidence.
+    Falls back to the Signal Board (paper signals) when the signal store is offline.
     """
-
-    from src.core.database import AsyncSessionLocal
+    if ticker and not _TICKER_RE.match(ticker.upper()):
+        raise HTTPException(status_code=422, detail="invalid ticker")
+    if direction and direction.upper() not in {"LONG", "SHORT"}:
+        raise HTTPException(status_code=422, detail="direction must be LONG or SHORT")
 
     try:
+        from src.core.database import AsyncSessionLocal
+
         # Build query
         conditions = ["confidence >= :min_confidence"]
         params = {"min_confidence": min_confidence}
@@ -1826,31 +1888,43 @@ async def get_signals(
             result = await session.execute(stmt)
             rows = result.fetchall()
 
-        signals = []
-        for row in rows:
-            signals.append(
-                Signal(
-                    id=row.id,
-                    ticker=row.ticker,
-                    direction=row.direction,
-                    strategy=row.strategy,
-                    entry_price=row.entry_price,
-                    take_profit=row.take_profit,
-                    stop_loss=row.stop_loss,
-                    confidence=row.confidence,
-                    generated_at=row.generated_at,
-                )
-            )
-
-        return SignalListResponse(
-            signals=signals,
-            total=len(signals),
-            generated_at=datetime.now(timezone.utc).isoformat(),
-        )
-
+        signals = [
+            {
+                "id": str(row.id),
+                "ticker": row.ticker,
+                "direction": row.direction,
+                "strategy": row.strategy,
+                "entry_price": row.entry_price,
+                "take_profit": row.take_profit,
+                "stop_loss": row.stop_loss,
+                "confidence": row.confidence,
+                "generated_at": str(row.generated_at),
+            }
+            for row in rows
+        ]
+        return {
+            "signals": signals,
+            "total": len(signals),
+            "source": "signal_store",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
     except Exception as e:
-        logger.error(f"Error fetching signals: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.info("signal store unavailable, using Signal Board: %s", type(e).__name__)
+
+    try:
+        signals = _signal_board_as_signals(ticker, direction, min_confidence, limit)
+    except Exception as e:
+        logger.error("Signal Board fallback failed: %s: %s", type(e).__name__, e)
+        raise HTTPException(
+            status_code=503, detail="Signals unavailable: store offline and Signal Board not ready"
+        ) from e
+    return {
+        "signals": signals,
+        "total": len(signals),
+        "source": "signal_board",
+        "authority": "Paper signal — not execution permission",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/signals/{signal_id}")
@@ -1930,13 +2004,13 @@ async def get_daily_report(
     _: bool = Depends(verify_api_key),
 ):
     """Get daily market report."""
-    from sqlalchemy import text
-
-    from src.core.database import AsyncSessionLocal
-
     report_date = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     try:
+        from sqlalchemy import text
+
+        from src.core.database import AsyncSessionLocal
+
         async with AsyncSessionLocal() as session:
             # Get report from database
             result = await session.execute(
@@ -1963,18 +2037,24 @@ async def get_daily_report(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error fetching daily report: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.warning("Daily report store unavailable: %s: %s", type(e).__name__, e)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Daily report store offline. Live alternatives: "
+                "/reports/market-overview and /api/v7/signal-board"
+            ),
+        ) from e
 
 
 @app.get("/reports/market-overview")
 async def get_market_overview(_: bool = Depends(verify_api_key)):
-    """Get current market overview."""
-    from sqlalchemy import text
-
-    from src.core.database import AsyncSessionLocal
-
+    """Get current market overview (OHLCV store first, live quotes as fallback)."""
     try:
+        from sqlalchemy import text
+
+        from src.core.database import AsyncSessionLocal
+
         async with AsyncSessionLocal() as session:
             # Get latest index data
             indices_sql = """
@@ -2017,11 +2097,40 @@ async def get_market_overview(_: bool = Depends(verify_api_key)):
             "indices": indices,
             "sectors": sectors,
             "market_status": "open" if _is_market_open() else "closed",
+            "source": "ohlcv_store",
+        }
+    except Exception as e:
+        logger.info("OHLCV store unavailable, using live quotes: %s", type(e).__name__)
+
+    index_tickers = ["SPY", "QQQ", "IWM", "DIA"]
+    sector_tickers = ["XLF", "XLE", "XLK", "XLV", "XLY", "XLP", "XLI", "XLU", "XLB", "XLRE", "XLC"]
+    try:
+        data = await _legacy_scanner_market_data(index_tickers + sector_tickers)
+        if not data:
+            raise ValueError("no market data returned")
+    except Exception as e:
+        raise _scanner_unavailable("Market overview", e) from e
+
+    def _last(t: str) -> Optional[dict]:
+        df = data.get(t)
+        if df is None or len(df) < 2:
+            return None
+        close, prev = float(df["close"].iloc[-1]), float(df["close"].iloc[-2])
+        return {
+            "price": round(close, 2),
+            "change_pct": round((close / prev - 1) * 100, 2) if prev else 0.0,
+            "as_of": str(df.index[-1].date()),
         }
 
-    except Exception as e:
-        logger.error(f"Error fetching market overview: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    indices = {t: v for t in index_tickers if (v := _last(t))}
+    sectors = {t: v["change_pct"] for t in sector_tickers if (v := _last(t))}
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "indices": indices,
+        "sectors": sectors,
+        "market_status": "open" if _is_market_open() else "closed",
+        "source": "live_quotes",
+    }
 
 
 # ===== Data Endpoints =====
@@ -2124,36 +2233,37 @@ async def get_news(
     limit: int = Query(50, le=200),
     _: bool = Depends(verify_api_key),
 ):
-    """Get recent news articles."""
-    from sqlalchemy import text
+    """Get recent news articles (news store first, live providers as fallback)."""
+    symbol = (ticker or "").strip().upper() or None
+    if symbol and not _TICKER_RE.match(symbol):
+        raise HTTPException(status_code=422, detail="invalid ticker")
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-    from src.core.database import AsyncSessionLocal
+    try:
+        from sqlalchemy import text
 
-    conditions = ["published_at > NOW() - INTERVAL ':hours hours'"]
-    params = {"hours": hours, "limit": limit}
+        from src.core.database import AsyncSessionLocal
 
-    if ticker:
-        conditions.append("tickers LIKE :ticker_pattern")
-        params["ticker_pattern"] = f"%{ticker.upper()}%"
+        conditions = ["published_at > :cutoff"]
+        params = {"cutoff": cutoff, "limit": limit}
+        if symbol:
+            conditions.append("tickers LIKE :ticker_pattern")
+            params["ticker_pattern"] = f"%{symbol}%"
+        where = " AND ".join(conditions)
 
-    where = " AND ".join(conditions)
-
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            text(f"""
-                SELECT id, title, source, published_at, sentiment_label, tickers
-                FROM news_articles
-                WHERE {where}
-                ORDER BY published_at DESC
-                LIMIT :limit
-            """),
-            params,
-        )
-        rows = result.fetchall()
-
-    articles = []
-    for row in rows:
-        articles.append(
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                text(f"""
+                    SELECT id, title, source, published_at, sentiment_label, tickers
+                    FROM news_articles
+                    WHERE {where}
+                    ORDER BY published_at DESC
+                    LIMIT :limit
+                """),
+                params,
+            )
+            rows = result.fetchall()
+        articles = [
             {
                 "id": row.id,
                 "title": row.title,
@@ -2162,9 +2272,67 @@ async def get_news(
                 "sentiment": row.sentiment_label,
                 "tickers": row.tickers.split(",") if row.tickers else [],
             }
-        )
+            for row in rows
+        ]
+        return {"articles": articles, "count": len(articles), "source": "news_store"}
+    except Exception as db_exc:
+        logger.info("news store unavailable, using live providers: %s", type(db_exc).__name__)
 
-    return {"articles": articles, "count": len(articles)}
+    try:
+        from src.ingestors.news import NewsIngestor
+
+        ingestor = NewsIngestor()
+        raw = await asyncio.wait_for(
+            ingestor.fetch(tickers=[symbol] if symbol else None),
+            timeout=30.0,
+        )
+        records = await ingestor.transform(raw)
+        filtered = []
+        for r in records:
+            published = r.get("published_at")
+            if published is None:
+                continue
+            if hasattr(published, "tzinfo") and published.tzinfo is None:
+                published = published.replace(tzinfo=timezone.utc)
+            if published >= cutoff:
+                filtered.append(r)
+        stale_feed = False
+        if not filtered and records:
+            stale_feed = True
+            records = records[:limit]
+        else:
+            records = filtered
+    except Exception as e:
+        logger.error("Live news fetch failed: %s: %s", type(e).__name__, e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"News unavailable: store offline and live providers failed ({type(e).__name__})",
+        ) from e
+
+    records.sort(key=lambda r: str(r.get("published_at") or ""), reverse=True)
+    articles = [
+        {
+            "id": r["id"],
+            "title": r["title"],
+            "source": r.get("source"),
+            "url": r.get("url"),
+            "published_at": (
+                r["published_at"].isoformat()
+                if hasattr(r.get("published_at"), "isoformat")
+                else r.get("published_at")
+            ),
+            "sentiment": r.get("sentiment_label"),
+            "tickers": r.get("tickers") or [],
+        }
+        for r in records[:limit]
+    ]
+    payload = {"articles": articles, "count": len(articles), "source": "live_providers"}
+    if stale_feed:
+        payload["stale"] = True
+        payload["warning"] = (
+            f"No articles in the last {hours}h from the feed — showing latest available headlines"
+        )
+    return payload
 
 
 @app.get("/sentiment/{ticker}")
@@ -2274,6 +2442,74 @@ async def scan_patterns(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+_legacy_scan_data: dict = {}
+_LEGACY_SCAN_TTL = 900
+_LEGACY_SCAN_MAX_KEYS = 8
+_LEGACY_SCAN_TIMEOUT = 90.0
+_TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
+
+
+def _legacy_scan_universe() -> list[str]:
+    from src.scanners.sector_scanner import SECTOR_ETFS, SECTOR_STOCKS
+
+    tickers = {t for names in SECTOR_STOCKS.values() for t in names}
+    tickers.update(SECTOR_ETFS.values())
+    tickers.add("SPY")
+    return sorted(tickers)
+
+
+async def _legacy_scanner_market_data(tickers: list[str]) -> dict:
+    """Daily OHLCV (lowercase columns) keyed by ticker for the src.scanners suite."""
+    import time as _t
+
+    key = tuple(sorted(set(tickers)))
+    hit = _legacy_scan_data.get(key)
+    if hit and _t.time() - hit[0] < _LEGACY_SCAN_TTL:
+        return hit[1]
+
+    def _download() -> dict:
+        import pandas as pd
+        import yfinance as yf
+
+        raw = yf.download(
+            list(key),
+            period="1y",
+            interval="1d",
+            group_by="ticker",
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
+        out = {}
+        for t in key:
+            try:
+                df = raw[t] if isinstance(raw.columns, pd.MultiIndex) else raw
+            except KeyError:
+                continue
+            df = df.dropna(how="all")
+            if len(df) < 60:
+                continue
+            out[t] = df.rename(columns=str.lower)
+        return out
+
+    data = await asyncio.wait_for(
+        asyncio.to_thread(_download), timeout=_LEGACY_SCAN_TIMEOUT
+    )
+    if data:
+        if len(_legacy_scan_data) >= _LEGACY_SCAN_MAX_KEYS:
+            _legacy_scan_data.pop(next(iter(_legacy_scan_data)))
+        _legacy_scan_data[key] = (_t.time(), data)
+    return data
+
+
+def _scanner_unavailable(name: str, exc: Exception) -> HTTPException:
+    logger.error("%s error: %s: %s", name, type(exc).__name__, exc)
+    return HTTPException(
+        status_code=503,
+        detail=f"{name} unavailable: market data could not be loaded ({type(exc).__name__})",
+    )
+
+
 @app.get("/scan/sectors")
 async def scan_sectors(_: bool = Depends(verify_api_key)):
     """
@@ -2284,46 +2520,54 @@ async def scan_sectors(_: bool = Depends(verify_api_key)):
     from src.scanners import SectorScanner
 
     try:
+        market_data = await _legacy_scanner_market_data(_legacy_scan_universe())
+        if not market_data:
+            raise ValueError("no market data returned")
         scanner = SectorScanner()
-        results = await scanner.scan_all_sectors()
-
-        sector_data = []
-        for sector, metrics in results.items():
-            sector_data.append(
-                {
-                    "sector": sector.value if hasattr(sector, "value") else str(sector),
-                    "performance_1d": metrics.performance_1d,
-                    "performance_1w": metrics.performance_1w,
-                    "performance_1m": metrics.performance_1m,
-                    "relative_strength": metrics.relative_strength,
-                    "volume_ratio": metrics.volume_ratio,
-                    "momentum_score": metrics.momentum_score,
-                    "top_stocks": metrics.top_stocks[:5],
-                    "bottom_stocks": metrics.bottom_stocks[:5],
-                }
-            )
-
-        # Sort by momentum score
-        sector_data.sort(key=lambda x: x["momentum_score"], reverse=True)
-
-        # Rotation analysis
-        rotation = scanner.analyze_rotation(results)
-
-        return {
-            "sectors": sector_data,
-            "rotation": {
-                "current_phase": rotation.current_phase,
-                "leading_sectors": rotation.leading_sectors[:3],
-                "lagging_sectors": rotation.lagging_sectors[:3],
-                "rotation_direction": rotation.rotation_direction,
-                "sector_recommendation": rotation.recommendation,
-            },
-            "scanned_at": datetime.now(timezone.utc).isoformat(),
-        }
-
+        results = await scanner.scan_all_sectors(market_data)
     except Exception as e:
-        logger.error(f"Sector scan error: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise _scanner_unavailable("Sector scan", e) from e
+
+    sector_data = [
+        {
+            "sector": sector.value if hasattr(sector, "value") else str(sector),
+            "performance_1d": round(m.return_1d, 2),
+            "performance_1w": round(m.return_5d, 2),
+            "performance_1m": round(m.return_21d, 2),
+            "performance_3m": round(m.return_63d, 2),
+            "relative_strength": round(m.relative_strength, 2),
+            "rs_rank": m.rs_rank,
+            "pct_above_sma50": round(m.pct_above_sma50, 1),
+            "avg_rsi": round(m.avg_rsi, 1),
+            "volume_ratio": round(m.volume_ratio, 2),
+            "trend_direction": m.trend_direction,
+            "momentum_score": round(m.trend_strength, 1),
+        }
+        for sector, m in results.items()
+    ]
+    sector_data.sort(key=lambda x: x["momentum_score"], reverse=True)
+
+    rotation = scanner.analyze_rotation(results)
+
+    def _names(sectors: list) -> list:
+        return [s.value if hasattr(s, "value") else str(s) for s in sectors]
+
+    return {
+        "sectors": sector_data,
+        "rotation": {
+            "current_phase": rotation.market_phase,
+            "leading_sectors": _names(rotation.leading_sectors[:3]),
+            "lagging_sectors": _names(rotation.lagging_sectors[:3]),
+            "improving_sectors": _names(rotation.improving_sectors),
+            "weakening_sectors": _names(rotation.weakening_sectors),
+            "overweight": _names(rotation.overweight),
+            "underweight": _names(rotation.underweight),
+            "defensive_offensive_ratio": round(rotation.defensive_offensive_ratio, 2),
+            "sector_recommendation": rotation.analysis,
+        },
+        "tickers_loaded": len(market_data),
+        "scanned_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/scan/momentum")
@@ -2345,46 +2589,64 @@ async def scan_momentum(
     """
     from src.scanners import MomentumScanner
 
-    try:
-        scanner = MomentumScanner()
-
-        if universe == "custom" and custom_tickers:
-            tickers = [t.strip().upper() for t in custom_tickers.split(",")]
-        else:
-            tickers = None  # Use default universe
-
-        alerts = await scanner.scan_universe(tickers, min_confidence=min_confidence)
-
-        results = []
-        for alert in alerts:
-            results.append(
-                {
-                    "ticker": alert.ticker,
-                    "signal_type": alert.signal_type.value,
-                    "confidence": alert.confidence,
-                    "volume_confirmation": alert.volume_confirmation,
-                    "entry_zone": {
-                        "low": alert.entry_zone[0] if alert.entry_zone else None,
-                        "high": alert.entry_zone[1] if alert.entry_zone else None,
-                    },
-                    "targets": alert.targets[:3] if alert.targets else [],
-                    "stop_loss": alert.stop_loss,
-                    "description": alert.description,
-                    "detected_at": (
-                        alert.detected_at.isoformat() if alert.detected_at else None
-                    ),
-                }
+    if universe == "custom":
+        tickers = [
+            t.strip().upper() for t in (custom_tickers or "").split(",") if t.strip()
+        ]
+        tickers = [t for t in tickers if _TICKER_RE.match(t)][:50]
+        if not tickers:
+            raise HTTPException(
+                status_code=422,
+                detail="universe=custom requires valid comma-separated custom_tickers",
             )
+        tickers = sorted(set(tickers) | {"SPY"})
+    else:
+        tickers = _legacy_scan_universe()
 
-        return {
-            "alerts": results,
-            "total": len(results),
-            "scanned_at": datetime.now(timezone.utc).isoformat(),
-        }
-
+    try:
+        market_data = await _legacy_scanner_market_data(tickers)
+        if not market_data:
+            raise ValueError("no market data returned")
+        spy = market_data.get("SPY")
+        scan_data = {t: df for t, df in market_data.items() if t != "SPY"}
+        alerts = await asyncio.to_thread(
+            MomentumScanner().scan_universe, scan_data, spy
+        )
     except Exception as e:
-        logger.error(f"Momentum scan error: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise _scanner_unavailable("Momentum scan", e) from e
+
+    results = [
+        {
+            "ticker": alert.ticker,
+            "signal_type": alert.signal_type.value,
+            "direction": alert.direction,
+            "confidence": round(float(alert.confidence), 1),
+            "current_price": round(float(alert.current_price), 2),
+            "change_percent": round(float(alert.change_percent), 2),
+            "volume_confirmation": bool(alert.volume_confirmation),
+            "trend_aligned": bool(alert.trend_aligned),
+            "entry_zone": {
+                "low": float(alert.entry_zone[0]) if alert.entry_zone else None,
+                "high": float(alert.entry_zone[1]) if alert.entry_zone else None,
+            },
+            "targets": [float(t) for t in (alert.targets or [])[:3]],
+            "stop_loss": float(alert.stop_loss),
+            "description": alert.description,
+            "detected_at": (
+                alert.detected_at.isoformat() if alert.detected_at else None
+            ),
+        }
+        for alert in alerts
+        if alert.confidence >= min_confidence
+    ]
+
+    return {
+        "alerts": results,
+        "total": len(results),
+        "universe": universe,
+        "tickers_loaded": len(scan_data),
+        "scanned_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/market/snapshot")
@@ -2397,18 +2659,31 @@ async def get_market_snapshot(_: bool = Depends(verify_api_key)):
     from src.scanners import MarketMonitor
 
     try:
-        monitor = MarketMonitor()
-        snapshot = await monitor.scan_market()
+        market_data = await _legacy_scanner_market_data(_legacy_scan_universe())
+        if not market_data:
+            raise ValueError("no market data returned")
+        spy = market_data.get("SPY")
+        snapshot = await MarketMonitor().scan_market(
+            {t: df for t, df in market_data.items() if t != "SPY"}, spy
+        )
+    except Exception as e:
+        raise _scanner_unavailable("Market snapshot", e) from e
 
+    try:
         return {
             "breadth": {
-                "advancing": snapshot.breadth.advancing,
-                "declining": snapshot.breadth.declining,
+                "advancing": snapshot.breadth.advances,
+                "declining": snapshot.breadth.declines,
                 "new_highs": snapshot.breadth.new_highs,
                 "new_lows": snapshot.breadth.new_lows,
-                "advance_decline_ratio": snapshot.breadth.advance_decline_ratio,
+                "advance_decline_ratio": snapshot.breadth.ad_ratio,
+                "pct_above_sma50": snapshot.breadth.pct_above_sma50,
+                "pct_above_sma200": snapshot.breadth.pct_above_sma200,
                 "mcclellan_oscillator": snapshot.breadth.mcclellan_oscillator,
+                "breadth_status": snapshot.breadth.breadth_status,
+                "risk_level": snapshot.breadth.risk_level,
             },
+            "market_status": snapshot.market_status,
             "top_patterns": [
                 {
                     "ticker": p.ticker,
@@ -2426,17 +2701,15 @@ async def get_market_snapshot(_: bool = Depends(verify_api_key)):
                 }
                 for a in snapshot.momentum_alerts[:5]
             ],
+            "top_gainers": snapshot.top_gainers[:5],
+            "top_losers": snapshot.top_losers[:5],
             "key_observations": snapshot.key_observations,
-            "generated_at": (
-                snapshot.generated_at.isoformat()
-                if snapshot.generated_at
-                else datetime.now(timezone.utc).isoformat()
-            ),
+            "tickers_loaded": len(market_data),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
         }
-
     except Exception as e:
-        logger.error(f"Market snapshot error: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error("Market snapshot serialisation error: %s", e)
+        raise HTTPException(status_code=500, detail="market snapshot failed") from e
 
 
 # ===== Research Endpoints =====
@@ -2455,10 +2728,10 @@ async def get_news_brief(
 
     Returns summarized news with sentiment and trading implications.
     """
-    from src.ingestors.news import NewsIngestor
-    from src.research import NewsAnalyzer
-
     try:
+        from src.ingestors.news import NewsIngestor
+        from src.research import NewsAnalyzer
+
         ingestor = NewsIngestor()
         analyzer = NewsAnalyzer()
 
@@ -2466,7 +2739,15 @@ async def get_news_brief(
         ticker_list = (
             [t.strip().upper() for t in tickers.split(",")] if tickers else None
         )
-        raw_news = await ingestor.fetch_news(tickers=ticker_list, limit=50)
+        if ticker_list:
+            ticker_list = [t for t in ticker_list if _TICKER_RE.match(t)][:20]
+        raw_news = await asyncio.wait_for(
+            ingestor.fetch(tickers=ticker_list or None), timeout=30.0
+        )
+        raw_news = [
+            {**a, "summary": a.get("description") or a.get("content") or ""}
+            for a in raw_news[:50]
+        ]
 
         # Analyze
         analyzed = await analyzer.analyze_news_batch(raw_news)
@@ -2496,8 +2777,11 @@ async def get_news_brief(
         }
 
     except Exception as e:
-        logger.error(f"News brief error: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error("News brief error: %s: %s", type(e).__name__, e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"News brief unavailable: news provider failed ({type(e).__name__})",
+        ) from e
 
 
 @app.get("/research/earnings/{ticker}")
@@ -6662,6 +6946,17 @@ try:
     )
 except Exception:
     logger.exception("[Router] Failed to load research_pipeline router")
+
+try:
+    from src.api.routers.research_integrations import router as research_integrations_router
+
+    app.include_router(research_integrations_router)
+    logger.info(
+        "[Router] research_integrations loaded (%d routes)",
+        len(research_integrations_router.routes),
+    )
+except Exception:
+    logger.exception("[Router] Failed to load research_integrations router")
 
 try:
     from src.api.routers.guide_briefing import router as guide_briefing_router

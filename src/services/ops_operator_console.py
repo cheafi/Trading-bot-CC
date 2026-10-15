@@ -459,6 +459,11 @@ def build_ops_operator_console(
     cached_recs = int(eng.get("cached_recommendations") or 0)
     last_cycle = eng.get("last_cycle") or _read_engine_heartbeat()
     ibkr = {**(cc_header.get("ibkr") or {}), **(execution_readiness or {})}
+    broker_unavailable = execution_readiness.get("available") is False
+    if broker_unavailable:
+        # Missing current status must not inherit cached connected evidence.
+        ibkr = dict(execution_readiness)
+        components["broker"] = None
     freshness = cc_header.get("freshness") or {}
     scheduler = _scheduler_summary(jobs_status)
 
@@ -474,7 +479,7 @@ def build_ops_operator_console(
     if gateway_ok or broker_connected:
         components["broker"] = True
     if freshness.get("worst_tier") == "FRESH" or any(
-        s.get("ok") for s in (freshness.get("streams") or [])
+        s.get("ok") for s in (freshness.get("streams") or []) if isinstance(s, dict)
     ):
         components["market_data"] = True
     ibkr_health = ibkr.get("health") or {}
@@ -523,12 +528,26 @@ def build_ops_operator_console(
         blockers.append("Signal pipeline produced zero signals today")
     if freshness.get("worst_tier") not in (None, "FRESH"):
         blockers.append(f"Market data tier: {freshness.get('worst_tier')}")
-    if not gateway_ok and not broker_connected and not components.get("broker"):
+    if broker_unavailable:
+        blockers.append("Broker status snapshot unavailable — handoff unconfirmed")
+    elif not gateway_ok and not broker_connected and not components.get("broker"):
         blockers.append("Broker path not reachable — paper handoff unavailable")
 
-    paper_ready = running and dry_run and not breaker and cycles > 0 and cached_recs > 0
+    paper_ready = (
+        running
+        and dry_run
+        and not breaker
+        and cycles > 0
+        and cached_recs > 0
+        and not broker_unavailable
+    )
     live_ready = (
-        running and not dry_run and not breaker and cycles > 0 and engine_handoff
+        running
+        and not dry_run
+        and not breaker
+        and cycles > 0
+        and engine_handoff
+        and not broker_unavailable
     )
 
     if breaker:
@@ -585,7 +604,9 @@ def build_ops_operator_console(
         _add("Verify scheduler heartbeat", scheduler["detail"])
     if cycles == 0 or not _is_today(last_cycle):
         _add("Run one full engine scan cycle", "Confirms signal + cache pipeline")
-    if gateway_ok and not broker_connected:
+    if broker_unavailable:
+        _add("Verify broker status snapshot", "Broker evidence unavailable")
+    elif gateway_ok and not broker_connected:
         _add(
             "Confirm broker auth / paper session login",
             "Gateway up but IBKR session not active",
@@ -629,7 +650,9 @@ def build_ops_operator_console(
         for k, v in sorted(breakdown.items(), key=lambda x: -int(x[1] or 0)):
             why_no_signals.append({"gate": k, "count": int(v or 0)})
 
-    last_rec_refresh = today.get("generated_at") or today.get("trust", {}).get("as_of")
+    last_rec_refresh = today.get("generated_at") or (today.get("trust") or {}).get(
+        "as_of"
+    )
     last_times = {
         "last_successful_engine_cycle": last_cycle,
         "last_recommendation_refresh": last_rec_refresh,
@@ -737,9 +760,7 @@ def build_ops_operator_console(
             "tone": (
                 "ok"
                 if scheduler["alive"] == "yes"
-                else "warn"
-                if scheduler["alive"] in ("stale", "unknown")
-                else "fail"
+                else "warn" if scheduler["alive"] in ("stale", "unknown") else "fail"
             ),
             "detail": scheduler["detail"],
         },
@@ -778,15 +799,21 @@ def build_ops_operator_console(
         "signal_engine": "on" if running else "off",
         "execution_mode": "paper" if dry_run else "live",
         "broker_path": (
-            "connected + exercised"
-            if broker_connected and order_path_tested
+            "unavailable"
+            if broker_unavailable
             else (
-                "monitoring only"
-                if broker_connected and account_api_ok and monitoring_only
+                "connected + exercised"
+                if broker_connected and order_path_tested
                 else (
-                    "connected, not exercised"
-                    if broker_connected
-                    else ("reachable, not logged in" if gateway_ok else "disconnected")
+                    "monitoring only"
+                    if broker_connected and account_api_ok and monitoring_only
+                    else (
+                        "connected, not exercised"
+                        if broker_connected
+                        else (
+                            "reachable, not logged in" if gateway_ok else "disconnected"
+                        )
+                    )
                 )
             )
         ),
@@ -908,7 +935,15 @@ def build_ops_operator_console(
     component_evidence = []
     for name, ok in sorted(components.items()):
         runtime_ev = _runtime_evidence(name)
-        if not ok:
+        if name == "broker" and broker_unavailable:
+            tier = "unavailable"
+            probe_label = "Unavailable"
+            runtime_ev = _ops_bi(
+                "Broker 狀態快照不可用 — 執行時未確認",
+                "Broker status snapshot unavailable — runtime unconfirmed",
+            )
+            evidence = runtime_ev
+        elif not ok:
             tier = "fail"
             probe_label = "FAIL"
             evidence = _ops_bi(
@@ -936,7 +971,7 @@ def build_ops_operator_console(
         component_evidence.append(
             {
                 "name": name,
-                "ok": bool(ok),
+                "ok": (None if name == "broker" and broker_unavailable else bool(ok)),
                 "tier": tier,
                 "label": probe_label,
                 "probe": probe_label,
@@ -1044,15 +1079,19 @@ def build_ops_operator_console(
 
     providers_honest = {
         "market_data": {
-            "probe": _ops_bi("已連線", "Connected")
-            if market_data_probe
-            else _ops_bi("未連線", "Disconnected"),
+            "probe": (
+                _ops_bi("已連線", "Connected")
+                if market_data_probe
+                else _ops_bi("未連線", "Disconnected")
+            ),
             "runtime": market_data_runtime,
         },
         "regime_router": {
-            "probe": _ops_bi("可用", "Available")
-            if components.get("regime_router")
-            else _ops_bi("離線", "Down"),
+            "probe": (
+                _ops_bi("可用", "Available")
+                if components.get("regime_router")
+                else _ops_bi("離線", "Down")
+            ),
             "runtime": regime_runtime,
         },
         "broker": {
@@ -1068,6 +1107,22 @@ def build_ops_operator_console(
             "runtime": broker_runtime,
         },
     }
+    if broker_unavailable:
+        providers_honest["broker"] = {
+            "probe": "Unavailable",
+            "runtime": "Broker status snapshot unavailable — runtime unconfirmed",
+        }
+        for layer in execution_layers:
+            if layer["layer"] in (
+                "Session auth",
+                "Order path tested",
+                "Engine handoff",
+            ):
+                layer.update(
+                    status="UNAVAILABLE",
+                    tone="warn",
+                    detail="Broker status snapshot unavailable",
+                )
 
     diagnostics = {
         "probe_only_mode": probe_only_mode,
@@ -1094,9 +1149,9 @@ def build_ops_operator_console(
     failed_jobs = (jobs_status or {}).get("failed_jobs") or []
     operational_events = {
         "last_engine_error": eng.get("last_error"),
-        "last_failed_job": failed_jobs[0]
-        if failed_jobs
-        else scheduler.get("last_error"),
+        "last_failed_job": (
+            failed_jobs[0] if failed_jobs else scheduler.get("last_error")
+        ),
         "last_heartbeat": ibkr.get("last_heartbeat") or last_cycle,
         "last_cycle": last_cycle,
         "scheduler_detail": scheduler.get("detail"),
@@ -1167,9 +1222,9 @@ def build_ops_operator_console(
         "scheduler": scheduler,
         "last_events": {
             "last_cycle": last_cycle,
-            "last_brief": (cc_header.get("brief_status") or {})
-            .get("latest", {})
-            .get("as_of"),
+            "last_brief": (
+                (cc_header.get("brief_status") or {}).get("latest") or {}
+            ).get("as_of"),
             "ibkr_heartbeat": ibkr.get("last_heartbeat"),
             "market_data_tier": freshness.get("worst_tier"),
         },
@@ -1189,18 +1244,19 @@ def build_ops_operator_console(
         "providers_honest": providers_honest,
         "machines_health": machines_health,
         "ibkr": {
-            "connected": broker_connected,
-            "gateway_reachable": gateway_ok,
+            "available": not broker_unavailable if ibkr else None,
+            "connected": None if broker_unavailable else broker_connected,
+            "gateway_reachable": None if broker_unavailable else gateway_ok,
             "session_auth": session_auth,
             "host": ibkr.get("host") or execution_readiness.get("host"),
             "port": ibkr.get("port") or execution_readiness.get("port"),
-            "mode": ibkr.get("mode") or "paper",
+            "mode": None if broker_unavailable else (ibkr.get("mode") or "paper"),
             "account_sync": ibkr.get("account")
             or execution_readiness.get("portfolio_source"),
             "health": ibkr_health or execution_readiness.get("health") or {},
             "health_label": ibkr.get("health_label")
             or execution_readiness.get("health_label"),
-            "monitoring_only": monitoring_only,
+            "monitoring_only": None if broker_unavailable else monitoring_only,
             "degraded_reasons": list(
                 ibkr_health.get("degraded_reasons")
                 or execution_readiness.get("degraded_reasons")

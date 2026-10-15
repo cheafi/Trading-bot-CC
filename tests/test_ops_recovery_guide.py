@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from _dashboard_html_contract import bindings
+from _dashboard_js_runtime import run_dashboard_js
+
 from src.services.fetch_surface_state import ops_recovery_guide
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,9 +26,25 @@ def test_ops_recovery_guide_sections():
 
 def test_index_html_ops_recovery_guide_panel():
     raw = INDEX_HTML.read_text(encoding="utf-8")
-    assert "opsRecoveryGuide()" in raw
-    start = raw.find("<!-- SURFACE 7: OPERATOR CONSOLE")
-    assert start >= 0
-    assert "Recovery runbook" in raw[start : start + 12000]
-    assert "blocks_capital" in raw
-    assert "safe_degraded" in raw
+    partial = ROOT / "src/api/templates/cc/partials/ops_recovery_runbook.html"
+    assert partial.read_text(encoding="utf-8").strip() in raw
+    for path in (INDEX_HTML, partial):
+        assert "opsRecoveryRunbookTitle()" in bindings(path, "x-text")
+        for section in ("retry", "blocks_capital", "safe_degraded"):
+            assert f"ln in opsRecoveryGuide().{section}" in bindings(path, "x-for")
+    run_dashboard_js("""
+        app.tab = 'ops';
+        app.healthMode = 'loading';
+        app.ops.running = false;
+        app.cc_status.breaker = true;
+        const guide = app.opsRecoveryGuide();
+        assert.ok(guide.retry.some(s => s.includes('/health')));
+        assert.ok(guide.retry.some(s => /mode=full/.test(s)));
+        assert.ok(guide.retry.some(s => /重啟|restart/i.test(s)));
+        assert.ok(guide.blocks_capital.some(s => /breaker/i.test(s)));
+        assert.ok(guide.blocks_capital.some(s => /IBKR|handoff/.test(s)));
+        assert.ok(guide.safe_degraded.some(s => /monitor|監察|監控/i.test(s)));
+        assert.ok(guide.safe_degraded.some(s => /sizing|倉位/.test(s)));
+        assert.equal(app.deployOpen(), false);
+        assert.ok(app.opsRecoveryRunbookTitle());
+    """)

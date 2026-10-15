@@ -37,6 +37,36 @@ _FORCE_SCAN_TIMEOUT_SECONDS = float(
 )
 
 
+_BACKGROUND_SCAN_TIMEOUT_SECONDS = 180.0
+_background_scans: Dict[str, "asyncio.Task[None]"] = {}
+
+
+async def _background_scan(
+    key: str, regime: str, top_n: int, min_price: float, min_vol: int
+) -> None:
+    try:
+        result = await asyncio.wait_for(
+            run_opportunity_scanner(
+                regime=regime, top_n=top_n, min_price=min_price, min_vol=min_vol
+            ),
+            timeout=_BACKGROUND_SCAN_TIMEOUT_SECONDS,
+        )
+        data = result.to_dict()
+        if (
+            data.get("candidates_ranked", 0) > 0
+            and str(data.get("engine", "")).lower() != "unknown"
+        ):
+            _set_cached(key, data)
+        else:
+            logger.warning("Background opportunity scan produced 0 candidates")
+    except Exception as exc:
+        logger.warning(
+            "Background opportunity scan failed: %s: %s", type(exc).__name__, exc
+        )
+    finally:
+        _background_scans.pop(key, None)
+
+
 def _cache_key(regime: str, top_n: int, min_price: float, min_vol: int) -> str:
     return f"{regime.upper()}_{top_n}_{min_price:.2f}_{int(min_vol)}"
 
@@ -259,9 +289,13 @@ async def opportunity_scanner(
                     payload.get("filter_funnel", {})
                 )
             return sanitize_for_json(payload)
+        if key not in _background_scans:
+            _background_scans[key] = asyncio.create_task(
+                _background_scan(key, regime, top_n, min_price, min_vol)
+            )
         return sanitize_for_json(
             {
-                "engine": "idle",
+                "engine": "warming",
                 "regime": regime.upper(),
                 "universe_size": 0,
                 "filter_funnel": {},
@@ -272,11 +306,11 @@ async def opportunity_scanner(
                 "candidates": [],
                 "cached": False,
                 "stale": True,
-                "warming": False,
-                "warning": "no scanner cache available — click Refresh for a live scan",
+                "warming": True,
+                "warning": "first scan running in background — results in about a minute",
                 "diagnosis": {
                     "verdict": "COLD_START",
-                    "hint": "No scan has run yet. Use force_refresh=true to run one.",
+                    "hint": "Background scan started automatically; poll again shortly.",
                     "stages": [],
                 },
             }

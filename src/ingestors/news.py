@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 from src.core.config import get_settings
-from src.core.database import get_session
 from src.ingestors.base import BaseIngestor
 
 settings = get_settings()
@@ -132,21 +131,21 @@ class NewsIngestor(BaseIngestor):
 
                 articles = []
                 for article in data.get("articles", []):
+                    title = str(article.get("title") or "")
+                    description = str(article.get("description") or "")
                     articles.append(
                         {
-                            "title": article.get("title", ""),
-                            "description": article.get("description", ""),
-                            "content": article.get("content", ""),
+                            "title": title,
+                            "description": description,
+                            "content": str(article.get("content") or ""),
                             "url": article.get("url", ""),
-                            "source": article.get("source", {}).get("name", ""),
+                            "source": (article.get("source") or {}).get("name", ""),
                             "published_at": article.get("publishedAt"),
                             "author": article.get("author"),
                             "image_url": article.get("urlToImage"),
                             "provider": "newsapi",
                             "tickers": self._extract_tickers(
-                                article.get("title", "")
-                                + " "
-                                + article.get("description", ""),
+                                f"{title} {description}",
                                 tickers or [],
                             ),
                         }
@@ -246,6 +245,8 @@ class NewsIngestor(BaseIngestor):
         """Store news articles in database."""
         if not records:
             return 0
+
+        from src.core.database import get_session
 
         stored_count = 0
 

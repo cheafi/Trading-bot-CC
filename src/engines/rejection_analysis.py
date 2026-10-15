@@ -72,9 +72,11 @@ class ConfidenceDisagreement:
             "ticker": self.ticker,
             "strategy_confidence": round(self.strategy_confidence, 2),
             "ensemble_confidence": round(self.ensemble_confidence, 2),
-            "gpt_confidence": round(self.gpt_confidence, 2)
-            if self.gpt_confidence is not None
-            else None,
+            "gpt_confidence": (
+                round(self.gpt_confidence, 2)
+                if self.gpt_confidence is not None
+                else None
+            ),
             "disagreement_magnitude": round(self.disagreement_magnitude, 2),
             "direction": self.direction,
             "explanation": self.explanation,
@@ -157,6 +159,10 @@ class RejectionAnalysisEngine:
         """Run full rejection analysis on accumulated data."""
         result = RejectionAnalysis()
         result.total_rejections = len(self._rejections)
+        # Disagreements remain evidence even without rejected signals.
+        result.confidence_disagreements = [
+            d.to_dict() for d in self._disagreements[-20:]
+        ]
 
         if not self._rejections:
             result.rule_recommendations = ["No rejections to analyze yet."]
@@ -199,12 +205,6 @@ class RejectionAnalysisEngine:
             regime = r.regime_at_rejection or "unknown"
             regime_cats[regime][r.rejection_category] += 1
         result.regime_breakdown = {k: dict(v) for k, v in regime_cats.items()}
-
-        # Confidence disagreements
-        result.confidence_disagreements = [
-            d.to_dict()
-            for d in self._disagreements[-20:]  # last 20
-        ]
 
         # Rule recommendations
         result.rule_recommendations = self._generate_recommendations(

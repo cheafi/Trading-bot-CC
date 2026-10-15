@@ -248,6 +248,25 @@ def test_api_returns_latest_board(client):
     assert "refreshing" in body
 
 
+def test_load_universe_includes_crypto() -> None:
+    sectors = sb.load_universe()
+    assert "BTC-USD" in sectors
+    assert sectors["BTC-USD"] == "Crypto"
+    assert "IBIT" in sectors
+
+
+def test_crypto_liquid_thresholds() -> None:
+    close = np.full(N, 100.0)
+    vol = np.full(N, 150_000.0)  # ~$15M 20d $ vol — ok for crypto ($5M+), not equities ($20M+)
+    h, lo, c, _vol = _bars(close, volume=vol)
+    f = sb.compute_features("BTC-USD", h, lo, c, _vol)
+    assert f is not None
+    assert sb.is_liquid(f, "Crypto")
+    f_eq = sb.compute_features("AAPL", h, lo, c, _vol)
+    assert f_eq is not None
+    assert not sb.is_liquid(f_eq)
+
+
 def test_api_refresh_requires_key(client, monkeypatch):
     c, router_mod, mp = client
     from src.core import config

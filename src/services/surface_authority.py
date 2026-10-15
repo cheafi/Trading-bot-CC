@@ -120,6 +120,31 @@ TAB_SURFACE_MAP: Dict[str, Dict[str, str]] = {
         "default_authority": AUTHORITY_SUSPENDED,
         "short": "Reference only · Decision surfaces suspended",
     },
+    "strategy_lab": {
+        "surface": "Strategy Lab",
+        "default_authority": AUTHORITY_RESEARCH,
+        "short": "NL research + backtest — no deploy authority",
+    },
+    "agent": {
+        "surface": "Vibe Agent",
+        "default_authority": AUTHORITY_RESEARCH,
+        "short": "Alerts and monitoring — confirm in Playbook",
+    },
+    "shadow": {
+        "surface": "Shadow Account",
+        "default_authority": AUTHORITY_RESEARCH,
+        "short": "Behavior vs rules — journal only",
+    },
+    "reports": {
+        "surface": "Reports",
+        "default_authority": AUTHORITY_RESEARCH,
+        "short": "Exported research runs — not live orders",
+    },
+    "settings": {
+        "surface": "Settings",
+        "default_authority": AUTHORITY_OPS,
+        "short": "Preferences — no market authority",
+    },
 }
 
 # UI tab ids in index.html → canonical surface_authority keys
@@ -130,6 +155,10 @@ TAB_ID_ALIASES: Dict[str, str] = {
     "stock-intel": "dossier",
     "rejections": "notrade",
     "backtest": "btlab",
+    "strategy-lab": "strategy_lab",
+    "agent": "agent",
+    "shadow": "shadow",
+    "reports": "reports",
 }
 
 
@@ -187,6 +216,14 @@ def resolve_authority(
     if tab == "flow":
         authority = AUTHORITY_CONFIRMATION
         reasons.append("Flow never authorizes deploy alone")
+
+    if tab in ("strategy_lab", "agent", "shadow", "reports", "btlab", "command"):
+        authority = AUTHORITY_RESEARCH
+        reasons.append(f"{meta['surface']} — research / monitoring only")
+
+    if tab == "settings":
+        authority = AUTHORITY_OPS
+        reasons.append("Settings — preferences only")
 
     return {
         "tab": tab,
@@ -295,6 +332,12 @@ SURFACE_MODES: Dict[str, str] = {
     "btlab": "backtest_research",
     "backtest": "backtest_research",
     "command": "command_research",
+    "strategy_lab": "strategy_lab_research",
+    "strategy-lab": "strategy_lab_research",
+    "agent": "agent_monitoring",
+    "shadow": "shadow_diagnostic",
+    "reports": "reports_library",
+    "settings": "settings_reference",
 }
 
 # Tabs reachable via More menu / deep link — excluded from mobile primary nav
@@ -387,6 +430,36 @@ _HEADER_BASE: Dict[str, Dict[str, str]] = {
         "title": "Backtest Lab — walk-forward research",
         "explanation": "Walk-forward and attribution research — backtest ≠ live track record.",
         "next_action": "Treat unstable walk-forward as lower trust, not higher conviction.",
+    },
+    "strategy_lab_research": {
+        "badge": "RESEARCH ONLY",
+        "title": "Strategy Lab — NL research + backtest",
+        "explanation": "Ask, validate, and benchmark ideas — today's Dashboard gate still rules deploy.",
+        "next_action": "Send promising runs to Playbook review — never auto-deploy.",
+    },
+    "agent_monitoring": {
+        "badge": "MONITORING ONLY",
+        "title": "Vibe Agent — alerts & watch rules",
+        "explanation": "Monitoring and alerts — not orders. Confirm on Playbook + Dossier before sizing.",
+        "next_action": "Open linked ticker in Dossier; cross-check Dashboard tradeability.",
+    },
+    "shadow_diagnostic": {
+        "badge": "JOURNAL ONLY",
+        "title": "Shadow Account — behavior vs rules",
+        "explanation": "Paper path vs rule path — journal and diagnostics, not broker truth.",
+        "next_action": "Improve watch rules; reconcile with IBKR before live size.",
+    },
+    "reports_library": {
+        "badge": "EXPORT LIBRARY",
+        "title": "Reports — research artifacts",
+        "explanation": "Historical exports and validation snapshots — not live execution permission.",
+        "next_action": "If acting, re-validate on Dashboard + Playbook for today's gate.",
+    },
+    "settings_reference": {
+        "badge": "PREFERENCES",
+        "title": "Settings — configuration",
+        "explanation": "UI and runtime preferences — no market or deploy authority.",
+        "next_action": "Return to Dashboard when ready to evaluate live posture.",
     },
 }
 

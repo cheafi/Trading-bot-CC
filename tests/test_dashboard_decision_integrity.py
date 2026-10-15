@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from _dashboard_js_runtime import run_dashboard_js
+
 from src.services.decision_truth_model import (
     DASHBOARD_KPI_PIPELINE_LABELS,
     FLOW_OVERLAY_DEGRADED_HEADLINES,
@@ -58,7 +60,10 @@ def test_fallback_row_not_trade():
         authority,
     )
     assert row["action"] == "FALLBACK WATCH"
-    assert row.get("confidence_fallback_only") or row.get("card_display_mode") == "reference_only"
+    assert (
+        row.get("confidence_fallback_only")
+        or row.get("card_display_mode") == "reference_only"
+    )
 
 
 def test_confidence_all_zero_unavailable():
@@ -141,21 +146,28 @@ def test_dashboard_kpi_pipeline_labels_aligned():
 
 
 def test_dashboard_kpi_watch_qualified_uses_funnel_only():
-    """Dashboard KPI must match Playbook strip — no near_miss / top_ranked inflation."""
+    """Dashboard KPI counts must not inflate from ranked or near-miss rows."""
     raw = INDEX_HTML.read_text(encoding="utf-8")
-    idx = raw.index("kpiWatchQualifiedCount(){")
-    end = raw.index("kpiWatchQualifiedHint(){", idx)
-    body = raw[idx:end]
-    assert "playbookFunnelCounts(this.today7.filter_funnel" in body
-    assert "near_miss" not in body
-    assert "top_ranked" not in body
-    funnel_idx = raw.index("playbookFunnelCounts(funnel")
-    funnel_body = raw[funnel_idx : funnel_idx + 400]
-    assert "rows.filter" not in funnel_body
-    deploy_idx = raw.index("kpiDeployQualifiedCount(){")
-    deploy_body = raw[deploy_idx : deploy_idx + 220]
-    assert "playbookFunnelCounts(this.today7.filter_funnel" in deploy_body
-    assert "top_ranked" not in deploy_body
+    assert 'x-text="kpiWatchQualifiedCount()"' in raw
+    assert 'x-text="kpiDeployQualifiedCount()"' in raw
+    run_dashboard_js("""
+        app.today7.top_ranked = [
+            {action: 'WATCH'}, {action: 'TRADE', execution_ready: true}];
+        app.today7.near_miss = [{ticker: 'A'}, {ticker: 'B'}];
+        app.rankedOpps.rows = app.today7.top_ranked;
+        app.rankedOpps.filter_funnel = {
+            watch_qualified_setups: 99, deploy_qualified_setups: 88};
+        for (const [watch, deploy] of [[0, 0], [2, 1]]) {
+            app.today7.filter_funnel = {
+                watch_qualified_setups: watch,
+                deploy_qualified_setups: deploy};
+            assert.equal(app.kpiWatchQualifiedCount(), watch);
+            assert.equal(app.kpiDeployQualifiedCount(), deploy);
+        }
+        app.today7.filter_funnel = null;
+        assert.equal(app.kpiWatchQualifiedCount(), 0);
+        assert.equal(app.kpiDeployQualifiedCount(), 0);
+    """)
 
 
 def test_dashboard_and_playbook_funnel_share_filter_funnel_field():
@@ -220,7 +232,12 @@ def test_dashboard_actionable_filter_excludes_raw_trade_on_wait():
         authority,
     )
     assert row["action"] != "TRADE"
-    assert row["action"] in ("WATCH ONLY", "RESEARCH ONLY", "REFERENCE ONLY", "NOT EXECUTION-GRADE")
+    assert row["action"] in (
+        "WATCH ONLY",
+        "RESEARCH ONLY",
+        "REFERENCE ONLY",
+        "NOT EXECUTION-GRADE",
+    )
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -229,14 +246,31 @@ INDEX_HTML = ROOT / "src" / "api" / "templates" / "index.html"
 
 def test_index_html_unified_empty_state_and_card_score_helpers():
     raw = INDEX_HTML.read_text(encoding="utf-8")
-    assert "surfaceEmptyState(tab" in raw
-    assert "playbookEmptyState()" in raw
-    assert "playbookFetchFailed()" in raw
-    assert "cardScoreLabel(row)" in raw
-    assert "cardScorePillClass(row)" in raw
-    assert "FETCH FAILED" in raw
-    assert "WAIT DAY" in raw
-    assert "x-text=\"cardScoreLabel(opp)\"" in raw
+    assert 'x-text="playbookEmptyState().title"' in raw
+    assert 'x-text="playbookEmptyState().detail"' in raw
+    assert 'x-text="playbookEmptyState().badge"' in raw
+    assert 'x-text="cardScoreLabel(opp)"' in raw
+    assert ':class="cardScorePillClass(r)"' in raw
+    run_dashboard_js("""
+        app.today7.tradeability = 'WAIT';
+        app.rankedOpps.loading = true;
+        app.rankedOpps.fetch_failed = true;
+        assert.equal(app.surfaceEmptyState('signals').kind, 'WARMING');
+        app.rankedOpps.loading = false;
+        assert.equal(app.playbookFetchFailed(), true);
+        assert.equal(app.surfaceEmptyState('signals').kind, 'FETCH_FAILED');
+        assert.equal(app.playbookEmptyState().badge, 'FETCH FAILED');
+        app.rankedOpps.fetch_failed = false;
+        assert.equal(app.surfaceEmptyState('signals').kind, 'WAIT_DAY_OK');
+        assert.equal(app.playbookEmptyState().badge, 'WAIT DAY OK');
+        assert.equal(app.surfaceEmptyState('other').kind, 'NO_DATA');
+        assert.equal(app.cardScoreLabel({score: 8.25}), '8.3');
+        assert.equal(app.cardScorePillClass({score: 8.25}), 'pg');
+        assert.equal(app.cardScoreLabel({}), '—');
+        const fallback = {score: 9, score_display_mode: 'fallback_rank'};
+        assert.equal(app.cardScoreLabel(fallback), 'Fallback rank · high');
+        assert.equal(app.cardScorePillClass(fallback), 'pa');
+    """)
 
 
 def test_index_html_confidence_component_pct_not_zero_literal():

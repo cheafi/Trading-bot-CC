@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -17,11 +16,17 @@ class LiveTradingRequiredError(RuntimeError):
     """Raised when dry_run=False without full live authorisation."""
 
 
-def assert_live_order_permitted(*, dry_run: bool, account: str = "") -> None:
-    """Raise if caller requests live execution without authorisation."""
+def assert_live_order_permitted(
+    *, dry_run: bool, account: str = "", paper_port: Optional[int] = None
+) -> None:
+    """Fail closed unless authorised or a verified IB paper account/session.
+
+    Environment mode alone cannot establish that the connected broker is paper.
+    Callers may supply an actual paper-session port, never an environment hint.
+    """
     if dry_run:
         return
-    if os.environ.get("IB_MODE", "paper") != "live":
+    if paper_port in (7497, 4002) and str(account).strip().upper().startswith("DU"):
         return
     auth = authorize_live_order(account)
     if not auth.live_allowed:

@@ -237,6 +237,9 @@ async def _warm_regime_cache() -> None:
         logger.debug("daily decision background regime warm failed: %s", exc)
 
 
+_SCAN_CACHE_MAX_AGE_SECONDS = 1800
+
+
 def _engine_recommendations(request: Request, limit: int) -> List[Dict[str, Any]]:
     engine = getattr(request.app.state, "engine", None)
     if not engine:
@@ -246,6 +249,63 @@ def _engine_recommendations(request: Request, limit: int) -> List[Dict[str, Any]
         data = _as_dict(rec)
         if data:
             rows.append(_normalize_trade_candidate(data, "engine_cache"))
+    return rows
+
+
+def _scanner_recommendations(request: Request, limit: int) -> List[Dict[str, Any]]:
+    cache = getattr(request.app.state, "scan_cache", None) or {}
+    age = time.time() - float(cache.get("ts") or 0.0)
+    if age > _SCAN_CACHE_MAX_AGE_SECONDS:
+        return []
+    rows = []
+    for rec in list(cache.get("recs") or [])[:limit]:
+        data = _as_dict(rec)
+        if data:
+            rows.append(_normalize_trade_candidate(data, "scanner_cache"))
+    return rows
+
+
+def _signal_board_candidates(limit: int) -> List[Dict[str, Any]]:
+    """Signal Board BUY rows as WATCH candidates: levels shown, never BUY_NOW."""
+    try:
+        from src.services.signal_board import get_latest  # noqa: PLC0415
+
+        board = get_latest() or {}
+    except Exception as exc:
+        logger.debug("daily decision signal board unavailable: %s", exc)
+        return []
+    buckets = board.get("buckets") or {}
+    rows = []
+    for item in list(buckets.get("strong_buy") or []) + list(buckets.get("buy") or []):
+        score = _as_float(item.get("score"), 0.0)
+        confidence = min(0.64, max(0.5, score / 150.0))
+        rows.append(
+            {
+                "ticker": item.get("ticker"),
+                "action": "WATCH",
+                "buy_now": False,
+                "score": score,
+                "confidence": confidence,
+                "final_conf": confidence,
+                "confidence_source": "signal-board",
+                "sector": item.get("sector") or "",
+                "sector_type": item.get("sector") or "",
+                "entry_price": item.get("entry"),
+                "stop_price": item.get("stop"),
+                "target_price": item.get("target1"),
+                "risk_reward": _as_float(item.get("rr_target1"), 0.0),
+                "rs_percentile": item.get("rs_percentile"),
+                "setup": item.get("setup") or "signal_board",
+                "grade": "A" if item.get("bucket") == "strong_buy" else "B",
+                "why_now": " · ".join(item.get("why") or []),
+                "why_not": "Paper signal from Signal Board; engine is off so this is not execution permission.",
+                "position_hint": "Paper signal — size from stated stop only after engine confirms",
+                "source": "signal_board",
+                "as_of": board.get("generated_at"),
+            }
+        )
+        if len(rows) >= limit:
+            break
     return rows
 
 
@@ -270,7 +330,7 @@ def _map_rs_rankings(
                 "rs_composite": item.get("rs_composite"),
                 "confidence": confidence,
                 "final_conf": confidence,
-                "confidence_source": "rs-watchlist",
+                "confidence_source": source,
                 "sector": item.get("sector") or "",
                 "sector_type": item.get("sector") or "",
                 "entry_price": item.get("price"),
@@ -284,13 +344,14 @@ def _map_rs_rankings(
                 "why_now": f"RS leader · {item.get('status', 'WATCH')} · percentile {item.get('rs_percentile', '—')} · trend {item.get('trend', '—')}",
                 "why_not": "No confirmed setup levels yet; target/stop hidden until scanner or brief confirms.",
                 "position_hint": "Watchlist only — no full-size entry",
-                "source": source,
+                "source": item.get("source") or source,
+                "stale": source == "stale-brief-watchlist" or bool(item.get("stale")),
             }
         )
     return rows
 
 
-async def _refresh_rs_cache(limit: int) -> None:
+async def _refresh_rs_cache(request: Request, limit: int) -> None:
     if _rs_cache.get("refreshing"):
         return
     _rs_cache["refreshing"] = True
@@ -298,10 +359,13 @@ async def _refresh_rs_cache(limit: int) -> None:
         from src.api.routers.playbook import rs_ranking  # noqa: PLC0415
 
         payload = await asyncio.wait_for(
-            rs_ranking(sector=None, cap=None, limit=max(limit, 8)), timeout=10.0
+            rs_ranking(request, sector=None, cap=None, limit=max(limit, 8), live=False),
+            timeout=10.0,
         )
-        rankings = payload.get("rankings", []) if isinstance(payload, dict) else []
-        rows = _map_rs_rankings(rankings, max(limit, 8), "rs-watchlist")
+        payload = payload if isinstance(payload, dict) else {}
+        rankings = payload.get("rankings", [])
+        source = "stale-brief-watchlist" if payload.get("stale") else "rs-watchlist"
+        rows = _map_rs_rankings(rankings, max(limit, 8), source)
         if rows:
             _rs_cache.update({"ts": time.time(), "rows": rows})
     except Exception as exc:
@@ -353,14 +417,14 @@ async def _brief_watchlist(limit: int) -> List[Dict[str, Any]]:
     return rows
 
 
-async def _rs_watchlist(limit: int) -> List[Dict[str, Any]]:
+async def _rs_watchlist(request: Request, limit: int) -> List[Dict[str, Any]]:
     age = time.time() - float(_rs_cache.get("ts") or 0.0)
     cached = list(_rs_cache.get("rows") or [])
     if cached and age < _RS_CACHE_TTL_SECONDS:
         return cached[:limit]
 
     if not _rs_cache.get("refreshing"):
-        asyncio.create_task(_refresh_rs_cache(limit))
+        asyncio.create_task(_refresh_rs_cache(request, limit))
 
     if cached:
         return [{**row, "source": "rs-watchlist-stale"} for row in cached[:limit]]
@@ -378,6 +442,8 @@ def _no_trade_reasons(
     actionable_count: int,
     engine_count: int,
     watchlist_count: int,
+    scanner_count: int = 0,
+    board_count: int = 0,
 ) -> List[str]:
     reasons: List[str] = []
     if not _regime_tradeable(regime):
@@ -391,9 +457,21 @@ def _no_trade_reasons(
         reasons.append(
             "No candidate currently passes action + confidence + R:R + entry/stop/target checks."
         )
-    if engine_count == 0:
+    if engine_count == 0 and scanner_count > 0:
         reasons.append(
-            "Engine recommendation cache is empty (0 candidates matched strict setup rules); using watchlist diagnostics instead of fabricating trades."
+            "Engine is off; candidates come from the live scanner cache "
+            f"({scanner_count} rows) and still need entry/stop/target checks."
+        )
+    elif engine_count == 0 and board_count > 0:
+        reasons.append(
+            "Engine is off; Signal Board paper signals are shown as WATCH "
+            f"({board_count} rows) — not execution permission."
+        )
+    elif engine_count == 0:
+        reasons.append(
+            "Engine recommendations unavailable: cache is empty; scan "
+            "completion and rejection counts are unconfirmed. "
+            "Watchlist diagnostics are not confirmed setups."
         )
     if watchlist_count > 0:
         reasons.append(
@@ -415,6 +493,10 @@ async def daily_decision_state(
     regime_ok = _regime_tradeable(regime)
 
     engine_rows = _engine_recommendations(request, limit)
+    scanner_rows = [] if engine_rows else _scanner_recommendations(request, limit)
+    board_rows = [] if engine_rows or scanner_rows else _signal_board_candidates(limit)
+    engine_count = len(engine_rows)
+    engine_rows = engine_rows or scanner_rows
 
     # Deduplicate by ticker across engine candidates
     trade_candidates = []
@@ -431,7 +513,14 @@ async def daily_decision_state(
     ]
     watch_from_engine = [row for row in trade_candidates if row not in actionable]
 
-    rs_rows_raw = await _rs_watchlist(limit)
+    board_watch = []
+    for row in board_rows:
+        tk = row.get("ticker", "")
+        if tk and tk not in seen:
+            seen.add(tk)
+            board_watch.append(row)
+
+    rs_rows_raw = await _rs_watchlist(request, limit)
     rs_rows = []
     for row in rs_rows_raw:
         tk = row.get("ticker", "")
@@ -439,7 +528,7 @@ async def daily_decision_state(
             seen.add(tk)
             rs_rows.append(row)
 
-    watchlist = (watch_from_engine + rs_rows)[:limit]
+    watchlist = (watch_from_engine + board_watch + rs_rows)[:limit]
 
     # Calculate blockers
     blockers = {
@@ -450,7 +539,7 @@ async def daily_decision_state(
         "missing entry/stop/target": 0,
         "unknown": 0,
     }
-    for tc in trade_candidates + rs_rows:
+    for tc in trade_candidates + board_watch + rs_rows:
         if tc not in actionable:
             br = _get_blocker_reason(tc, regime_ok=regime_ok)
             blockers[br] = blockers.get(br, 0) + 1
@@ -489,13 +578,19 @@ async def daily_decision_state(
     else:
         decision = "WAIT"
         tradeability = "WAIT"
-        summary = "No actionable setups. Market context requires patience."
+        summary = (
+            "No actionable setups. Market context requires patience."
+            if engine_rows
+            else "Engine recommendations unavailable; no confirmed setup assessment."
+        )
 
     reasons = _no_trade_reasons(
         regime=regime,
         actionable_count=len(actionable),
-        engine_count=len(engine_rows),
+        engine_count=engine_count,
         watchlist_count=len(watchlist),
+        scanner_count=len(scanner_rows),
+        board_count=len(board_watch),
     )
 
     top_ranked = actionable + pruned_watchlist
@@ -527,19 +622,43 @@ async def daily_decision_state(
             "status": "unproven" if not actionable else "candidate-level",
             "source": (
                 "decision-ledger + live engine"
-                if engine_rows
-                else "rs-watchlist fallback"
+                if engine_count
+                else (
+                    "scanner-cache fallback"
+                    if scanner_rows
+                    else (
+                        "signal-board fallback"
+                        if board_watch
+                        else "rs-watchlist fallback"
+                        if rs_rows
+                        else "unavailable"
+                    )
+                )
             ),
             "sample_note": "Show sample size/Brier proof before treating confidence as predictive.",
         },
         "sources": {
-            "engine_cache": {"count": len(engine_rows)},
+            "engine_cache": {
+                "count": engine_count,
+                "status": "available" if engine_count else "unavailable",
+            },
+            "scanner_cache": {
+                "count": len(scanner_rows),
+                "status": "available" if scanner_rows else "unavailable",
+            },
+            "signal_board": {
+                "count": len(board_watch),
+                "status": "available" if board_watch else "unavailable",
+            },
             "actionable": {"count": len(actionable)},
             "rs_watchlist": {
                 "count": len(rs_rows),
-                "stale": bool(_rs_cache.get("rows"))
-                and (time.time() - float(_rs_cache.get("ts") or 0.0))
-                >= _RS_CACHE_TTL_SECONDS,
+                "stale": any(
+                    row.get("stale")
+                    or row.get("source")
+                    in {"stale-brief-watchlist", "rs-watchlist-stale"}
+                    for row in rs_rows
+                ),
                 "refreshing": bool(_rs_cache.get("refreshing")),
             },
         },

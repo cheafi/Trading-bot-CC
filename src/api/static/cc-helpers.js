@@ -1804,77 +1804,65 @@
 			return formatOperatorSentence(ss.operator_sentence)
 		}
 		var base = {
-			now: "今日狀態：" + tb + " · 只可監察",
+			now: "今日燈號：" + tb + (tb === "WAIT" || tb === "NO_TRADE" ? " · 宜休息" : ""),
 			blocker: blocked,
-			nextAction: "只跟進 monitor queue；" + repair,
+			nextAction: tb === "WAIT" || tb === "NO_TRADE" ? "只觀察，唔加新倉" : repair,
 			scope: "dashboard",
 		}
 		if (tabSafe === "signals") {
 			base = {
-				now: deployOpen ? "Deploy review · 可檢視 deploy-qualified" : "無可部署名單 · No deploy names",
-				blocker: deployOpen
-					? localizeOperatorCopy("verify execution readiness")
-					: localizeOperatorCopy("board gate " + tb + " + 0 deploy-qualified"),
-				nextAction: deployOpen
-					? localizeOperatorCopy("size only deploy-qualified")
-					: localizeOperatorCopy("只追蹤 near-miss upgrade candidates · track near-miss upgrades only"),
+				now: deployOpen ? "Playbook · 有完整候選" : "Playbook · 今日未必適合買",
+				blocker: deployOpen ? "確認每行有止蝕" : "Dashboard 話 " + tb,
+				nextAction: deployOpen ? "揀 TRADE 行，再對 Dashboard" : "只觀察或等小注 PILOT",
 				scope: "playbook",
 			}
 		} else if (tabSafe === "scanners") {
 			base = {
-				now:
-					fetchState === "failed_fetch"
-						? "Scanner unavailable · 掃描暫不可用"
-						: "Discovery research · 研究模式",
-				blocker: fetchState === "failed_fetch" ? localizeOperatorCopy("API fetch failed") : blocked,
-				nextAction: localizeOperatorCopy("用 cached leaders 或 retry scan · use cached leaders or retry"),
+				now: fetchState === "failed_fetch" ? "探索 · 掃描暫停" : "探索 · 搵靈感（唔係准買）",
+				blocker: fetchState === "failed_fetch" ? "稍後再試" : blocked,
+				nextAction: "有名再開 Playbook",
 				scope: "discovery",
 			}
 		} else if (tabSafe === "dossier" || tabSafe === "stock-intel") {
 			base = {
-				now: "Structure confirm · 結構確認",
+				now: "Dossier · 一隻股票詳情",
 				blocker: blocked,
-				nextAction: localizeOperatorCopy("review levels; no handoff until gates open"),
+				nextAction: "買前返 Dashboard 睇今日燈號",
 				scope: "dossier",
 			}
 		} else if (tabSafe === "flow") {
 			base = {
-				now: "Flow unavailable / mock · Flow 暫不可用",
-				blocker: mockOnly ? localizeOperatorCopy("live provider not connected") : blocked,
-				nextAction: mockOnly
-					? "今日忽略 flow · Ignore flow today"
-					: localizeOperatorCopy("confirm in Playbook only"),
+				now: mockOnly ? "資金流 · 示範數據" : "資金流 · 參考",
+				blocker: mockOnly ? "唔好單憑呢頁落決定" : blocked,
+				nextAction: "同 Playbook 一齊睇",
 				scope: "flow",
 			}
 		} else if (tabSafe === "funds") {
 			base = {
-				now: fetchState === "failed_fetch" ? "Allocation blocked · 配置暫停" : "Funds research · 研究模式",
+				now: fetchState === "failed_fetch" ? "基金 · 資料未載入" : "基金 · 模型參考",
 				blocker: blocked,
-				nextAction:
-					fetchState === "failed_fetch"
-						? localizeOperatorCopy("no sleeve allocation today; repair market data first")
-						: localizeOperatorCopy("index/core posture only"),
+				nextAction: "真錢仍要 Dashboard + Playbook",
 				scope: "funds",
 			}
 		} else if (tabSafe === "guide") {
 			base = {
-				now: "Reference manual · 參考手冊",
+				now: "指南 · 說明書",
 				blocker: "",
-				nextAction: "儀表板 → 策略簿 → 檔案 每日流程 · Dashboard → Playbook → Dossier daily flow",
+				nextAction: "Dashboard → Playbook → Dossier",
 				scope: "guide",
 			}
 		} else if (tabSafe === "agent") {
 			base = {
-				now: "Vibe Agent · 熬夜盯盤副駕 · Research / Monitoring only",
+				now: "Agent · 盯盤提醒（唔自動買）",
 				blocker: blocked,
-				nextAction: "檢視警報 → Playbook 確認 → 檔案 · Review alerts → Playbook → Dossier",
+				nextAction: "有警報 → Playbook 確認",
 				scope: "agent",
 			}
 		} else if (tabSafe === "strategy-lab") {
 			base = {
-				now: "Strategy Lab · 策略實驗室 · draft + validation",
+				now: "策略實驗室 · 做功課",
 				blocker: blocked,
-				nextAction: "產生草稿 → 驗證 → watch rule → Playbook · Generate → validate → watch rule",
+				nextAction: "驗證後送 Playbook，唔自動落單",
 				scope: "strategy-lab",
 			}
 		} else if (tabSafe === "shadow") {
@@ -2485,6 +2473,33 @@
 		} catch (_e) {
 			return false
 		}
+	}
+
+	/** Open export HTML for print/PDF; falls back to download when pop-ups are blocked. */
+	function openHtmlExport(html, filename) {
+		var name = String(filename || "cc-x-export") + ".html"
+		try {
+			var blob = new Blob([html], { type: "text/html;charset=utf-8" })
+			var url = URL.createObjectURL(blob)
+			var popup = window.open(url, "_blank", "noopener,noreferrer")
+			if (popup) {
+				popup.focus()
+				setTimeout(function () {
+					try {
+						popup.print()
+					} catch (_e) {}
+				}, 600)
+				setTimeout(function () {
+					URL.revokeObjectURL(url)
+				}, 120000)
+				return { mode: "window", ok: true }
+			}
+			URL.revokeObjectURL(url)
+		} catch (_e) {}
+		if (downloadTextFile(name, html)) {
+			return { mode: "download", ok: true }
+		}
+		return { mode: "failed", ok: false }
 	}
 
 	function resolveWorkflowStage(opts) {
@@ -3427,6 +3442,7 @@
 		captureTabLayoutHtml: captureTabLayoutHtml,
 		buildUiLayoutExportDocument: buildUiLayoutExportDocument,
 		downloadTextFile: downloadTextFile,
+		openHtmlExport: openHtmlExport,
 		extractDashboardInlineStyles: extractDashboardInlineStyles,
 		identifiedErrorsTruncateText: identifiedErrorsTruncateText,
 		identifiedErrorsIncidentKey: identifiedErrorsIncidentKey,
@@ -3506,9 +3522,9 @@ function cc() {
 		settingsTab: { id: "settings", icon: "⚙", label: "設定" },
 		guideSection: "quickstart",
 		guideSections: [
-			{ id: "quickstart", label: "快速上手" },
-			{ id: "advanced", label: "進階" },
-			{ id: "reference", label: "參考" },
+			{ id: "quickstart", label: "新手必讀" },
+			{ id: "advanced", label: "各頁用法" },
+			{ id: "reference", label: "詞彙表" },
 		],
 		moreTabs: [
 			{
@@ -3534,6 +3550,7 @@ function cc() {
 		showMore: false,
 		uiMode: "operator",
 		todayContextExpanded: false,
+		todayFetch: { loading: false, completed: false, error: "" },
 		dataContractDismissed: false,
 		pmStripChipMenuOpen: false,
 		cc_status: {
@@ -3630,6 +3647,7 @@ function cc() {
 		playbookFocusTicker: "",
 		pf: {
 			loading: false,
+			error: "",
 			source: "manual",
 			ssot: "server",
 			ssotFallback: false,
@@ -3651,6 +3669,8 @@ function cc() {
 			addError: "",
 			addSuccess: "",
 			editTicker: null,
+			correlationSurface: null,
+			correlationLoading: false,
 		},
 		pfDecision: null,
 		pfDecisionLoading: false,
@@ -3687,6 +3707,17 @@ function cc() {
 			page_capability: null,
 			safety: null,
 			pineExport: "",
+			vibeWorkspace: null,
+			attachments: [],
+			documentPreview: null,
+			researchConsole: null,
+			progressSteps: [],
+			benchmarkContext: null,
+			institutionalPreview: null,
+			correlationPreview: null,
+			alphaZoo: null,
+			alphaZooMeta: null,
+			researchAsOf: "",
 		},
 		shadowAccount: { loading: false, error: "", tradesJson: "", result: null, page_capability: null },
 		reportsLib: { loading: false, error: "", reports: [], selected: null, exportText: "", page_capability: null },
@@ -3993,6 +4024,7 @@ function cc() {
 			near_miss: [],
 			avoid_collapsed: true,
 			filter_funnel: null,
+			research_handoff: null,
 			degraded_banner: "",
 			instant_degraded: false,
 			operator_board: null,
@@ -4988,7 +5020,8 @@ function cc() {
 			return nn === 1 ? singular : p
 		},
 		portfolioSummaryPositionsLabel() {
-			const n = Number((this.pf && this.pf.summary && this.pf.summary.total_positions) || 0)
+			const n = this.presentationNumber(this.pf?.summary?.total_positions)
+			if (n == null) return "Positions unavailable"
 			if (!n) return "No positions"
 			return `${n} ${this.pluralize(n, "position")}`
 		},
@@ -4997,34 +5030,32 @@ function cc() {
 		},
 		portfolioSummaryStripLine() {
 			if (!this.portfolioSummaryStripVisible()) return ""
-			const val = Number((this.pf && this.pf.summary && this.pf.summary.total_value) || 0)
-			const dollars = Number.isFinite(val) ? val.toLocaleString() : "—"
-			return `${this.portfolioSummaryPositionsLabel()} · $${dollars}`
+			return `${this.portfolioSummaryPositionsLabel()} · ${this.portfolioSummaryMoneyLine("total_value")}`
 		},
 		portfolioSummaryValueShortLine() {
 			const s = this.pf && this.pf.summary
 			if (!s) return ""
-			const val = Number(s.total_value)
-			if (!Number.isFinite(val)) return ""
+			const val = this.presentationNumber(s.total_value)
+			if (val == null) return "Value unavailable"
 			return `Value $${val.toLocaleString()}`
 		},
 		portfolioSummaryMoneyLine(field) {
 			const s = this.pf && this.pf.summary
 			if (!s) return "—"
-			const val = Number(s[field])
-			return Number.isFinite(val) ? "$" + val.toLocaleString() : "—"
+			const val = this.presentationNumber(s[field])
+			return val != null ? "$" + val.toLocaleString() : "—"
 		},
 		portfolioSummaryPnlIsPositive() {
 			const s = this.pf && this.pf.summary
 			if (!s) return false
-			const pnl = Number(s.total_pnl)
-			return Number.isFinite(pnl) && pnl >= 0
+			const pnl = this.presentationNumber(s.total_pnl)
+			return pnl != null && pnl >= 0
 		},
 		portfolioSummaryPnlLine() {
 			const s = this.pf && this.pf.summary
 			if (!s) return "—"
-			const pnl = Number(s.total_pnl)
-			if (!Number.isFinite(pnl)) return "—"
+			const pnl = this.presentationNumber(s.total_pnl)
+			if (pnl == null) return "—"
 			const sign = pnl >= 0 ? "+" : ""
 			const pct = s.total_pnl_pct
 			const pctPart = pct != null && pct !== "" ? ` (${pct}%)` : ""
@@ -5410,91 +5441,127 @@ function cc() {
 			btlab: "backtest_research",
 			backtest: "backtest_research",
 			command: "command_research",
+			strategy_lab: "strategy_lab_research",
+			"strategy-lab": "strategy_lab_research",
+			agent: "agent_monitoring",
+			shadow: "shadow_diagnostic",
+			reports: "reports_library",
+			settings: "settings_reference",
 		},
 		_HEADER_BASE: {
 			dashboard_core: {
-				badge: "BOARD GATE",
-				title: "Dashboard — 今日 deploy 姿態",
-				explanation: "Regime + board gate + deploy posture。只有 tradeability 同 execution 對齊先可 sizing。",
-				next_action: "先睇 tradeability，再睇 top ranked。",
+				badge: "TODAY",
+				title: "Dashboard — 今日總覽",
+				explanation: "大市今日適唔適合買股？睇 tradeability（WAIT = 休息）。",
+				next_action: "先睇今日燈號，再睇下面候選。",
 			},
 			playbook_core: {
-				badge: "BOARD REVIEW",
-				title: "Playbook — 排序機會",
-				explanation: "Ranked board；只有 board_mode 完整，而且名稱 execution-ready，先可 Deploy。",
-				next_action: "先篩 execution-ready rows，再交叉確認 Dashboard gate。",
+				badge: "IDEAS",
+				title: "Playbook — 候選名單",
+				explanation: "系統排好嘅股票；要有止蝕先算完整計劃。",
+				next_action: "揀 TRADE 行，再同 Dashboard 對一對。",
 			},
 			discovery_research: {
-				badge: "RESEARCH ONLY",
-				title: "Discovery — 全市場掃描",
-				explanation: "只屬 scanner funnel input；呢度出現嘅候選本身唔授權交易。",
-				next_action: "有興趣嘅名稱送去 Playbook 或 Dossier。",
+				badge: "RESEARCH",
+				title: "Discovery — 搵靈感",
+				explanation: "掃描全市場；呢度唔係准買清單。",
+				next_action: "有興趣 → Playbook 或 Dossier。",
 			},
 			dossier_research: {
-				badge: "RESEARCH ONLY",
-				title: "Dossier — 單一標的研究",
-				explanation: "每隻 ticker 嘅證據整理；唔可單獨當成 deploy permission。",
-				next_action: "行動前先去 Dashboard 確認 board posture。",
+				badge: "RESEARCH",
+				title: "Dossier — 一隻股票",
+				explanation: "買入區、止蝕、理由；唔可以跳過 Dashboard。",
+				next_action: "買之前返 Dashboard 睇今日燈號。",
 			},
 			portfolio_manual: {
-				badge: "BOOK CONSTRUCTION",
-				title: "Portfolio — 倉位與風險層級",
-				explanation: "手動 book construction 同風險管理；override 由你決定，唔係由 scanner 自動決定。",
-				next_action: "再平衡前先對齊 manual book 同 IBKR。",
+				badge: "HOLDINGS",
+				title: "Portfolio — 倉位與風險",
+				explanation: "你持倉同風險會唔會太重。",
+				next_action: "加倉前對實戶口。",
 			},
 			funds_research: {
-				badge: "MODEL EVIDENCE",
-				title: "Funds — sleeve 研究",
-				explanation: "Model sleeves 同 backtest 證據；backtest ≠ live track record。",
-				next_action: "落資金前仍要 live validation。",
+				badge: "RESEARCH",
+				title: "Funds — 模型參考",
+				explanation: "回測同模型；唔等於實盤成績。",
+				next_action: "真錢仍要 Dashboard + Playbook。",
 			},
 			flow_supporting: {
-				badge: "CONFIRMATION ONLY",
-				title: "Flow — options 敘事輔助",
-				explanation: "Flow 只支援 scan-ranked 名稱；唔可作為單獨入場觸發。",
-				next_action: "先確認 Playbook + Dossier 一致。",
+				badge: "RESEARCH",
+				title: "Flow — 資金流",
+				explanation: "大戶動向參考；唔好單憑呢頁買。",
+				next_action: "同 Playbook 一齊睇。",
 			},
 			rs_supporting: {
-				badge: "RESEARCH ONLY",
-				title: "Relative strength — Discovery 輸入",
-				explanation: "RS 只幫手排序 funnel 候選；唔代表 deploy authority。",
-				next_action: "交叉核對 sector regime 同 Playbook；經 Discovery 提升。",
+				badge: "RESEARCH",
+				title: "RS — 相對強弱",
+				explanation: "邊隻跑贏大市；唔係買入許可。",
+				next_action: "去 Playbook 睇行動標籤。",
 			},
 			command_research: {
-				badge: "RESEARCH ONLY",
-				title: "Command — 進階聚合",
-				explanation: "Terminal aggregate 視圖；只係深度 decision dump，唔係 deploy gate。",
-				next_action: "Deploy authority 仍以 Dashboard + Playbook 為準。",
+				badge: "RESEARCH",
+				title: "Command — 進階總覽",
+				explanation: "深度資料；落單仍以 Dashboard 為準。",
+				next_action: "Deploy → Dashboard + Playbook。",
 			},
 			rejections_diagnostic: {
-				badge: "AUDIT TRAIL",
-				title: "Rejections — 閘門失敗紀錄",
-				explanation: "解釋名稱點解過唔到 gates；屬診斷用途，唔係 deploy permission。",
-				next_action: "整理 watchlist，再回到 Playbook 睇可行 board。",
+				badge: "LOG",
+				title: "Rejections — 被否決紀錄",
+				explanation: "邊啲名過唔到系統檢查。",
+				next_action: "返 Playbook 睇而家可行名單。",
 			},
 			backtest_research: {
-				badge: "BACKTEST ONLY",
-				title: "Backtest Lab — walk-forward 研究",
-				explanation: "Walk-forward 研究；backtest ≠ live track record。",
-				next_action: "用 lab 睇 walk-forward diagnostics；落 sizing 前仍要 live validation。",
+				badge: "RESEARCH",
+				title: "Backtest Lab — 歷史測試",
+				explanation: "過去數據模擬；唔代表將來。",
+				next_action: "實盤前仍要今日燈號。",
 			},
 			guide_reference: {
-				badge: "GUIDE MODE",
-				title: "Guide — 參考頁",
-				explanation: "文檔同 workflow 參考；呢度唔評估 runtime。",
-				next_action: "準備好先返 Dashboard 睇 live board posture。",
+				badge: "GUIDE",
+				title: "Guide — 說明書",
+				explanation: "Reference-only；即時盤面去 Dashboard。",
+				next_action: "Daily flow：Dashboard → Playbook → Dossier。",
 			},
 			ops_diagnostic: {
-				badge: "OPS / CONNECTIVITY",
-				title: "Ops — runtime 診斷",
-				explanation: "Engine 健康同 providers 狀態；workflow status ≠ capital permission。",
-				next_action: "返 Dashboard 前先修好 stale provider 或 breaker。",
+				badge: "OPS",
+				title: "Ops — 系統狀態",
+				explanation: "引擎同數據是否正常。",
+				next_action: "紅燈修好先交易。",
 			},
 			ibkr_execution: {
-				badge: "EXECUTION GATE",
-				title: "IBKR — broker handoff",
-				explanation: "連線同落單準備度；關鍵錯誤會直接阻止 execution。",
-				next_action: "先連 gateway，再確認 session_usable。",
+				badge: "BROKER",
+				title: "IBKR — 落單",
+				explanation: "連券商；LOGIN 唔等於可以落單。",
+				next_action: "READY 後先 handoff。",
+			},
+			strategy_lab_research: {
+				badge: "RESEARCH",
+				title: "Strategy Lab — 問答 + 回測",
+				explanation: "研究同驗證；Dashboard 今日燈號先准 deploy。",
+				next_action: "可行 → Playbook 審閱；唔好 auto-deploy。",
+			},
+			agent_monitoring: {
+				badge: "MONITOR",
+				title: "Agent — 監察同提示",
+				explanation: "提示唔係落單；要 Playbook + Dossier 對一對。",
+				next_action: "開 ticker Dossier；睇 Dashboard tradeability。",
+			},
+			shadow_diagnostic: {
+				badge: "JOURNAL",
+				title: "Shadow — 行為 vs 規則",
+				explanation: "紙上同規則對照；唔等於券商倉位真相。",
+				next_action: "改 watch rules；實盤前對 IBKR。",
+			},
+			reports_library: {
+				badge: "EXPORT",
+				title: "Reports — 研究紀錄",
+				explanation: "匯出同快照；唔係 live 許可。",
+				next_action: "要落單 → 返 Dashboard + Playbook 驗今日。",
+			},
+			settings_reference: {
+				badge: "SETTINGS",
+				title: "Settings — 設定",
+				explanation: "介面同偏好；無 market 權限。",
+				next_action: "評估盤面 → 開 Dashboard。",
 			},
 		},
 		pageSurface() {
@@ -5549,7 +5616,11 @@ function cc() {
 				mode === "rs_supporting" ||
 				mode === "funds_research" ||
 				mode === "backtest_research" ||
-				mode === "command_research"
+				mode === "command_research" ||
+				mode === "strategy_lab_research" ||
+				mode === "agent_monitoring" ||
+				mode === "shadow_diagnostic" ||
+				mode === "reports_library"
 			if (mode === "dossier_research") {
 				return {
 					...entry,
@@ -6701,12 +6772,18 @@ function cc() {
 			const ctx = this.ccHeader && this.ccHeader.portfolio_context
 			if (ctx && typeof ctx === "object") return ctx
 			const src = this.pfBrokerSource()
-			const count = (this.pf.summary && this.pf.summary.total_positions) || (this.pf.positions || []).length || 0
+			const count =
+				this.presentationNumber(this.pf.summary?.total_positions) ?? ((this.pf.positions || []).length || null)
 			const manual = src.pill === "MANUAL" || this.pf.source === "manual"
 			const brokerOk = !!(this.cc_status && this.cc_status.ibkr_connected)
 			return {
 				book_label: manual ? "Manual book" : src.pill,
-				positions_label: count ? `${count} ` + this.pluralize(count, "position") : "No positions",
+				positions_label:
+					count == null
+						? "Positions unavailable"
+						: count
+							? `${count} ` + this.pluralize(count, "position")
+							: "No positions",
 				broker_sync: brokerOk ? "ok" : "unavailable",
 				rebalance_label: "Rebalance support only",
 			}
@@ -6808,6 +6885,7 @@ function cc() {
 		},
 		surfaceEmptyState(tab, ctx) {
 			const c = ctx || {}
+			if (tab === "today" && !c.today_lifecycle) return this.dashboardEmptyState()
 			const hintsKey = tab === "notrade" ? "notrade" : tab === "signals" ? "signals" : tab
 			const hints = this.surfaceFetchHints[hintsKey] || {}
 			const loading = !!(
@@ -6894,7 +6972,279 @@ function cc() {
 			return this.surfaceEmptyState("scanners", {})
 		},
 		dashboardEmptyState() {
-			return this.surfaceEmptyState("today", { wait_day_ok: this.isWaitDay() && this.dashboardHasNoBoardData() })
+			const state = this.todayPresentationState()
+			if (state === "loading" || state === "initial")
+				return this.surfaceEmptyState("today", { today_lifecycle: true, loading: true })
+			if (state === "error")
+				return this.surfaceEmptyState("today", {
+					today_lifecycle: true,
+					failed_fetch: true,
+					error: this.todayFetch.error || this.replay.error,
+				})
+			if (!this.dashboardHasNoBoardData())
+				return {
+					kind: "BOARD_PRESENT",
+					headline: "Research evidence available",
+					detail: "Populated board — gates still apply.",
+					badge: "RESEARCH",
+					cta: "Review board",
+				}
+			if (state === "stale" || state === "unavailable")
+				return {
+					kind: "UNAVAILABLE",
+					headline: "Board evidence unavailable",
+					detail: "Missing or stale evidence is not a completed empty scan or a regime veto.",
+					badge: "UNAVAILABLE",
+					cta: "Refresh",
+				}
+			if (state === "replay")
+				return {
+					kind: "REPLAY_EMPTY",
+					headline: "No historical rows returned",
+					detail: "Historical replay only — no live authority.",
+					badge: "REPLAY",
+					cta: "Review replay",
+				}
+			return this.surfaceEmptyState("today", { today_lifecycle: true, wait_day_ok: this.isWaitDay() })
+		},
+		// Presentation only: these selectors consume evidence, never grant authority.
+		presentationNumber(value) {
+			if (
+				value == null ||
+				(typeof value !== "number" && typeof value !== "string") ||
+				String(value).trim() === ""
+			)
+				return null
+			const n = Number(value)
+			return Number.isFinite(n) ? n : null
+		},
+		todayPresentationState() {
+			if (this.replay.active) {
+				if (this.replay.loading) return "loading"
+				if (this.replay.error) return "error"
+				return this.today7.replay_mode ? "replay" : "initial"
+			}
+			if (this.todayFetch.loading) return "loading"
+			if (this.todayFetch.error) return "error"
+			const t = this.today7.trust || {}
+			if (
+				t.stale ||
+				this.today7.instant_degraded ||
+				this.today7.regime?.synthetic ||
+				/cache|fallback|brief/i.test(t.source || "")
+			)
+				return "stale"
+			if (!this.todayFetch.completed) return "initial"
+			return this.today7.regime ? "ready" : "unavailable"
+		},
+		todayEvidenceTrust() {
+			const t = this.today7.trust || {}
+			const market = this.trust?.source === "cc-header" ? {} : this.trust || {}
+			return Object.keys(t).length ? t : market
+		},
+		todayEvidenceModeLabel() {
+			if (this.replay.active) return "REPLAY · no live authority"
+			if (
+				this.today7.regime?.synthetic ||
+				this.todayEvidenceTrust().synthetic ||
+				this.todayEvidenceTrust().mode === "SYNTHETIC"
+			)
+				return "⚠ SYNTHETIC"
+			return this.todayEvidenceTrust().mode || "Mode unverified"
+		},
+		todayEvidenceFreshnessLabel() {
+			const t = this.todayEvidenceTrust()
+			if (this.replay.active) return "Historical replay"
+			if (t.stale || this.today7.instant_degraded || /cache|fallback|brief/i.test(t.source || ""))
+				return "STALE / reference only"
+			return t.freshness || "Freshness unknown"
+		},
+		todayEvidenceSourceLine() {
+			const t = this.todayEvidenceTrust()
+			return (
+				(t.source || "Source unavailable") +
+				" · As of " +
+				(t.as_of || this.today7.as_of || "unavailable") +
+				" · " +
+				this.todayEvidenceFreshnessLabel()
+			)
+		},
+		todayConfidencePct() {
+			const n = this.presentationNumber(this.today7.regime?.confidence)
+			return n != null && n >= 0 && n <= 1 ? Math.round(n * 100) : null
+		},
+		todayConfidenceLabel() {
+			const n = this.todayConfidencePct()
+			return n == null ? "Confidence unavailable" : n + "%"
+		},
+		todayMarketEvidenceLine() {
+			const valid = (row) =>
+				row &&
+				!row.error &&
+				(this.presentationNumber(row.price) > 0 ||
+					(row.change_available !== false && this.presentationNumber(row.change_pct) != null))
+			const indices = (
+				this.today7.pulse?.indices?.length ? this.today7.pulse.indices : this.indices || []
+			).filter(valid)
+			const sectors = (this.sectors || []).filter(valid)
+			const names = indices
+				.slice(0, 5)
+				.map((r) => r.symbol || r.name)
+				.filter(Boolean)
+			const status =
+				indices.length || sectors.length
+					? indices.length +
+						" market rows · " +
+						sectors.length +
+						" sectors" +
+						(names.length ? " · " + names.join(" / ") : "")
+					: this.marketStrip.loading
+						? "Market evidence loading"
+						: "Market evidence unavailable"
+			return (
+				status +
+				" · Market source " +
+				(this.marketStrip.source || "unavailable") +
+				" · As of " +
+				(this.marketStrip.snapshotAt || "unavailable") +
+				(this.marketStrip.error ? " · " + this.marketStrip.error : "")
+			)
+		},
+		todayResearchNames() {
+			const td = this.today7.todays_decision || {}
+			const names = [
+				...(this.today7.dashboard_monitors || []),
+				td.best_watch?.ticker,
+				td.best_pilot?.ticker,
+				...(this.today7.near_miss || []).map((r) => r.ticker),
+				...(this.today7.top_ranked || []).map((r) => r.ticker),
+			]
+			return [
+				...new Set(names.filter((n) => typeof n === "string" && n.trim()).map((n) => n.trim().toUpperCase())),
+			].slice(0, 6)
+		},
+		todayPresentationBlockers() {
+			const td = this.today7.todays_decision || {}
+			const ss = this.systemState()
+			const raw = [
+				...(ss.blockers || []),
+				ss.blocker_compact,
+				...(this.todayMissionSystemBlockersList() || []),
+				...(td.risk_blockers || []),
+				...(td.why_not_aggressive || []),
+				...(this.missionControl().why_not_deploy || []),
+			]
+			const lines = raw
+				.map((b) => (typeof b === "string" ? b : b?.message || b?.label || b?.reason || ""))
+				.filter(Boolean)
+			if (this.todayFetch.error) lines.unshift("Today fetch failed: " + this.todayFetch.error)
+			if (this.marketStrip.error) lines.push(this.marketStrip.error)
+			if (["stale", "unavailable", "initial"].includes(this.todayPresentationState()))
+				lines.unshift("Board evidence not verified — not a regime veto")
+			if (this.today7.trust?.reason) lines.push(this.today7.trust.reason)
+			return [...new Set(lines)]
+		},
+		todayPortfolioPresentation() {
+			const s = this.pf.summary || {}
+			const number = (key) => this.presentationNumber(s[key])
+			const count =
+				number("total_positions") ?? this.presentationNumber(this.ccHeader.portfolio_context?.position_count)
+			const money = (key) =>
+				number(key) == null
+					? "Unavailable"
+					: "$" + number(key).toLocaleString("en-US", { maximumFractionDigits: 2 })
+			const heat = this.pfDecision?.portfolio_heat || {}
+			const heatR = this.presentationNumber(heat.heat_r)
+			const alerts = [...(this.pf.alerts || []), ...(this.risk_alerts?.alerts || [])]
+			const lines = alerts
+				.map((a) => (typeof a === "string" ? a : a?.message || a?.msg || a?.label || ""))
+				.filter(Boolean)
+			const missingStop = this.portfolioPrimaryRiskBlocker()
+			if (missingStop?.message) lines.unshift(missingStop.message)
+			for (const p of this.pf.positions || []) {
+				if (String(p.risk_status || "").includes("BREACH"))
+					lines.unshift((p.ticker || p.symbol || "Position") + " · " + p.risk_status)
+			}
+			if (heat.heat_warning || heat.post_breach_note) lines.unshift(heat.post_breach_note || heat.heat_warning)
+			if (this.pf.error) lines.unshift("Portfolio fetch failed: " + this.pf.error)
+			const source = this.pf.ssotFallback
+				? "Browser cache · not broker truth"
+				: this.pf.summary
+					? s.source || this.pf.source || "Source unavailable"
+					: "Source unavailable"
+			const sync = this.portfolioHeaderBrokerSyncUnavailable()
+				? "Broker sync unavailable"
+				: "Broker connected · reconcile book before allocation"
+			return {
+				positions: count == null ? "Unavailable" : String(count),
+				value: money("total_value"),
+				pnl: money("total_pnl"),
+				heat:
+					heat.heat_available === true &&
+					!heat.stop_breached_count &&
+					!heat.without_stop &&
+					!missingStop?.message &&
+					heatR != null
+						? heatR + "R"
+						: "Unavailable",
+				source,
+				sync,
+				warnings: [...new Set(lines)],
+				status: this.pf.loading
+					? "Refreshing book"
+					: this.pf.error
+						? "Book refresh failed"
+						: count == null
+							? "Book evidence unavailable"
+							: this.pf.ssotFallback
+								? "Cached book · unverified"
+								: count === 0
+									? "Confirmed empty book"
+									: "Existing book · risk first",
+				next: lines.length
+					? "Review existing-book warnings before new allocation."
+					: count == null
+						? "Confirm holdings, stops and broker sync before new allocation."
+						: "Review existing-book risk before new allocation; book metrics do not grant deploy authority.",
+			}
+		},
+		todayPresentationQuestions() {
+			const state = this.todayPresentationState()
+			const td = this.today7.todays_decision || {}
+			const { regime } = this.today7
+			const vix = this.presentationNumber(regime?.vix)
+			const breadth = this.presentationNumber(regime?.breadth)
+			const quality = this.today7.opportunity_verdict
+			return {
+				know:
+					"Board " +
+					state +
+					" · " +
+					(regime ? this.canonicalRegimeLine() : "Regime unavailable") +
+					(vix != null ? " · VIX " + vix : "") +
+					(breadth != null ? " · Breadth " + breadth + "%" : "") +
+					" · " +
+					this.todayConfidenceLabel(),
+				believe:
+					quality?.headline_bilingual ||
+					quality?.headline ||
+					td.stance_one_liner ||
+					td.headline ||
+					"Opportunity quality not assessed — evidence pending.",
+				doubt: this.todayPresentationBlockers().length
+					? this.todayPresentationBlockers().length + " unresolved evidence / gate flags — listed below."
+					: "No supplied blockers; data, broker and card gates still require confirmation.",
+				act:
+					this.todayPortfolioPresentation().next +
+					" " +
+					(this.replay.active
+						? "Replay only — no live authority."
+						: this.deployOpen()
+							? "Server deploy gate open; validate the card and human approval."
+							: "No new deployment authority · " +
+								this.canonicalTradeability() +
+								". Research review remains available."),
+			}
 		},
 		rejectionsEmptyState() {
 			return this.surfaceEmptyState("notrade", {
@@ -7199,9 +7549,9 @@ function cc() {
 			return this.isWaitDay() ? this._uiText("Today focus") : this._uiText("Today mission")
 		},
 		trustProvenanceLine() {
-			const t = this.today7.trust || this.trust || {}
-			const src = String(t.source || "market_data_service").replace(/_/g, " ")
-			const fresh = String(t.freshness || "REAL_TIME")
+			const t = this.todayEvidenceTrust()
+			const src = String(t.source || "Source unavailable").replace(/_/g, " ")
+			const fresh = this.todayEvidenceFreshnessLabel()
 			let age = ""
 			const streams = (this.freshness && this.freshness.streams) || []
 			const worst = streams.reduce((m, s) => Math.max(m, Number(s.age_min) || 0), 0)
@@ -8341,25 +8691,76 @@ function cc() {
 						data: row.data,
 					})),
 				})
-				const popup = window.open("", "_blank", "noopener,noreferrer")
-				if (!popup) {
-					alert("Pop-up blocked — allow pop-ups for CC X, then click Export again.")
+				const opened =
+					typeof CCHelpers !== "undefined" && CCHelpers.openHtmlExport
+						? CCHelpers.openHtmlExport(html, "cc-x-review-pack")
+						: { ok: false }
+				if (!opened.ok) {
+					alert("Export blocked — allow pop-ups for CC X or check downloads, then try again.")
 					return
 				}
-				popup.document.open()
-				popup.document.write(html)
-				popup.document.close()
-				popup.focus()
-				setTimeout(() => {
-					try {
-						popup.print()
-					} catch (_e) {}
-				}, 400)
+				if (opened.mode === "download") {
+					alert("Review pack downloaded as HTML — open the file in your browser, then Print → Save as PDF.")
+				}
 			} catch (e) {
 				console.warn("exportReviewPack failed", e)
 				alert("Review pack export failed: " + (e && e.message ? e.message : String(e)))
 			} finally {
 				this.reviewPackLoading = false
+			}
+		},
+		async exportUiLayoutPack() {
+			if (this.uiLayoutExportLoading) return
+			this.uiLayoutExportLoading = true
+			const cap = typeof CCHelpers !== "undefined" ? CCHelpers : null
+			try {
+				if (!cap || !cap.buildUiLayoutExportDocument || !cap.captureTabLayoutHtml) {
+					alert("UI export builder unavailable — reload CC X and retry.")
+					return
+				}
+				const tabDefs = []
+				const seen = new Set()
+				const addTab = (t) => {
+					if (!t || !t.id || seen.has(t.id)) return
+					seen.add(t.id)
+					tabDefs.push(t)
+				}
+				;(this.tabs || []).forEach(addTab)
+				addTab(this.guideTab)
+				addTab(this.settingsTab)
+				;(this.moreTabs || []).forEach(addTab)
+				const prevTab = this.tab
+				const pages = []
+				for (const t of tabDefs) {
+					this.tab = t.id
+					await this.$nextTick()
+					await new Promise((r) => setTimeout(r, 80))
+					pages.push({
+						id: t.id,
+						label: (t.icon ? t.icon + " " : "") + (t.label || t.id),
+						html: cap.captureTabLayoutHtml(t.id, t.label || t.id, tabDefs),
+					})
+				}
+				this.tab = prevTab
+				await this.$nextTick()
+				const html = cap.buildUiLayoutExportDocument({
+					meta: { generated_at: new Date().toISOString(), ui_mode: this.uiMode },
+					pages,
+					inlineStyles: cap.extractDashboardInlineStyles ? cap.extractDashboardInlineStyles() : "",
+				})
+				const opened = cap.openHtmlExport ? cap.openHtmlExport(html, "cc-x-ui-layout") : { ok: false }
+				if (!opened.ok) {
+					alert("Export blocked — allow pop-ups for CC X or check downloads, then try again.")
+					return
+				}
+				if (opened.mode === "download") {
+					alert("UI layout downloaded as HTML — open the file in your browser, then Print → Save as PDF.")
+				}
+			} catch (e) {
+				console.warn("exportUiLayoutPack failed", e)
+				alert("UI layout export failed: " + (e && e.message ? e.message : String(e)))
+			} finally {
+				this.uiLayoutExportLoading = false
 			}
 		},
 		async fetchDecisionReadiness(ticker) {
@@ -9321,9 +9722,7 @@ function cc() {
 			return this.missionBriefCard()
 		},
 		missionControlLoading() {
-			if (this.tab !== "today") return false
-			if (this.today7.opportunity_verdict || this.today7.regime) return false
-			return this.healthMode === "loading" || !this.live
+			return this.tab === "today" && ["initial", "loading"].includes(this.todayPresentationState())
 		},
 		tradeabilityBadgeClass(tradeability) {
 			const t = tradeability != null ? tradeability : this.canonicalTradeability()
@@ -10209,10 +10608,13 @@ function cc() {
 			return rows.map((ix) => this.normalizeMarketItem(ix)).filter((ix) => ix && (ix.symbol || ix.name))
 		},
 		dashboardHasNoBoardData() {
-			const hasTop = (this.today7.top_ranked || []).length > 0
-			const hasNear = (this.today7.near_miss || []).length > 0
-			const hasWatch = !!this.today7.todays_decision?.best_watch?.ticker
-			return !hasTop && !hasNear && !hasWatch
+			return !(
+				(this.today7.top_ranked || []).length ||
+				(this.today7.near_miss || []).length ||
+				(this.today7.avoid_list || []).length ||
+				this.today7.avoid_grouped?.total ||
+				this.todayResearchNames().length
+			)
 		},
 		playbookVisibleRows() {
 			const filter = String(this.rankedOpps.actionFilter || "").toUpperCase()
@@ -13134,7 +13536,12 @@ function cc() {
 		signalBoardTime(iso) {
 			if (!iso) return "—"
 			try {
-				return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+				return new Date(iso).toLocaleString([], {
+					month: "short",
+					day: "numeric",
+					hour: "2-digit",
+					minute: "2-digit",
+				})
 			} catch (e) {
 				return iso
 			}
@@ -13309,6 +13716,7 @@ function cc() {
 		},
 		async fetchPortfolio() {
 			this.pf.loading = true
+			this.pf.error = ""
 			this.pf.ssotFallback = false
 			try {
 				try {
@@ -13411,6 +13819,7 @@ function cc() {
 				} catch (_) {}
 			} catch (e) {
 				console.warn("Portfolio fetch error:", e)
+				this.pf.error = String(e?.message || "Portfolio monitor unavailable")
 				const local = this.hydratePortfolioFromLocal()
 				if (local && local.holdings && local.holdings.length) {
 					this.pf.positions = local.holdings
@@ -15651,6 +16060,7 @@ function cc() {
 				name: r.name || sym || "—",
 				price: Number(r.price) || 0,
 				change_pct: Number(r.change_pct) || 0,
+				change_available: r.change_available !== false && this.presentationNumber(r.change_pct) != null,
 				change_5d: r.change_5d != null ? Number(r.change_5d) : null,
 				change_20d: r.change_20d != null ? Number(r.change_20d) : null,
 				role: this.marketRoleFor(sym),
@@ -15950,11 +16360,16 @@ function cc() {
 			if (this.replay.active && this.replay.as_of) {
 				return this.refreshReplaySurfaces()
 			}
+			if (this.todayFetch.loading) return
+			this.todayFetch.loading = true
+			this.todayFetch.error = ""
 			try {
 				const prevHash = this.today7?.decision_board_hash || ""
 				const r = await this.ccFetch("/api/v7/today", { retries: 1, backoff: 400, timeoutMs: 12000 })
 				if (!r || !r.ok) throw new Error("HTTP " + (r ? r.status : "fail"))
 				const d = await r.json()
+				if (d && d.error) throw new Error(String(d.error))
+				if (!d || !d.market_regime) throw new Error("incomplete today payload")
 				if (
 					prevHash &&
 					d.decision_board_hash &&
@@ -15966,11 +16381,10 @@ function cc() {
 					this.today7.decision_board_hash = d.decision_board_hash
 					this.today7.system_state = d.system_state || this.today7.system_state
 					this.today7.trust = d.trust || this.today7.trust
+					this.todayFetch.completed = true
 					return
 				}
 				this.captureInstantDegradedBanner(d)
-				if (d && d.error) throw new Error(String(d.error))
-				if (!d || !d.market_regime) throw new Error("incomplete today payload")
 				this.today7.regime = d.market_regime || null
 				this.today7.decision_authority = d.decision_authority || null
 				this.today7.top_ranked = d.top_5 || []
@@ -16084,20 +16498,25 @@ function cc() {
 					console.warn("dod diff failed", e)
 				}
 				this.buildDecisionHubFromToday(d)
+				this.todayFetch.completed = true
 				if (this.today7.top_ranked.length) setTimeout(() => this.loadSparklines(this.today7.top_ranked), 200)
 				if (!(this.pmStrip.funds || []).length) this.fetchFunds()
 				try {
-					const qa = await this.ccFetchJson("/api/v7/quant/sleeve-allocation", {
+					this.ccFetchJson("/api/v7/quant/sleeve-allocation", {
 						tab: "today",
 						retries: 1,
 						backoff: 400,
 					})
-					if (qa.ok) this.today7.quant_alloc = qa.data
+						.then((qa) => {
+							if (qa.ok) this.today7.quant_alloc = qa.data
+						})
+						.catch((e) => console.warn("quant sleeve-allocation", e))
 				} catch (e) {
 					console.warn("quant sleeve-allocation", e)
 				}
 			} catch (e) {
 				console.warn("v7/today fetch failed", e)
+				this.todayFetch.error = String(e.message || e).slice(0, 140)
 				this.today7.trust = {
 					...(this.today7.trust || {}),
 					stale: true,
@@ -16109,6 +16528,8 @@ function cc() {
 					if (bridged.length) this.today7.top_ranked = bridged.slice(0, 5)
 				}
 				if (!this.playbookBoardHasContent()) this.fetchWarmupBriefBoard()
+			} finally {
+				this.todayFetch.loading = false
 			}
 			this.rebuildIdentifiedErrors()
 		},
@@ -16835,7 +17256,17 @@ function cc() {
 		},
 
 		tabAuthorityAlias(t) {
-			return { signals: "playbook", scanners: "discovery", today: "today" }[t] || t
+			return (
+				{
+					signals: "playbook",
+					scanners: "discovery",
+					today: "today",
+					"stock-intel": "dossier",
+					rejections: "notrade",
+					backtest: "btlab",
+					"strategy-lab": "strategy_lab",
+				}[t] || t
+			)
 		},
 		guideAuthorityStrip() {
 			return this._uiText("GUIDE MODE · Reference only · Decision surfaces suspended")
@@ -17322,20 +17753,408 @@ function cc() {
 			await this.fetchVibeAgent()
 		},
 
+		_applyResearchBootstrap(data) {
+			if (!data) return
+			this.strategyLab.researchConsole = data
+			this.strategyLab.correlationPreview = data.correlation_surface || null
+			const az = data.alpha_zoo_cache
+			if (az?.available) this.strategyLab.alphaZooMeta = az
+		},
+
 		async fetchStrategyLabShell() {
 			const tab = "strategy-lab"
 			this.strategyLab.loading = true
 			this.strategyLab.error = ""
 			try {
-				const res = await this.ccFetchJson("/api/v7/research/contract?surface=strategy-lab", {
-					tab,
-					retries: 1,
-				})
-				if (res.ok) this.strategyLab.safety = res.data
+				const [contractRes, bootRes] = await Promise.all([
+					this.ccFetchJson("/api/v7/research/contract?surface=strategy-lab", { tab, retries: 1 }),
+					this.ccFetchJson("/api/v7/research/console/bootstrap", { tab, retries: 1 }),
+				])
+				if (contractRes.ok) this.strategyLab.safety = contractRes.data
+				if (bootRes.ok) this._applyResearchBootstrap(bootRes.data)
 			} catch (e) {
 				this.strategyLab.error = e.message || "load failed"
 			} finally {
 				this.strategyLab.loading = false
+			}
+		},
+
+		async refreshResearchConsole() {
+			this.strategyLab.loading = true
+			try {
+				const bootRes = await this.ccFetchJson("/api/v7/research/console/bootstrap?refresh=true", {
+					tab: "strategy-lab",
+					retries: 1,
+				})
+				if (bootRes.ok) this._applyResearchBootstrap(bootRes.data)
+			} catch (e) {
+				this.strategyLab.error = e.message || "load failed"
+			} finally {
+				this.strategyLab.loading = false
+			}
+		},
+
+		researchTeamStanceClass(stance) {
+			const s = String(stance || "").toLowerCase()
+			if (s === "support" || s === "research_favorable") return "pill pg text-[7px]"
+			if (s === "contradiction" || s === "research_unfavorable") return "pill pr text-[7px]"
+			return "pill pw text-[7px]"
+		},
+
+		strategyLabTeamsList() {
+			const teams = this.strategyLab.vibeWorkspace?.teams?.teams
+			if (Array.isArray(teams) && teams.length) return teams
+			return []
+		},
+
+		researchIdosBlock() {
+			const rc = this.strategyLab.researchConsole || {}
+			const vw = this.strategyLab.vibeWorkspace || {}
+			const gates = rc.gates || {}
+			const corr = rc.correlation_surface || this.strategyLab.correlationPreview || {}
+			const bench = this.strategyLab.benchmarkContext?.benchmark_context || {}
+			const tb = gates.tradeability || "—"
+			const regime = corr.regime || "—"
+			return {
+				know: `今日燈號 ${tb} · 大市關聯 ${regime}`,
+				believe: vw.composite_backtest?.run_card
+					? `策略回測約 ${vw.composite_backtest.run_card.aggregate_return_pct ?? "—"}%，SPY 買持 ${bench.buy_hold_return_pct ?? "—"}%（歷史，唔保證將來）`
+					: "按「Backtest」或「Analyst teams」先攞數據。",
+				doubt: (vw.self_improve && vw.self_improve[0]) || "研究模式：唔會自動落單；數據可能有延遲。",
+				therefore: gates.deploy_open
+					? "滿意 → 送 Playbook；真買要 Dashboard 同 IBKR 都 OK。"
+					: "而家只觀察：去 Dashboard / Playbook，唔好喺呢度 sizing。",
+			}
+		},
+
+		_applyResearchTaskResult(task, data) {
+			if (!data) return
+			if (task === "backtest_idea") {
+				this.strategyLab.draft = data.strategy_draft || this.strategyLab.draft
+				this.strategyLab.validation = data.validation || null
+				this.strategyLab.benchmarkContext = data.benchmark_context || null
+				this.strategyLab.vibeWorkspace = {
+					composite_backtest: data.composite_backtest,
+					self_improve: data.validation_artifacts,
+				}
+			} else {
+				this.strategyLab.vibeWorkspace = data
+				this.strategyLab.draft = data.strategy_draft || this.strategyLab.draft
+			}
+		},
+
+		async _researchTaskHttp(task, prompt, payload) {
+			return this.ccFetchJson("/api/v7/research/task", {
+				tab: "strategy-lab",
+				retries: 1,
+				init: {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ task, prompt, payload }),
+				},
+			})
+		},
+
+		async runResearchTaskQuick(task) {
+			const prompt = String(this.strategyLab.prompt || "").trim()
+			this.strategyLab.loading = true
+			this.strategyLab.error = ""
+			this.strategyLab.progressSteps = [{ step: "intent", detail: task }]
+			try {
+				if (task === "institutional_intel") {
+					const ticker = (this.strategyLab.draft?.universe || ["SPY"])[0] || "SPY"
+					const res = await this.ccFetchJson(
+						"/api/v7/research/institutional/intel?ticker=" + encodeURIComponent(ticker),
+						{ tab: "strategy-lab", retries: 1 },
+					)
+					if (res.ok) this.strategyLab.institutionalPreview = res.data
+					else this.strategyLab.error = res.error
+					return
+				}
+				if (task === "correlation_regime") {
+					const res = await this.ccFetchJson(
+						"/api/v7/research/correlation/regime-timeline?tickers=SPY,QQQ,TLT,IWM,GLD,BTC-USD",
+						{ tab: "strategy-lab", retries: 1 },
+					)
+					if (res.ok) {
+						this.strategyLab.correlationPreview = res.data?.current || res.data
+					} else this.strategyLab.error = res.error
+					return
+				}
+				if (task === "alpha_zoo") {
+					const t = (this.strategyLab.draft?.universe || ["SPY"])[0] || "SPY"
+					let res = await this.ccFetchJson("/api/v7/research/alpha/bench-zoo/latest", {
+						tab: "strategy-lab",
+						retries: 1,
+					})
+					if (!res.ok || !res.data?.ok) {
+						res = await this.ccFetchJson(
+							"/api/v7/research/alpha/bench-zoo?ticker=" + encodeURIComponent(t) + "&compute_limit=478",
+							{ tab: "strategy-lab", retries: 1, init: { method: "POST" } },
+						)
+					}
+					if (res.ok && res.data?.ok) {
+						this.strategyLab.alphaZoo = res.data
+						this.strategyLab.vibeWorkspace = {
+							...(this.strategyLab.vibeWorkspace || {}),
+							alpha_zoo: res.data,
+						}
+					} else this.strategyLab.error = res.error || res.data?.hint || "alpha zoo unavailable"
+					return
+				}
+				if (task === "review_trades") {
+					this.switchTab("shadow")
+					await this.loadShadowFromLocal()
+					return
+				}
+				if (!prompt && task !== "review_trades") {
+					this.strategyLab.error = "Enter a research question first."
+					return
+				}
+				const payload = { persist: true, run_backtest: true }
+				if (this.strategyLab.attachments?.length) payload.files = this.strategyLab.attachments
+				const asOfQuick = String(this.strategyLab.researchAsOf || "").trim()
+				if (asOfQuick) payload.as_of = asOfQuick.slice(0, 10)
+				const wsTasks = ["ask_question", "backtest_idea"]
+				let data = null
+				if (wsTasks.includes(task)) {
+					try {
+						data = await this._runResearchViaWebSocket(task, prompt, payload)
+					} catch (_ws) {
+						this.strategyLab.progressSteps = [
+							...(this.strategyLab.progressSteps || []),
+							{ step: "cross_market", detail: "HTTP fallback" },
+						]
+					}
+				}
+				if (!data) {
+					const res = await this._researchTaskHttp(task, prompt, payload)
+					if (!res.ok) {
+						this.strategyLab.error = res.error
+						return
+					}
+					data = res.data
+				}
+				this._applyResearchTaskResult(task, data)
+			} catch (e) {
+				this.strategyLab.error = e.message
+			} finally {
+				this.strategyLab.loading = false
+				if (!this.strategyLab.error) {
+					this.strategyLab.progressSteps = [
+						...(this.strategyLab.progressSteps || []),
+						{ step: "risk", detail: "Done" },
+					]
+				} else {
+					this.strategyLab.progressSteps = []
+				}
+			}
+		},
+
+		async loadShadowFromLocal() {
+			this.shadowAccount.loading = true
+			this.shadowAccount.error = ""
+			try {
+				const res = await this.ccFetchJson("/api/v7/research/task", {
+					tab: "shadow",
+					retries: 1,
+					init: {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							task: "review_trades",
+							payload: { use_local_closed: true },
+						}),
+					},
+				})
+				if (!res.ok) {
+					this.shadowAccount.error = res.error
+					return
+				}
+				this.shadowAccount.result = res.data?.shadow || null
+				this.shadowAccount.tradesJson = JSON.stringify(res.data?.journal?.trades || [], null, 2)
+			} catch (e) {
+				this.shadowAccount.error = e.message
+			} finally {
+				this.shadowAccount.loading = false
+			}
+		},
+
+		researchProgressDetail() {
+			const steps = this.strategyLab.progressSteps || []
+			const active = steps.slice(-1)[0]
+			if (!active) return ""
+			const label = active.detail || active.step || ""
+			return active.step && active.detail && active.detail !== active.step
+				? active.step + " · " + active.detail
+				: String(label)
+		},
+
+		researchWorkflowStepper() {
+			const defs = [
+				{ id: "intent", label: "Intent" },
+				{ id: "cross_market", label: "Data" },
+				{ id: "backtest", label: "Backtest" },
+				{ id: "investment", label: "Investment" },
+				{ id: "quant", label: "Quant" },
+				{ id: "crypto", label: "Crypto" },
+				{ id: "macro", label: "Macro" },
+				{ id: "risk", label: "Risk" },
+			]
+			const done = new Set((this.strategyLab.progressSteps || []).map((s) => String(s.step || "")))
+			const active = (this.strategyLab.progressSteps || []).slice(-1)[0]
+			return defs.map((d) => ({
+				...d,
+				done: done.has(d.id),
+				active: active && String(active.step) === d.id,
+			}))
+		},
+
+		sendResearchToPlaybook() {
+			const draft = this.strategyLab.draft
+			const vw = this.strategyLab.vibeWorkspace || {}
+			const rc = vw.composite_backtest?.run_card || {}
+			const universe = (draft && draft.universe) || rc.symbols || []
+			const ticker = String(universe[0] || "SPY")
+				.toUpperCase()
+				.trim()
+			const consensus = vw.teams?.consensus || vw.consensus || ""
+			const ret = rc.aggregate_return_pct
+			const bench = this.strategyLab.benchmarkContext?.benchmark_context || {}
+			const spy = bench.buy_hold_return_pct
+			const excess = bench.excess_vs_spy_pct
+			this.rankedOpps.research_handoff = {
+				ticker,
+				consensus,
+				composite_return_pct: ret,
+				spy_return_pct: spy,
+				excess_vs_spy_pct: excess,
+				hypothesis: (draft && draft.hypothesis) || String(this.strategyLab.prompt || "").slice(0, 160),
+				at: new Date().toISOString(),
+				note: "研究交接 — 買之前確認 Dashboard 今日燈號同 Playbook 止蝕。",
+			}
+			this.playbookSetFocusTicker(ticker)
+			this.switchTab("signals")
+			this.fetchRanked({ snapshotFirst: true })
+		},
+
+		clearResearchPlaybookHandoff() {
+			this.rankedOpps.research_handoff = null
+			this.playbookClearFocusTicker()
+		},
+
+		async fetchPortfolioCorrelationSurface() {
+			this.pf.correlationLoading = true
+			try {
+				const fromBook = (this.pf.positions || [])
+					.map((p) => String(p.ticker || "").toUpperCase())
+					.filter(Boolean)
+				const list = fromBook.length >= 2 ? fromBook.slice(0, 10).join(",") : "SPY,QQQ,TLT,IWM,GLD,BTC-USD"
+				const res = await this.ccFetchJson(
+					"/api/v7/research/correlation/regime-timeline?tickers=" +
+						encodeURIComponent(list) +
+						"&period=3mo&window=30&step=10",
+					{ tab: "portfolio", retries: 1 },
+				)
+				if (res.ok) this.pf.correlationSurface = res.data?.current || res.data
+			} catch (e) {
+				/* non-blocking */
+			} finally {
+				this.pf.correlationLoading = false
+			}
+		},
+
+		_researchWsUrl() {
+			const proto = location.protocol === "https:" ? "wss:" : "ws:"
+			return proto + "//" + location.host + "/api/v7/research/ws/session"
+		},
+
+		async _runResearchViaWebSocket(task, prompt, payload) {
+			return new Promise((resolve, reject) => {
+				let ws
+				try {
+					ws = new WebSocket(this._researchWsUrl())
+				} catch (e) {
+					reject(e)
+					return
+				}
+				const steps = []
+				const timer = setTimeout(() => {
+					try {
+						ws.close()
+					} catch (_x) {}
+					reject(new Error("research_ws_timeout"))
+				}, 120000)
+				ws.onopen = () => {
+					ws.send(JSON.stringify({ task, prompt, payload }))
+				}
+				ws.onmessage = (ev) => {
+					let msg
+					try {
+						msg = JSON.parse(ev.data)
+					} catch (_x) {
+						return
+					}
+					if (msg.event === "progress" && msg.phase) {
+						this.strategyLab.progressSteps = [
+							...(this.strategyLab.progressSteps || []),
+							{ step: msg.phase, detail: msg.detail || "" },
+						]
+					}
+					if (msg.step === "accepted") {
+						this.strategyLab.progressSteps = [{ step: "intent", detail: "Session accepted" }]
+					}
+					if (msg.step === "done") {
+						clearTimeout(timer)
+						ws.close()
+						resolve(msg.result)
+					}
+					if (msg.step === "error") {
+						clearTimeout(timer)
+						ws.close()
+						reject(new Error(msg.detail || "ws_error"))
+					}
+				}
+				ws.onerror = () => {
+					clearTimeout(timer)
+					reject(new Error("ws_connect_failed"))
+				}
+			})
+		},
+
+		async exportResearchTdxMt5() {
+			if (!this.strategyLab.draft && !this.strategyLab.prompt) {
+				this.strategyLab.error = "Need draft or prompt"
+				return
+			}
+			const body = this.strategyLab.draft
+				? { draft: this.strategyLab.draft }
+				: { prompt: this.strategyLab.prompt }
+			try {
+				const [tdx, mt5] = await Promise.all([
+					this.ccFetchJson("/api/v7/research/export/tdx", {
+						tab: "strategy-lab",
+						init: {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify(body),
+						},
+					}),
+					this.ccFetchJson("/api/v7/research/export/mt5", {
+						tab: "strategy-lab",
+						init: {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify(body),
+						},
+					}),
+				])
+				if (typeof CCHelpers !== "undefined" && CCHelpers.openHtmlExport) {
+					const bundle = (tdx.data?.tdx || "") + "\n\n// --- MT5 ---\n\n" + (mt5.data?.mql5 || "")
+					CCHelpers.openHtmlExport("research-artifacts.txt", bundle, "text/plain")
+				}
+			} catch (e) {
+				this.strategyLab.error = e.message
 			}
 		},
 
@@ -17414,6 +18233,159 @@ function cc() {
 				}
 				this.strategyLab.validation = res.data?.validation || null
 				this.strategyLab.page_capability = res.data?.page_capability || null
+			} catch (e) {
+				this.strategyLab.error = e.message
+			} finally {
+				this.strategyLab.loading = false
+			}
+		},
+
+		async researchFilesToPayload(files) {
+			const list = Array.from(files || []).slice(0, 5)
+			const out = []
+			for (const f of list) {
+				const b64 = await new Promise((resolve, reject) => {
+					const r = new FileReader()
+					r.onload = () => {
+						const s = String(r.result || "")
+						const idx = s.indexOf(",")
+						resolve(idx >= 0 ? s.slice(idx + 1) : s)
+					}
+					r.onerror = () => reject(new Error("read failed"))
+					r.readAsDataURL(f)
+				})
+				out.push({ filename: f.name, content_b64: b64 })
+			}
+			return out
+		},
+
+		async onStrategyLabFiles(event) {
+			try {
+				const files = event?.target?.files || event?.dataTransfer?.files
+				if (!files?.length) return
+				const payload = await this.researchFilesToPayload(files)
+				this.strategyLab.attachments = payload
+				const res = await this.ccFetchJson("/api/v7/research/documents/read-batch", {
+					tab: "strategy-lab",
+					retries: 1,
+					init: {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ files: payload }),
+					},
+				})
+				if (res.ok) this.strategyLab.documentPreview = res.data
+			} catch (e) {
+				this.strategyLab.error = e.message
+			}
+		},
+
+		async onStrategyLabPaste(event) {
+			const items = event?.clipboardData?.items
+			if (!items) return
+			const files = []
+			for (const it of items) {
+				if (it.kind === "file") {
+					const f = it.getAsFile()
+					if (f) files.push(f)
+				}
+			}
+			if (files.length) {
+				event.preventDefault()
+				await this.onStrategyLabFiles({ target: { files } })
+			}
+		},
+
+		async runResearchAsk() {
+			const prompt = String(this.strategyLab.prompt || "").trim()
+			if (!prompt) return
+			this.strategyLab.loading = true
+			this.strategyLab.error = ""
+			try {
+				const payload = { persist: true, run_backtest: true }
+				if (this.strategyLab.attachments?.length) payload.files = this.strategyLab.attachments
+				const asOfAsk = String(this.strategyLab.researchAsOf || "").trim()
+				if (asOfAsk) payload.as_of = asOfAsk.slice(0, 10)
+				const res = await this.ccFetchJson("/api/v7/research/task", {
+					tab: "strategy-lab",
+					retries: 1,
+					init: {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ task: "ask_question", prompt, payload }),
+					},
+				})
+				if (!res.ok) {
+					this.strategyLab.error = res.error
+					return
+				}
+				this.strategyLab.vibeWorkspace = res.data
+				this.strategyLab.draft = res.data?.strategy_draft || this.strategyLab.draft
+			} catch (e) {
+				this.strategyLab.error = e.message
+			} finally {
+				this.strategyLab.loading = false
+			}
+		},
+
+		_applyVibeWorkspaceResult(data) {
+			if (!data) return
+			this.strategyLab.vibeWorkspace = data
+			this.strategyLab.draft = data.strategy_draft || this.strategyLab.draft
+			if (data.teams?.teams) {
+				this.strategyLab.committee = {
+					agents: data.teams.teams.flatMap((t) =>
+						(t.agents || []).length
+							? t.agents
+							: [{ id: t.id, label: t.label, stance: t.stance, evidence: t.evidence }],
+					),
+					summaryZh: "Vibe teams · " + (data.teams.consensus || ""),
+					summaryEn: data.teams.consensus,
+				}
+			}
+			if (data.session_recall) {
+				this.strategyLab.researchConsole = {
+					...(this.strategyLab.researchConsole || {}),
+					session_recall: data.session_recall,
+				}
+			}
+		},
+
+		async runVibeWorkspace() {
+			const prompt = String(this.strategyLab.prompt || "").trim()
+			if (!prompt) return
+			this.strategyLab.loading = true
+			this.strategyLab.error = ""
+			this.strategyLab.progressSteps = [{ step: "intent", detail: "Connecting research session…" }]
+			const payload = { run_backtest: true, persist: true }
+			if (this.strategyLab.attachments?.length) payload.files = this.strategyLab.attachments
+			const asOf = String(this.strategyLab.researchAsOf || "").trim()
+			if (asOf) payload.as_of = asOf.slice(0, 10)
+			try {
+				let data = null
+				try {
+					data = await this._runResearchViaWebSocket("ask_question", prompt, payload)
+				} catch (_ws) {
+					this.strategyLab.progressSteps = [
+						...(this.strategyLab.progressSteps || []),
+						{ step: "cross_market", detail: "WebSocket unavailable — running via HTTP" },
+					]
+					const res = await this.ccFetchJson("/api/v7/research/vibe/workspace", {
+						tab: "strategy-lab",
+						retries: 1,
+						init: {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ prompt, run_backtest: true, persist: true }),
+						},
+					})
+					if (!res.ok) {
+						this.strategyLab.error = res.error
+						return
+					}
+					data = res.data
+				}
+				this._applyVibeWorkspaceResult(data)
 			} catch (e) {
 				this.strategyLab.error = e.message
 			} finally {
