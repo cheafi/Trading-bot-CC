@@ -17,7 +17,7 @@
         var el=document.getElementById('cc-api-key');
         if(el&&el.textContent){var k=JSON.parse(el.textContent);if(k)return k;}
       }catch(e){}
-      return 'dev-secret-local';
+      return '';
     })();
     </script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>

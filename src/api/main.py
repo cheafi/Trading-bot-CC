@@ -751,15 +751,12 @@ _init_shared_services()
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard(request: Request):
-    """Serve the main dashboard."""
-    api_key = ""
-    try:
-        from src.core.config import settings
+    """Serve the main dashboard.
 
-        api_key = settings.api_secret_key or ""
-    except Exception:
-        api_key = ""
-    return templates.TemplateResponse(request, "index.html", {"api_key": api_key})
+    Security: never embed API_SECRET_KEY in HTML. Browser calls use same-origin
+    session or optional read routes; privileged ops require server-side auth later.
+    """
+    return templates.TemplateResponse(request, "index.html", {"api_key": ""})
 
 
 @app.get("/signals/explorer", response_class=HTMLResponse, include_in_schema=False)
