@@ -275,6 +275,61 @@ class BrokerReconciliationEngine:
         self._persist_snapshot()
         return self._reconciliation_status
 
+    def import_broker_open_orders(
+        self, orders: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Merge IBKR (or paper) open-order snapshot after restart."""
+        imported = 0
+        updated = 0
+        for row in orders or []:
+            if not isinstance(row, dict):
+                continue
+            oid = str(row.get("order_id") or row.get("orderId") or "").strip()
+            sym = str(row.get("symbol") or row.get("ticker") or "").upper().strip()
+            if not oid or not sym:
+                continue
+            action = str(row.get("action") or "BUY").upper()
+            qty = int(float(row.get("quantity") or row.get("remaining") or 0))
+            if qty <= 0:
+                continue
+            status_raw = str(row.get("status") or "").strip().lower()
+            if status_raw in ("filled",):
+                mapped = OrderState.FILLED
+            elif status_raw in ("cancelled", "api cancelled", "inactive"):
+                mapped = OrderState.CANCELLED
+            else:
+                mapped = OrderState.SENT
+            rec = self._orders.get(oid)
+            if not rec:
+                self.record_order(
+                    oid,
+                    sym,
+                    action,
+                    qty,
+                    limit_price=row.get("lmt_price") or row.get("limit_price"),
+                    client_order_id=oid,
+                )
+                imported += 1
+                rec = self._orders.get(oid)
+            filled = int(float(row.get("filled") or 0))
+            if rec:
+                if rec.state != mapped:
+                    rec.state = mapped
+                    updated += 1
+                if mapped == OrderState.FILLED and filled <= 0:
+                    filled = rec.quantity
+                if filled > 0:
+                    rec.filled_quantity = filled
+                    rec.avg_fill_price = float(row.get("avg_fill_price") or 0.0)
+                rec.updated_at = _utcnow()
+        if updated:
+            self._persist_snapshot()
+        return {
+            "imported": imported,
+            "updated": updated,
+            "broker_order_count": len(orders or []),
+        }
+
     def recovery_gate(self) -> Dict[str, Any]:
         """Post-restart: report open orders before trading unlock."""
         open_orders = [

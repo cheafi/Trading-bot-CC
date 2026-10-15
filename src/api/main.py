@@ -1704,6 +1704,18 @@ async def broker_reconciliation_status():
     return broker_reconciliation.status()
 
 
+@app.post(
+    "/api/v6/broker-reconciliation/sync-ibkr",
+    tags=["operator"],
+    summary="Replay IBKR open orders + positions into reconciliation ledger",
+)
+async def broker_reconciliation_sync_ibkr(_: bool = Depends(verify_api_key)):
+    """Post-restart recovery: pull broker truth before unlocking can_trade."""
+    from src.services.broker_reconciliation_ibkr import sync_reconciliation_from_ibkr
+
+    return await sync_reconciliation_from_ibkr()
+
+
 # ===== Signal Endpoints =====
 
 
