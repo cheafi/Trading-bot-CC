@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from src.api.deps import optional_api_key
+from src.api.deps import verify_api_key
 from src.services.slippage_gate_service import check_slippage
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,9 @@ class SlippageCheckRequest(BaseModel):
 
 @router.post("/api/slippage/check", tags=["execution"])
 async def slippage_check(
-    req: SlippageCheckRequest, request: Request, _=optional_api_key
+    req: SlippageCheckRequest,
+    request: Request,
+    _: bool = Depends(verify_api_key),
 ):
     """Pre-trade slippage verdict — call before sending bracket order."""
     mds = getattr(request.app.state, "market_data", None)
