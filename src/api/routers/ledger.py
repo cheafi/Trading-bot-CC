@@ -19,10 +19,10 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from src.api.deps import optional_api_key
+from src.api.deps import verify_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -49,9 +49,35 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _performance_trust_fields(source: str) -> Dict[str, Any]:
+    """Classify rows for downstream Sharpe / learning — not all sources are official PnL."""
+    src = (source or "manual").strip().lower()
+    if src in ("ibkr_bracket", "ibkr", "broker_verified"):
+        tier = "broker_verified"
+        verified_at = _utc_now_iso()
+    elif src in ("paper_sim", "paper", "simulation"):
+        tier = "paper_simulated"
+        verified_at = None
+    elif src in ("manual", "user", "operator"):
+        tier = "manual_unverified"
+        verified_at = None
+    else:
+        tier = "research_hypothetical"
+        verified_at = None
+    return {
+        "performance_tier": tier,
+        "verified_at": verified_at,
+        "execution_id": "",
+        "account_id": "",
+        "strategy_version": "",
+    }
+
+
 @router.post("/api/ledger/close-trade", tags=["ledger"])
 async def ledger_close_trade(
-    req: CloseTradeRequest, request: Request, _=optional_api_key
+    req: CloseTradeRequest,
+    request: Request,
+    _: bool = Depends(verify_api_key),
 ):
     """Append a single closed trade row to closed_trades.jsonl."""
     entry = req.entry_time or _utc_now_iso()
@@ -97,6 +123,7 @@ async def ledger_close_trade(
         "hold_days": hold_days,
         "source": req.source or "manual",
         "logged_at": _utc_now_iso(),
+        **_performance_trust_fields(req.source or "manual"),
     }
 
     try:
