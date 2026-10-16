@@ -80,7 +80,7 @@ jobs:
             --ignore=tests/sprints/test_sprint55.py \
             --ignore=tests/sprints/test_sprint56.py \
             --ignore=tests/sprints/test_sprint57.py \
-            --ignore=tests/sprints/test_sprint58.py 2>/dev/null || true
+            --ignore=tests/sprints/test_sprint58.py
         env:
           TRADING_ENV: paper
 

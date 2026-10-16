@@ -1244,6 +1244,16 @@ class IBKRService:
         logger.info(
             f"[IBKR] placeOrder id={order_id} {action} {quantity}x {symbol} {order_type}"
         )
+        from src.core.order_execution import track_broker_fill, track_broker_order_intent
+
+        track_broker_order_intent(
+            source="ibkr_service",
+            symbol=symbol,
+            side=action,
+            quantity=int(quantity),
+            order_id=str(order_id),
+            limit_price=limit_price,
+        )
 
         try:
             result = await asyncio.wait_for(
@@ -1260,6 +1270,13 @@ class IBKRService:
                 self._record_event(
                     "order_ack",
                     f"#{result.order_id} {action} {quantity}x {symbol} {result.status}",
+                )
+            filled = int(float(result.filled or 0))
+            if filled > 0:
+                track_broker_fill(
+                    str(result.order_id or order_id),
+                    filled_quantity=filled,
+                    avg_fill_price=float(result.avg_fill_price or 0.0),
                 )
             return result
         except asyncio.TimeoutError:

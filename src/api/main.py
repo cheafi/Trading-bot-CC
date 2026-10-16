@@ -751,15 +751,12 @@ _init_shared_services()
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard(request: Request):
-    """Serve the main dashboard."""
-    api_key = ""
-    try:
-        from src.core.config import settings
+    """Serve the main dashboard.
 
-        api_key = settings.api_secret_key or ""
-    except Exception:
-        api_key = ""
-    return templates.TemplateResponse(request, "index.html", {"api_key": api_key})
+    Security: never embed API_SECRET_KEY in HTML. Browser calls use same-origin
+    session or optional read routes; privileged ops require server-side auth later.
+    """
+    return templates.TemplateResponse(request, "index.html", {"api_key": ""})
 
 
 @app.get("/signals/explorer", response_class=HTMLResponse, include_in_schema=False)
@@ -1122,6 +1119,30 @@ async def _startup_prewarm():
         logger.info("[Prewarm] Scanner cache warm: %d signals", len(recs))
     except Exception as exc:
         logger.warning("[Prewarm] Scanner warm failed (non-fatal): %s", exc)
+
+    try:
+        from src.engines.broker_reconciliation import broker_reconciliation
+        from src.services.broker_reconciliation_ibkr import sync_reconciliation_from_ibkr
+
+        needs_sync = broker_reconciliation.recovery_gate().get(
+            "requires_broker_reconcile"
+        )
+        env_sync = os.getenv("CC_BROKER_RECON_SYNC", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if needs_sync or env_sync:
+            recon = await sync_reconciliation_from_ibkr()
+            logger.info(
+                "[Prewarm] Broker reconciliation sync ok=%s can_trade=%s (needs=%s env=%s)",
+                recon.get("ok"),
+                recon.get("can_trade"),
+                needs_sync,
+                env_sync,
+            )
+    except Exception as exc:
+        logger.warning("[Prewarm] Broker reconciliation sync failed: %s", exc)
 
 
 @asynccontextmanager
@@ -1705,6 +1726,18 @@ async def broker_reconciliation_status():
     from src.engines.broker_reconciliation import broker_reconciliation
 
     return broker_reconciliation.status()
+
+
+@app.post(
+    "/api/v6/broker-reconciliation/sync-ibkr",
+    tags=["operator"],
+    summary="Replay IBKR open orders + positions into reconciliation ledger",
+)
+async def broker_reconciliation_sync_ibkr(_: bool = Depends(verify_api_key)):
+    """Post-restart recovery: pull broker truth before unlocking can_trade."""
+    from src.services.broker_reconciliation_ibkr import sync_reconciliation_from_ibkr
+
+    return await sync_reconciliation_from_ibkr()
 
 
 # ===== Signal Endpoints =====

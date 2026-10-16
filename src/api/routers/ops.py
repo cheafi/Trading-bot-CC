@@ -138,3 +138,11 @@ async def ops_engine_stop(request: Request, _: bool = Depends(verify_api_key)):
 async def ops_engine_run_cycle(request: Request, _: bool = Depends(verify_api_key)):
     """Run one scan cycle on demand (dev helper when loop is not running)."""
     return sanitize_for_json(await _run_engine_cycle_once(request.app))
+
+
+@router.post("/broker-reconciliation/sync-ibkr")
+async def ops_broker_reconciliation_sync(_: bool = Depends(verify_api_key)):
+    """Operator: replay IBKR open orders + positions into reconciliation ledger."""
+    from src.services.broker_reconciliation_ibkr import sync_reconciliation_from_ibkr
+
+    return sanitize_for_json(await sync_reconciliation_from_ibkr())

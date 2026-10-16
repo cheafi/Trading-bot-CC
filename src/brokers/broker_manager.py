@@ -228,6 +228,11 @@ class BrokerManager:
                 broker=str(broker or self._active_broker),
             )
 
+        from src.core.order_execution import (
+            track_broker_fill,
+            track_broker_order_intent,
+        )
+
         order = OrderRequest(
             ticker=ticker,
             side=side,
@@ -242,6 +247,21 @@ class BrokerManager:
 
         # Notify callbacks
         if result.success:
+            oid = track_broker_order_intent(
+                source="broker_manager",
+                symbol=ticker,
+                side=side.value,
+                quantity=quantity,
+                order_id=result.order_id,
+                limit_price=limit_price,
+            )
+            filled = int(getattr(result, "filled_qty", 0) or 0)
+            if filled > 0:
+                track_broker_fill(
+                    oid,
+                    filled_quantity=filled,
+                    avg_fill_price=float(result.avg_fill_price or 0.0),
+                )
             for callback in self._callbacks["on_order_fill"]:
                 try:
                     await callback(result, order)

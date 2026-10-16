@@ -107,7 +107,10 @@ class RiskCircuitBreaker:
         self.triggered: bool = False
         self.trigger_reason: str = ""
         self.trigger_time: Optional[datetime] = None
-        self.today: date = date.today()
+        self.manual_reset_required: bool = False
+        # UTC, not local: a local-midnight rollover would reset the daily loss
+        # limit mid-session for any non-UTC host and re-enable trading.
+        self.today: date = datetime.now(timezone.utc).date()
         # Restore cross-session peak_equity so drawdown tracking survives restarts
         _stored_peak: float = 0.0
         try:
@@ -145,15 +148,17 @@ class RiskCircuitBreaker:
             except Exception:
                 pass  # non-fatal — in-memory value still correct
 
-        # Check cooldown
-        if self.triggered and self.trigger_time:
+        if self.manual_reset_required:
+            return False
+
+        # Check cooldown (soft triggers only — severe halts need manual_reset)
+        if self.triggered and self.trigger_time and not self.manual_reset_required:
             elapsed = (datetime.now(timezone.utc) - self.trigger_time).total_seconds()
             if elapsed < self.cooldown_minutes * 60:
                 return False
-            else:
-                self.triggered = False
-                self.trigger_reason = ""
-                logger.info("Circuit breaker cooldown expired, resuming trading")
+            self.triggered = False
+            self.trigger_reason = ""
+            logger.info("Circuit breaker cooldown expired, resuming trading")
 
         # Update trade P&L
         if trade_pnl is not None:
@@ -168,19 +173,23 @@ class RiskCircuitBreaker:
             (self.daily_pnl / self.peak_equity * 100) if self.peak_equity > 0 else 0.0
         )
         if daily_pnl_pct < -self.max_daily_loss_pct:
-            self._trigger(f"Daily loss {daily_pnl_pct:.1f}% exceeds limit")
+            self._trigger(
+                f"Daily loss {daily_pnl_pct:.1f}% exceeds limit", severe=True
+            )
             return False
 
         # Check drawdown
         if self.peak_equity > 0:
             drawdown = (self.peak_equity - equity) / self.peak_equity * 100
             if drawdown > self.max_drawdown_pct:
-                self._trigger(f"Drawdown {drawdown:.1f}% exceeds limit")
+                self._trigger(f"Drawdown {drawdown:.1f}% exceeds limit", severe=True)
                 return False
 
         # Check consecutive losses
         if self.consecutive_losses >= self.max_consecutive_losses:
-            self._trigger(f"{self.consecutive_losses} consecutive losses")
+            self._trigger(
+                f"{self.consecutive_losses} consecutive losses", severe=False
+            )
             return False
 
         # Check max positions
@@ -189,11 +198,20 @@ class RiskCircuitBreaker:
 
         return True
 
-    def _trigger(self, reason: str):
+    def clear_manual_halt(self) -> None:
+        """Operator ack after severe halt (drawdown / daily loss limit)."""
+        self.manual_reset_required = False
+        self.triggered = False
+        self.trigger_reason = ""
+        self.trigger_time = None
+
+    def _trigger(self, reason: str, *, severe: bool = False):
         was_triggered = self.triggered
         self.triggered = True
         self.trigger_reason = reason
         self.trigger_time = datetime.now(timezone.utc)
+        if severe:
+            self.manual_reset_required = True
         logger.warning(f"🚨 Circuit breaker triggered: {reason}")
         if not was_triggered:
             try:
@@ -736,24 +754,12 @@ class AutoTradingEngine:
         await self._maybe_run_eod()
 
     def _get_active_markets(self, now: datetime) -> List[str]:
-        """Determine which markets are currently open."""
-        hour, minute = now.hour, now.minute
-        current_minutes = hour * 60 + minute
-        active: Set[str] = set()
+        """Determine which markets are currently open (US = America/New_York, DST-safe)."""
+        from src.core.market_sessions import active_markets_at
 
-        for session_name, session in MARKET_SESSIONS.items():
-            open_h, open_m = session["open"]
-            close_h, close_m = session["close"]
-            open_minutes = open_h * 60 + open_m
-            close_minutes = close_h * 60 + close_m
-
-            if close_minutes == 24 * 60:
-                close_minutes = 24 * 60 - 1
-
-            if open_minutes <= current_minutes < close_minutes:
-                active.update(session["markets"])
-
-        return list(active)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        return active_markets_at(now)
 
     # ------------------------------------------------------------------
     # Sprint 30: No-trade cycle — do useful work even when regime
