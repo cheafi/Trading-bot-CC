@@ -15,10 +15,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
-from src.api.deps import optional_api_key, sanitize_for_json
+from src.api.deps import optional_api_key, sanitize_for_json, verify_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ async def advise_single(
 async def advise_batch(
     request: Request,
     body: BatchRequest,
-    _auth=optional_api_key,
+    _: bool = Depends(verify_api_key),
 ):
     """
     Compute sizing recommendations for up to 20 signals in one call.

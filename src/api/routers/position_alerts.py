@@ -21,9 +21,9 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
-from src.api.deps import optional_api_key
+from src.api.deps import optional_api_key, verify_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -286,7 +286,7 @@ async def alerts_history(limit: int = 50, _=optional_api_key):
 
 
 @router.post("/api/portfolio/alerts-clear-dedupe", tags=["portfolio"])
-async def alerts_clear_dedupe(_=optional_api_key):
+async def alerts_clear_dedupe(_: bool = Depends(verify_api_key)):
     """Wipe in-memory de-dupe map — next scan re-pushes all active alerts."""
     n = len(_DISPATCHED)
     _DISPATCHED.clear()
@@ -294,7 +294,7 @@ async def alerts_clear_dedupe(_=optional_api_key):
 
 
 @router.post("/api/portfolio/alerts-rotate", tags=["portfolio"])
-async def alerts_rotate(keep: int = 5000, _=optional_api_key):
+async def alerts_rotate(keep: int = 5000, _: bool = Depends(verify_api_key)):
     """Trim alerts.jsonl to the last `keep` rows (default 5000).
 
     Archives discarded rows to alerts.jsonl.<UTC-date>.bak only if >0 trimmed.
