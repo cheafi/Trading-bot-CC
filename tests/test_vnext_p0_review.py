@@ -30,11 +30,47 @@ def test_active_us_market_midday_et() -> None:
 
 def test_broker_reconciliation_fail_closed(tmp_path) -> None:
     eng = BrokerReconciliationEngine(snapshot_path=tmp_path / "rec.json")
-    assert eng.can_trade() is True
-    eng.reconcile(broker_positions={})
+    assert eng.can_trade() is False
+    assert eng.reconcile(broker_positions=None) == ReconciliationStatus.PENDING
+    assert eng.can_trade() is False
+    assert eng.reconcile(broker_positions={}) == ReconciliationStatus.OK
     assert eng.can_trade() is True
     eng.record_order("o1", "AAPL", "BUY", 10)
     assert eng.can_trade() is False
+
+
+def test_cold_start_never_trusts_missing_snapshot(tmp_path) -> None:
+    eng = BrokerReconciliationEngine(snapshot_path=tmp_path / "missing.json")
+    assert eng.recovery_gate()["requires_broker_reconcile"] is True
+    assert eng.can_trade() is False
+
+
+def test_cold_start_never_trusts_persisted_ok(tmp_path) -> None:
+    snap = tmp_path / "order_reconciliation.json"
+    snap.write_text(
+        '{"reconciliation_status":"ok","orders":[],"last_reconciliation":"2020-01-01"}',
+        encoding="utf-8",
+    )
+    eng = BrokerReconciliationEngine(snapshot_path=snap)
+    assert eng._reconciliation_status == ReconciliationStatus.PENDING
+    assert eng.can_trade() is False
+
+
+def test_reconcile_none_never_ok(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CC_RECON_SIMULATION_READY", "1")
+    eng = BrokerReconciliationEngine(snapshot_path=tmp_path / "r.json")
+    eng.mark_simulation_ready()
+    assert eng.reconcile(broker_positions=None) == ReconciliationStatus.SIMULATION_READY
+    eng2 = BrokerReconciliationEngine(snapshot_path=tmp_path / "r2.json")
+    assert eng2.reconcile(broker_positions=None) == ReconciliationStatus.PENDING
+    assert eng2._reconciliation_status != ReconciliationStatus.OK
+
+
+def test_simulation_ready_explicit_env(tmp_path, monkeypatch) -> None:
+    eng = BrokerReconciliationEngine(snapshot_path=tmp_path / "sim.json")
+    monkeypatch.setenv("CC_RECON_SIMULATION_READY", "1")
+    eng.mark_simulation_ready()
+    assert eng.can_trade() is True
 
 
 def test_broker_empty_positions_still_compares(tmp_path) -> None:

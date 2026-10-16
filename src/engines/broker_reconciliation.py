@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -43,6 +44,8 @@ class ReconciliationStatus(str, Enum):
     MISMATCH = "mismatch"
     PENDING = "pending"
     STALE = "stale"
+    UNKNOWN = "unknown"
+    SIMULATION_READY = "simulation_ready"
 
 
 @dataclass
@@ -107,45 +110,45 @@ class BrokerReconciliationEngine:
         self._snapshot_path = snapshot_path or order_reconciliation_snapshot_path()
         self._orders: Dict[str, OrderRecord] = {}
         self._last_reconciliation: str = ""
-        self._reconciliation_status = ReconciliationStatus.PENDING
+        self._broker_verified_at: str = ""
+        self._reconciliation_status = ReconciliationStatus.UNKNOWN
         self._discrepancies: List[Dict[str, Any]] = []
+        self._persist_ok: bool = True
         self._load_snapshot()
 
     def _load_snapshot(self) -> None:
         path = self._snapshot_path
         if not path.exists():
-            self._reconciliation_status = ReconciliationStatus.OK
+            self._reconciliation_status = ReconciliationStatus.UNKNOWN
             return
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
+                self._reconciliation_status = ReconciliationStatus.UNKNOWN
                 return
             for row in data.get("orders") or []:
                 if isinstance(row, dict) and row.get("order_id"):
                     rec = _record_from_dict(row)
                     self._orders[rec.order_id] = rec
             self._last_reconciliation = str(data.get("last_reconciliation") or "")
-            st = str(data.get("reconciliation_status") or ReconciliationStatus.PENDING.value)
-            try:
-                self._reconciliation_status = ReconciliationStatus(st)
-            except ValueError:
-                self._reconciliation_status = ReconciliationStatus.PENDING
+            self._broker_verified_at = ""
+            # Never trust a persisted OK without a fresh broker verify this process.
+            self._reconciliation_status = ReconciliationStatus.PENDING
             if self._orders:
                 logger.info(
-                    "Loaded %d orders from reconciliation snapshot (status=%s)",
+                    "Loaded %d orders from reconciliation snapshot (cold-start=PENDING)",
                     len(self._orders),
-                    self._reconciliation_status.value,
                 )
-            elif self._reconciliation_status == ReconciliationStatus.PENDING:
-                self._reconciliation_status = ReconciliationStatus.OK
         except Exception as exc:
             logger.warning("Reconciliation snapshot load failed: %s", exc)
+            self._reconciliation_status = ReconciliationStatus.UNKNOWN
 
     def _persist_snapshot(self) -> None:
         payload = {
             "schema": "cc.order_reconciliation.v1",
             "saved_at": _utcnow(),
             "last_reconciliation": self._last_reconciliation,
+            "broker_verified_at": self._broker_verified_at or None,
             "reconciliation_status": self._reconciliation_status.value,
             "orders": [_record_to_dict(o) for o in self._orders.values()],
         }
@@ -153,7 +156,9 @@ class BrokerReconciliationEngine:
             atomic_write_text(
                 self._snapshot_path, json.dumps(payload, indent=2, sort_keys=True)
             )
+            self._persist_ok = True
         except Exception as exc:
+            self._persist_ok = False
             logger.warning("Reconciliation snapshot persist failed: %s", exc)
 
     def record_order(
@@ -222,10 +227,12 @@ class BrokerReconciliationEngine:
     def reconcile(
         self,
         broker_positions: Optional[Dict[str, int]] = None,
+        *,
+        broker_snapshot_complete: bool = True,
     ) -> ReconciliationStatus:
         """
         Compare internal order state with broker positions.
-        In production, broker_positions comes from the broker API.
+        broker_positions must be supplied (empty dict is valid); None means no verify.
         """
         now = _utcnow()
         self._last_reconciliation = now
@@ -251,30 +258,56 @@ class BrokerReconciliationEngine:
                     }
                 )
 
-        if broker_positions is not None:
-            expected: Dict[str, int] = {}
-            for rec in self._orders.values():
-                if rec.state in (OrderState.FILLED, OrderState.PARTIAL_FILL):
-                    sign = 1 if rec.direction == "BUY" else -1
-                    qty = rec.filled_quantity * sign
-                    expected[rec.ticker] = expected.get(rec.ticker, 0) + qty
-            for ticker, exp_qty in expected.items():
-                broker_qty = broker_positions.get(ticker, 0)
-                if exp_qty != broker_qty:
-                    self._discrepancies.append(
-                        {
-                            "ticker": ticker,
-                            "expected": exp_qty,
-                            "broker": broker_qty,
-                            "issue": "position mismatch",
-                        }
-                    )
+        if broker_positions is None:
+            if self._reconciliation_status != ReconciliationStatus.SIMULATION_READY:
+                self._reconciliation_status = ReconciliationStatus.PENDING
+            self._persist_snapshot()
+            return self._reconciliation_status
+
+        if not broker_snapshot_complete:
+            self._reconciliation_status = ReconciliationStatus.PENDING
+            self._discrepancies.append(
+                {"issue": "incomplete broker snapshot", "broker": "unknown"}
+            )
+            self._persist_snapshot()
+            return self._reconciliation_status
+
+        expected: Dict[str, int] = {}
+        for rec in self._orders.values():
+            if rec.state in (OrderState.FILLED, OrderState.PARTIAL_FILL):
+                sign = 1 if rec.direction == "BUY" else -1
+                qty = rec.filled_quantity * sign
+                expected[rec.ticker] = expected.get(rec.ticker, 0) + qty
+        for ticker, exp_qty in expected.items():
+            broker_qty = broker_positions.get(ticker, 0)
+            if exp_qty != broker_qty:
+                self._discrepancies.append(
+                    {
+                        "ticker": ticker,
+                        "expected": exp_qty,
+                        "broker": broker_qty,
+                        "issue": "position mismatch",
+                    }
+                )
 
         if self._discrepancies:
             self._reconciliation_status = ReconciliationStatus.MISMATCH
         else:
             self._reconciliation_status = ReconciliationStatus.OK
+            self._broker_verified_at = now
 
+        self._persist_snapshot()
+        return self._reconciliation_status
+
+    def mark_simulation_ready(self) -> ReconciliationStatus:
+        """Offline paper sim only — not equivalent to broker RECONCILED."""
+        flag = os.environ.get("CC_RECON_SIMULATION_READY", "").strip().lower()
+        if flag not in ("1", "true", "yes"):
+            raise RuntimeError(
+                "Simulation reconciliation requires CC_RECON_SIMULATION_READY=1"
+            )
+        self._reconciliation_status = ReconciliationStatus.SIMULATION_READY
+        self._broker_verified_at = _utcnow()
         self._persist_snapshot()
         return self._reconciliation_status
 
@@ -340,13 +373,17 @@ class BrokerReconciliationEngine:
             for o in self._orders.values()
             if o.state in (OrderState.PENDING, OrderState.SENT, OrderState.PARTIAL_FILL)
         ]
+        trusted = self._reconciliation_status in (
+            ReconciliationStatus.OK,
+            ReconciliationStatus.SIMULATION_READY,
+        )
         return {
             "open_orders": open_orders,
             "open_count": len(open_orders),
             "reconciliation_status": self._reconciliation_status.value,
+            "broker_verified_at": self._broker_verified_at or None,
             "can_trade": self.can_trade(),
-            "requires_broker_reconcile": bool(open_orders)
-            or self._reconciliation_status != ReconciliationStatus.OK,
+            "requires_broker_reconcile": bool(open_orders) or not trusted,
         }
 
     def status(self) -> Dict[str, Any]:
@@ -375,8 +412,14 @@ class BrokerReconciliationEngine:
         }
 
     def can_trade(self) -> bool:
-        """Gate: fail-closed — only trade when reconciliation is explicitly OK."""
-        if self._reconciliation_status != ReconciliationStatus.OK:
+        """Gate: fail-closed — broker OK or explicit simulation-ready only."""
+        if not self._persist_ok:
+            return False
+        allowed_status = (
+            ReconciliationStatus.OK,
+            ReconciliationStatus.SIMULATION_READY,
+        )
+        if self._reconciliation_status not in allowed_status:
             return False
         open_orders = [
             o

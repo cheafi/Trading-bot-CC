@@ -18,6 +18,7 @@ def test_track_order_intent_blocks_until_reconciled(
     monkeypatch.setattr(
         "src.engines.trade_gate.broker_reconciliation", eng, raising=False
     )
+    assert eng.reconcile(broker_positions={}) is not None
     assert eng.can_trade() is True
     oid = track_broker_order_intent(
         source="test",
