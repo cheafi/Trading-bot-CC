@@ -35,7 +35,8 @@ jobs:
             tests/test_p0_auth_ledger.py \
             tests/test_vnext_p0_review.py \
             tests/test_transactional_oms_v1.py \
-            tests/test_order_execution_reconciliation.py
+            tests/test_order_execution_reconciliation.py \
+            tests/test_execution_gateway.py
         env:
           TRADING_ENV: paper
 

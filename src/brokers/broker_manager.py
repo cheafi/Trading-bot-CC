@@ -203,6 +203,9 @@ class BrokerManager:
         stop_price: Optional[float] = None,
         market: Market = Market.US,
         broker: Optional[BrokerType] = None,
+        *,
+        skip_ledger_intent: bool = False,
+        ledger_order_id: Optional[str] = None,
     ) -> OrderResult:
         """
         Place an order through the specified or active broker.
@@ -246,20 +249,28 @@ class BrokerManager:
             market=market,
         )
 
-        client_order_id = uuid.uuid4().hex[:16]
-        local_oid = track_broker_order_intent(
-            source="broker_manager",
-            symbol=ticker,
-            side=side.value,
-            quantity=quantity,
-            client_order_id=client_order_id,
-            limit_price=limit_price,
-        )
-        if not broker_reconciliation._persist_ok:
-            raise BrokerError(
-                message="Reconciliation ledger persist failed — order not sent",
-                broker=str(broker or self._active_broker),
+        if skip_ledger_intent:
+            local_oid = str(ledger_order_id or "").strip()
+            if not local_oid:
+                raise BrokerError(
+                    message="ledger_order_id required when skip_ledger_intent=True",
+                    broker=str(broker or self._active_broker),
+                )
+        else:
+            client_order_id = uuid.uuid4().hex[:16]
+            local_oid = track_broker_order_intent(
+                source="broker_manager",
+                symbol=ticker,
+                side=side.value,
+                quantity=quantity,
+                client_order_id=client_order_id,
+                limit_price=limit_price,
             )
+            if not broker_reconciliation._persist_ok:
+                raise BrokerError(
+                    message="Reconciliation ledger persist failed — order not sent",
+                    broker=str(broker or self._active_broker),
+                )
 
         result = await target_broker.place_order(order)
 
