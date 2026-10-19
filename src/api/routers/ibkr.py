@@ -17,7 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from src.api.deps import verify_api_key, sanitize_for_json
+from src.api.deps import sanitize_for_json, verify_api_key, verify_sensitive_api_key
 from src.services.ibkr_service import (
     default_ibkr_port,
     get_ibkr_service,
@@ -139,7 +139,7 @@ async def ibkr_status(
 
 
 @router.post("/connect")
-async def ibkr_connect(req: ConnectRequest, _=Depends(verify_api_key)):
+async def ibkr_connect(req: ConnectRequest, _=Depends(verify_sensitive_api_key)):
     """
     Connect to IB Gateway / TWS.
     mode='paper' → port 7497 unless overridden
@@ -174,7 +174,7 @@ async def ibkr_connect(req: ConnectRequest, _=Depends(verify_api_key)):
 
 
 @router.post("/disconnect")
-async def ibkr_disconnect(_=Depends(verify_api_key)):
+async def ibkr_disconnect(_=Depends(verify_sensitive_api_key)):
     """Gracefully disconnect from IB Gateway."""
     svc = get_ibkr_service()
     await svc.disconnect()
@@ -319,7 +319,7 @@ async def ibkr_positions(_=Depends(verify_api_key)):
 @router.post("/order")
 async def ibkr_place_order(
     req: PlaceOrderRequest,
-    _=Depends(verify_api_key),
+    _=Depends(verify_sensitive_api_key),
     x_confirm_live_order: Optional[str] = Header(default=None),
 ):
     """
@@ -395,7 +395,7 @@ async def ibkr_place_order(
 @router.post("/bracket")
 async def ibkr_place_bracket(
     req: PlaceBracketRequest,
-    _=Depends(verify_api_key),
+    _=Depends(verify_sensitive_api_key),
     x_confirm_live_order: Optional[str] = Header(default=None),
 ):
     """
@@ -462,7 +462,7 @@ class CancelBracketRequest(BaseModel):
 
 
 @router.delete("/order/{order_id}")
-async def ibkr_cancel_order(order_id: int, _=Depends(verify_api_key)):
+async def ibkr_cancel_order(order_id: int, _=Depends(verify_sensitive_api_key)):
     """Cancel a single working order by id."""
     svc = get_ibkr_service()
     if not svc.is_connected:
@@ -476,7 +476,9 @@ async def ibkr_cancel_order(order_id: int, _=Depends(verify_api_key)):
 
 
 @router.post("/cancel-bracket")
-async def ibkr_cancel_bracket(req: CancelBracketRequest, _=Depends(verify_api_key)):
+async def ibkr_cancel_bracket(
+    req: CancelBracketRequest, _=Depends(verify_sensitive_api_key)
+):
     """Cancel all 3 legs of a bracket (parent + stop + target)."""
     svc = get_ibkr_service()
     if not svc.is_connected:

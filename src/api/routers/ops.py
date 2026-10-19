@@ -9,7 +9,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, Query, Request
 
 from src.api.app_state import get_engine
-from src.api.deps import sanitize_for_json, verify_api_key
+from src.api.deps import sanitize_for_json, verify_api_key, verify_sensitive_api_key
 from src.core.config import get_settings
 from src.services.platform_error_log import get_error_log, load_changelog
 from src.services.runtime_truth import engine_runtime_snapshot
@@ -123,25 +123,33 @@ async def ops_engine_status(request: Request):
 
 
 @router.post("/engine/start")
-async def ops_engine_start(request: Request, _: bool = Depends(verify_api_key)):
+async def ops_engine_start(
+    request: Request, _: bool = Depends(verify_sensitive_api_key)
+):
     """Start the AutoTradingEngine background loop (paper/dry-run by default)."""
     return sanitize_for_json(await _start_engine_loop(request.app))
 
 
 @router.post("/engine/stop")
-async def ops_engine_stop(request: Request, _: bool = Depends(verify_api_key)):
+async def ops_engine_stop(
+    request: Request, _: bool = Depends(verify_sensitive_api_key)
+):
     """Stop the AutoTradingEngine background loop."""
     return sanitize_for_json(await _stop_engine_loop(request.app))
 
 
 @router.post("/engine/run-cycle")
-async def ops_engine_run_cycle(request: Request, _: bool = Depends(verify_api_key)):
+async def ops_engine_run_cycle(
+    request: Request, _: bool = Depends(verify_sensitive_api_key)
+):
     """Run one scan cycle on demand (dev helper when loop is not running)."""
     return sanitize_for_json(await _run_engine_cycle_once(request.app))
 
 
 @router.post("/broker-reconciliation/sync-ibkr")
-async def ops_broker_reconciliation_sync(_: bool = Depends(verify_api_key)):
+async def ops_broker_reconciliation_sync(
+    _: bool = Depends(verify_sensitive_api_key),
+):
     """Operator: replay IBKR open orders + positions into reconciliation ledger."""
     from src.services.broker_reconciliation_ibkr import sync_reconciliation_from_ibkr
 

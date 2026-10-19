@@ -5,10 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
 
-from src.api.deps import optional_api_key, sanitize_for_json
+from src.api.deps import optional_api_key, sanitize_for_json, verify_api_key
 from src.services.cc_state import attach_page_capability, attach_system_state
 from src.services.reports_library import create_report_from_shadow, export_report, list_reports as list_report_rows
 from src.services.research_committee import run_committee_review
@@ -67,7 +67,9 @@ async def get_pipeline_steps(_=optional_api_key):
 
 
 @router.post("/strategy/parse")
-async def post_strategy_parse(body: Dict[str, Any], _=optional_api_key):
+async def post_strategy_parse(
+    body: Dict[str, Any], _: bool = Depends(verify_api_key)
+):
     prompt = str((body or {}).get("prompt") or "").strip()
     if not prompt or len(prompt) > 4000:
         raise HTTPException(status_code=400, detail="prompt required (max 4000 chars)")
@@ -76,7 +78,9 @@ async def post_strategy_parse(body: Dict[str, Any], _=optional_api_key):
 
 
 @router.post("/strategy")
-async def post_strategy_save(body: Dict[str, Any], _=optional_api_key):
+async def post_strategy_save(
+    body: Dict[str, Any], _: bool = Depends(verify_api_key)
+):
     prompt = str((body or {}).get("prompt") or "").strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt required")
@@ -100,7 +104,9 @@ async def get_strategy(draft_id: str, _=optional_api_key):
 
 
 @router.post("/validate")
-async def post_validate(body: Dict[str, Any], request: Request, _=optional_api_key):
+async def post_validate(
+    body: Dict[str, Any], request: Request, _: bool = Depends(verify_api_key)
+):
     draft_id = str((body or {}).get("draft_id") or "").strip()
     draft = get_strategy_draft(draft_id) if draft_id else None
     if not draft and (body or {}).get("draft"):
@@ -139,7 +145,9 @@ async def post_validate(body: Dict[str, Any], request: Request, _=optional_api_k
 
 
 @router.post("/pipeline")
-async def post_pipeline(body: Dict[str, Any], request: Request, _=optional_api_key):
+async def post_pipeline(
+    body: Dict[str, Any], request: Request, _: bool = Depends(verify_api_key)
+):
     prompt = str((body or {}).get("prompt") or "").strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt required")
@@ -153,7 +161,9 @@ async def post_pipeline(body: Dict[str, Any], request: Request, _=optional_api_k
 
 
 @router.post("/committee/review")
-async def post_committee(body: Dict[str, Any], request: Request, _=optional_api_key):
+async def post_committee(
+    body: Dict[str, Any], request: Request, _: bool = Depends(verify_api_key)
+):
     subject = (body or {}).get("subject") if isinstance((body or {}).get("subject"), dict) else {}
     if not subject and (body or {}).get("draft_id"):
         subject = get_strategy_draft(str(body.get("draft_id"))) or {}
@@ -165,7 +175,9 @@ async def post_committee(body: Dict[str, Any], request: Request, _=optional_api_
 
 
 @router.post("/shadow/analyze")
-async def post_shadow(body: Dict[str, Any], request: Request, _=optional_api_key):
+async def post_shadow(
+    body: Dict[str, Any], request: Request, _: bool = Depends(verify_api_key)
+):
     trades = (body or {}).get("trades")
     if not isinstance(trades, list) or not trades:
         raise HTTPException(status_code=400, detail="trades list required")
@@ -248,7 +260,9 @@ async def get_backtest_runs(limit: int = 30, _=optional_api_key):
 
 
 @router.post("/export/pine")
-async def post_export_pine(body: Dict[str, Any], _=optional_api_key):
+async def post_export_pine(
+    body: Dict[str, Any], _: bool = Depends(verify_api_key)
+):
     draft = (body or {}).get("draft") if isinstance((body or {}).get("draft"), dict) else {}
     if not draft and (body or {}).get("draft_id"):
         draft = get_strategy_draft(str(body.get("draft_id"))) or {}

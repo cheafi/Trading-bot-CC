@@ -661,20 +661,34 @@ async def desk_monitor():
 
     broker_block = {
         "connected": False,
-        "name": "paper",
+        "session_verified": False,
+        "name": "unknown",
         "last_sync": None,
         "mode": "PAPER" if state.get("dry_run", True) else "LIVE",
+        "trust": "unknown",
     }
     try:
         from src.brokers.broker_manager import get_broker_manager
 
         mgr = await get_broker_manager()
         bt = getattr(mgr, "active_broker_type", None)
+        broker = getattr(mgr, "active_broker", None)
+        session_ok = bool(broker and getattr(broker, "is_connected", False))
+        if not session_ok:
+            try:
+                from src.services.ibkr_service import get_ibkr_service
+
+                ibkr = get_ibkr_service()
+                session_ok = bool(getattr(ibkr, "is_connected", False))
+            except Exception:
+                session_ok = False
         broker_block = {
-            "connected": True,
+            "connected": session_ok,
+            "session_verified": session_ok,
             "name": bt.value if bt else "paper",
-            "last_sync": datetime.utcnow().isoformat(),
+            "last_sync": None,
             "mode": "PAPER" if state.get("dry_run", True) else "LIVE",
+            "trust": "verified" if session_ok else "unknown",
         }
     except Exception:  # noqa: BLE001
         pass

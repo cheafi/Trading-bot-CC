@@ -19,9 +19,9 @@ import sys
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
-from src.api.deps import optional_api_key
+from src.api.deps import optional_api_key, verify_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -137,7 +137,9 @@ def _roll_forward_brief(source_path: str, source_date: str) -> Dict[str, Any]:
 
 @router.post("/api/brief/regenerate", tags=["brief"])
 async def brief_regenerate(
-    request: Request, dry_run: bool = False, _=optional_api_key
+    request: Request,
+    dry_run: bool = False,
+    _: bool = Depends(verify_api_key),
 ):
     """Run data/generate_brief.py in a subprocess. Returns generated path + age."""
     if not os.path.exists(GENERATOR):

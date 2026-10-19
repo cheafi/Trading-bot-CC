@@ -11,7 +11,7 @@ from src.services.research_safety import sanitize_research_payload
 from src.services.strategy_export import export_pine_draft, export_strategy_contract_json
 
 _TICKER_RE = re.compile(r"\b([A-Z]{1,5})\b")
-_MA_RE = re.compile(r"(\d+)\s*/\s*(\d+)\s*ma", re.I)
+_MA_RE = re.compile(r"(\d{1,4})\s*/\s*(\d{1,4})\s*ma", re.I)
 _VIX_RE = re.compile(r"vix", re.I)
 
 
@@ -25,7 +25,7 @@ def _default_expiry(days: int = 30) -> str:
 
 def parse_strategy_prompt(raw_prompt: str) -> Dict[str, Any]:
     """Turn plain-language strategy into structured draft — not live orders."""
-    text = str(raw_prompt or "").strip()
+    text = str(raw_prompt or "").strip()[:4000]
     lower = text.lower()
     universe = ["SPY"]
     for m in _TICKER_RE.finditer(text.upper()):

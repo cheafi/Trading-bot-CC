@@ -20,7 +20,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from src.api.deps import verify_api_key
+from src.api.deps import verify_api_key, verify_sensitive_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,9 @@ async def get_broker_status(_: bool = Depends(verify_api_key)):
 
 
 @router.post("/switch/{broker_type}")
-async def switch_broker(broker_type: str, _: bool = Depends(verify_api_key)):
+async def switch_broker(
+    broker_type: str, _: bool = Depends(verify_sensitive_api_key)
+):
     """
     Switch active broker.
 
@@ -196,7 +198,7 @@ async def place_order(
     order_type: str = "market",
     limit_price: Optional[float] = None,
     stop_price: Optional[float] = None,
-    _: bool = Depends(verify_api_key),
+    _: bool = Depends(verify_sensitive_api_key),
 ):
     """
     Place a trading order through the active broker.

@@ -12,9 +12,11 @@ Architecture:
 
 import atexit
 import fcntl
+import hmac
 import http.server
 import json
 import os
+import re
 import signal
 import sys
 import socketserver
@@ -143,13 +145,29 @@ def _read_template_bytes() -> bytes:
 
 
 def _patch_dashboard_api_key(plain: bytes) -> bytes:
-    """Instant server serves raw template — replace Jinja api_key token."""
-    key = os.environ.get("API_SECRET_KEY", "dev-secret-local")
+    """Instant server serves raw template — never embed API_SECRET_KEY in HTML."""
     token = b"window._apiKey = {{ api_key|tojson|safe }};"
     if token in plain:
-        repl = ("window._apiKey = " + json.dumps(key) + ";").encode()
-        return plain.replace(token, repl)
+        return plain.replace(token, b'window._apiKey = "";')
     return plain
+
+
+_WEAK_API_SECRETS = frozenset({"", "dev-secret-local", "changeme", "change-me"})
+
+
+def _validate_instant_security() -> None:
+    """Fail fast when production-like runs use weak or missing secrets."""
+    env = (
+        os.environ.get("ENVIRONMENT") or os.environ.get("CC_ENV") or "development"
+    ).strip().lower()
+    secret = (os.environ.get("API_SECRET_KEY") or "").strip()
+    if env == "production":
+        weak = secret.lower() in _WEAK_API_SECRETS or len(secret) < 16
+        if weak:
+            raise SystemExit(
+                "[instant] Refusing to start: ENVIRONMENT=production requires "
+                "API_SECRET_KEY of at least 16 characters (not dev defaults)."
+            )
 
 
 def _read_gzip_dashboard_file() -> bytes | None:
@@ -413,18 +431,107 @@ def _proxy_timeout(path: str) -> int:
 
 
 def _dashboard_api_key(header_value: str | None) -> str | None:
-    """Return the API key the local dashboard proxy should send upstream.
+    """Forward client X-API-Key only — never inject server API_SECRET_KEY."""
+    if header_value is None:
+        return None
+    key = str(header_value).strip()
+    return key or None
 
-    The static dashboard historically falls back to ``dev-secret-local``. In
-    prod-local runs the real key can be supplied from ``.env`` and differ from
-    that fallback, which caused authenticated Ops panels to stay blank with
-    401s. Keep the real key server-side and only rewrite the known dashboard
-    fallback inside this local proxy.
-    """
-    actual = os.environ.get("API_SECRET_KEY") or None
-    if actual and (not header_value or header_value == "dev-secret-local"):
-        return actual
-    return header_value
+
+_INSTANT_STATIC_DIR = (_REPO_ROOT / "src/api/static").resolve()
+_STATIC_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_STATIC_FILE_ALLOWLIST: dict[str, Path] = {}
+_INSTANT_SENSITIVE_DEGRADED_GET = frozenset({"/api/portfolio/monitor"})
+_INSTANT_SENSITIVE_DEGRADED_POST = frozenset({"/api/portfolio/position"})
+
+
+def _refresh_static_allowlist() -> None:
+    """Map relative /static/* keys to pre-validated files (no runtime path join from URL)."""
+    allow: dict[str, Path] = {}
+    root = _INSTANT_STATIC_DIR
+    if not root.is_dir():
+        _STATIC_FILE_ALLOWLIST.clear()
+        return
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            resolved = path.resolve()
+            resolved.relative_to(root)
+        except ValueError:
+            continue
+        if path.is_symlink():
+            try:
+                resolved.resolve().relative_to(root)
+            except ValueError:
+                continue
+        rel_key = path.relative_to(root).as_posix()
+        if rel_key and ".." not in rel_key.split("/"):
+            allow[rel_key] = resolved
+    _STATIC_FILE_ALLOWLIST.clear()
+    _STATIC_FILE_ALLOWLIST.update(allow)
+
+
+def _safe_static_file(url_path: str) -> Path | None:
+    """Resolve /static/* via allowlist populated from src/api/static (no traversal)."""
+    if not url_path.startswith("/static/"):
+        return None
+    if not _STATIC_FILE_ALLOWLIST:
+        _refresh_static_allowlist()
+    rel = urllib.parse.unquote(url_path[len("/static/") :]).replace("\\", "/").lstrip(
+        "/"
+    )
+    if not rel or ".." in rel.split("/"):
+        return None
+    parts = rel.split("/")
+    if any(not part or not _STATIC_SEGMENT_RE.fullmatch(part) for part in parts):
+        return None
+    return _STATIC_FILE_ALLOWLIST.get(rel)
+
+
+def _instant_api_secret() -> str:
+    secret = (os.environ.get("API_SECRET_KEY") or "").strip()
+    if secret:
+        return secret
+    try:
+        from src.core.config import settings  # noqa: PLC0415
+
+        return (getattr(settings, "api_secret_key", None) or "").strip()
+    except Exception:
+        return ""
+
+
+def _instant_is_production() -> bool:
+    env = (os.environ.get("ENVIRONMENT") or os.environ.get("CC_ENV") or "").strip().lower()
+    if env == "production":
+        return True
+    try:
+        from src.core.config import settings  # noqa: PLC0415
+
+        return getattr(settings, "environment", "development") == "production"
+    except Exception:
+        return False
+
+
+def _instant_sensitive_auth(x_api_key: str | None) -> tuple[bool, int, str]:
+    """Fail-closed auth for instant degraded portfolio routes (no dev bypass)."""
+    secret = _instant_api_secret()
+    if not secret:
+        if _instant_is_production():
+            return False, 503, "API key not configured. Set API_SECRET_KEY."
+        return False, 401, "API key required for this endpoint."
+    key = (x_api_key or "").strip()
+    if not key or not hmac.compare_digest(key, secret):
+        return False, 401, "Invalid or missing API key"
+    return True, 200, ""
+
+
+def _cors_allow_origin() -> str:
+    """Restrict cross-origin API access; override with CC_INSTANT_CORS_ORIGIN."""
+    custom = os.environ.get("CC_INSTANT_CORS_ORIGIN", "").strip()
+    if custom:
+        return custom
+    return "http://127.0.0.1:8000"
 
 
 def _load_snapshot():
@@ -2278,7 +2385,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             pass
 
     def _cors_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", _cors_allow_origin())
         self.send_header(
             "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
         )
@@ -2399,17 +2506,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_json(json.dumps(health_payload).encode())
             return
 
-        # Static files — serve locally
-        if self.path.startswith("/static/"):
-            fpath = _REPO_ROOT / "src/api" / self.path.lstrip("/")
+        path_only = self.path.split("?", 1)[0]
+        raw_post: bytes | None = None
+        if self.command == "POST":
+            cl = self.headers.get("Content-Length")
+            raw_post = self.rfile.read(int(cl)) if cl else b""
+
+        # Static files — serve locally (canonical path under src/api/static)
+        if path_only.startswith("/static/"):
+            fpath = _safe_static_file(path_only)
             body = b""
-            if fpath.is_file():
+            if fpath is not None:
                 body = _read_file_bytes(fpath)
-            if fpath.name == "cc-helpers.js" and len(body) < 50000:
+            if (
+                fpath is not None
+                and fpath.name == "cc-helpers.js"
+                and len(body) < 50000
+            ):
                 cache = _REPO_ROOT / "data/cache/cc-helpers.bundle.js"
                 if cache.is_file():
                     body = _read_file_bytes(cache)
-            if body:
+            if body and fpath is not None:
                 self.send_response(200)
                 ct = {
                     ".css": "text/css",
@@ -2427,7 +2544,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._json_error(404, "Static file not found")
             return
 
-        path_only = self.path.split("?", 1)[0]
         degrade_reason = "backend importing — full API still loading"
 
         # Always-local fast GET paths — never block the UI on a slow :8001 ranked pipeline.
@@ -2443,19 +2559,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
 
         if _mark_backend_ready():
-            if self._proxy():
+            if self._proxy(body=raw_post):
                 return
             degrade_reason = "backend proxy failed — serving cached data"
 
+        if path_only in _INSTANT_SENSITIVE_DEGRADED_GET and self.command == "GET":
+            ok, status, detail = _instant_sensitive_auth(self.headers.get("X-API-Key"))
+            if not ok:
+                self._send_json(json.dumps({"detail": detail}).encode(), status=status)
+                return
+
         if self.command == "POST":
-            cl = self.headers.get("Content-Length")
-            raw = self.rfile.read(int(cl)) if cl else b""
-            if path_only == "/api/portfolio/position":
-                post_result = _degraded_portfolio_position_post(raw)
-                if post_result is not None:
-                    status, post_body = post_result
-                    self._send_json(post_body, status=status)
+            raw = raw_post if raw_post is not None else b""
+            if path_only in _INSTANT_SENSITIVE_DEGRADED_POST:
+                ok, status, detail = _instant_sensitive_auth(
+                    self.headers.get("X-API-Key")
+                )
+                if not ok:
+                    self._send_json(
+                        json.dumps({"detail": detail}).encode(), status=status
+                    )
                     return
+            if path_only == "/api/portfolio/position":
+                self._send_json(
+                    json.dumps(
+                        {
+                            "detail": (
+                                "Portfolio writes require the full API backend; "
+                                "instant degraded mode does not persist positions."
+                            ),
+                            "degraded": True,
+                            "writes_blocked": True,
+                        }
+                    ).encode(),
+                    status=503,
+                )
+                return
             if path_only == "/api/live/backtest":
                 bt_result = _degraded_live_backtest_post(raw)
                 if bt_result is not None:
@@ -2507,14 +2646,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _proxy(self) -> bool:
+    def _proxy(self, body: bytes | None = None) -> bool:
         """Forward request to uvicorn backend on BACKEND_PORT. True if response sent."""
         url = f"http://127.0.0.1:{BACKEND_PORT}{self.path}"
         try:
-            body = None
-            cl = self.headers.get("Content-Length")
-            if cl:
-                body = self.rfile.read(int(cl))
+            if body is None:
+                cl = self.headers.get("Content-Length")
+                body = self.rfile.read(int(cl)) if cl else None
 
             req = urllib.request.Request(url, data=body, method=self.command)
             req.add_header(
@@ -2770,6 +2908,8 @@ def _log_main_exit() -> None:
 def main() -> None:
     if not _acquire_single_instance():
         sys.exit(0)
+
+    _validate_instant_security()
 
     # Clear stale listeners from a crashed prior instance (we hold the singleton lock)
     _kill_port(PORT)

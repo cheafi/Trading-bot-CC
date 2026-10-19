@@ -8,6 +8,7 @@ Routers import from here instead of from main.py.
 from __future__ import annotations
 
 import math
+import os
 import re
 from typing import Any
 
@@ -52,16 +53,31 @@ def validate_ticker(ticker: str) -> str:
 # ── Auth dependencies ─────────────────────────────────────────────────────────
 
 
-async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> bool:
-    """Verify API key from X-API-Key header.
+def _dev_unauth_api_allowed() -> bool:
+    """Explicit local-only bypass — never default for mutating broker/ledger APIs."""
+    return os.environ.get("CC_DEV_ALLOW_UNAUTH_API", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
-    Security hardening: in production, a missing API_SECRET_KEY means ALL
-    authenticated endpoints are locked. In development we allow open access.
-    """
+
+def _load_settings():
+    from src.core.config import settings  # noqa: PLC0415
+
+    return settings
+
+
+def _require_matching_api_key(
+    x_api_key: str | None, *, allow_dev_bypass: bool
+) -> bool:
     try:
-        from src.core.config import settings  # noqa: PLC0415
-    except Exception:
-        return True
+        settings = _load_settings()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Configuration unavailable; cannot authenticate.",
+        ) from exc
 
     if not settings.api_secret_key:
         if getattr(settings, "environment", "development") == "production":
@@ -69,19 +85,43 @@ async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> bo
                 status_code=503,
                 detail="API key not configured. Set API_SECRET_KEY.",
             )
-        return True  # dev/staging: open access
+        if allow_dev_bypass and _dev_unauth_api_allowed():
+            return True
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "API key required. Set API_SECRET_KEY"
+                + (
+                    " or CC_DEV_ALLOW_UNAUTH_API=1 for non-sensitive local dev only."
+                    if allow_dev_bypass
+                    else " for this endpoint."
+                )
+            ),
+        )
 
     if not x_api_key or x_api_key != settings.api_secret_key:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     return True
 
 
+async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> bool:
+    """Verify API key; optional CC_DEV_ALLOW_UNAUTH_API for non-sensitive routes only."""
+    return _require_matching_api_key(x_api_key, allow_dev_bypass=True)
+
+
+async def verify_sensitive_api_key(
+    x_api_key: str = Header(None, alias="X-API-Key"),
+) -> bool:
+    """Broker, ledger, and account mutations — never allow unauthenticated dev bypass."""
+    return _require_matching_api_key(x_api_key, allow_dev_bypass=False)
+
+
 async def optional_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
-    """Optional API key verification — returns None on mismatch (no raise)."""
+    """Optional key for read-only surfaces — invalid key yields None (no raise)."""
     try:
-        from src.core.config import settings  # noqa: PLC0415
+        settings = _load_settings()
     except Exception:
-        return x_api_key
+        return None
     if settings.api_secret_key and x_api_key != settings.api_secret_key:
         return None
     return x_api_key

@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from src.api.deps import optional_api_key, sanitize_for_json
+from src.api.deps import optional_api_key, sanitize_for_json, verify_api_key
 from src.services.cc_state import attach_page_capability, attach_system_state
 from src.services.vibe_agent import (
     agent_status,
@@ -87,7 +87,9 @@ async def get_overnight_brief(request: Request, _=optional_api_key):
 
 
 @router.post("/intent/parse")
-async def post_parse_intent(body: Dict[str, Any], _=optional_api_key):
+async def post_parse_intent(
+    body: Dict[str, Any], _: bool = Depends(verify_api_key)
+):
     text = str((body or {}).get("text") or "").strip()
     if not text or len(text) > 2000:
         raise HTTPException(status_code=400, detail="text required (max 2000 chars)")
@@ -96,7 +98,7 @@ async def post_parse_intent(body: Dict[str, Any], _=optional_api_key):
 
 
 @router.post("/intent")
-async def post_intent(body: Dict[str, Any], _=optional_api_key):
+async def post_intent(body: Dict[str, Any], _: bool = Depends(verify_api_key)):
     text = str((body or {}).get("text") or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="text required")
@@ -115,7 +117,7 @@ async def get_rules(status: Optional[str] = None, _=optional_api_key):
 
 
 @router.post("/rules")
-async def post_rule(body: Dict[str, Any], _=optional_api_key):
+async def post_rule(body: Dict[str, Any], _: bool = Depends(verify_api_key)):
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="JSON body required")
     rule = save_rule(
@@ -131,7 +133,9 @@ async def post_rule(body: Dict[str, Any], _=optional_api_key):
 
 
 @router.patch("/rules/{rule_id}")
-async def patch_rule(rule_id: str, body: Dict[str, Any], _=optional_api_key):
+async def patch_rule(
+    rule_id: str, body: Dict[str, Any], _: bool = Depends(verify_api_key)
+):
     updated = update_rule(rule_id, body or {})
     if not updated:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -158,7 +162,9 @@ async def get_alerts(limit: int = 50, _=optional_api_key):
 
 
 @router.patch("/alerts/{alert_id}")
-async def patch_alert(alert_id: str, body: Dict[str, Any], _=optional_api_key):
+async def patch_alert(
+    alert_id: str, body: Dict[str, Any], _: bool = Depends(verify_api_key)
+):
     updated = update_alert(alert_id, body or {})
     if not updated:
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -171,7 +177,9 @@ async def get_journal(limit: int = 100, _=optional_api_key):
 
 
 @router.post("/guardrail")
-async def post_guardrail(body: Dict[str, Any], request: Request, _=optional_api_key):
+async def post_guardrail(
+    body: Dict[str, Any], request: Request, _: bool = Depends(verify_api_key)
+):
     action_type = str((body or {}).get("action_type") or "").strip()
     if not action_type:
         raise HTTPException(status_code=400, detail="action_type required")
@@ -183,7 +191,9 @@ async def post_guardrail(body: Dict[str, Any], request: Request, _=optional_api_
 
 
 @router.post("/review-outcome")
-async def post_review_outcome(body: Dict[str, Any], _=optional_api_key):
+async def post_review_outcome(
+    body: Dict[str, Any], _: bool = Depends(verify_api_key)
+):
     alert_id = str((body or {}).get("alert_id") or "").strip()
     if not alert_id:
         raise HTTPException(status_code=400, detail="alert_id required")

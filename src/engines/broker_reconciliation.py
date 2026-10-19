@@ -278,7 +278,8 @@ class BrokerReconciliationEngine:
                 sign = 1 if rec.direction == "BUY" else -1
                 qty = rec.filled_quantity * sign
                 expected[rec.ticker] = expected.get(rec.ticker, 0) + qty
-        for ticker, exp_qty in expected.items():
+        for ticker in set(expected.keys()) | set(broker_positions.keys()):
+            exp_qty = expected.get(ticker, 0)
             broker_qty = broker_positions.get(ticker, 0)
             if exp_qty != broker_qty:
                 self._discrepancies.append(

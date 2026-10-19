@@ -10,6 +10,33 @@ permissions:
   contents: read
 
 jobs:
+  p0-security-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements/base.txt -r requirements/api.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: P0 security regression suite
+        run: |
+          PYTHONPATH=. python -m pytest -q \
+            tests/test_instant_proxy_security.py \
+            tests/test_instant_proxy_http.py \
+            tests/test_p0_auth_ledger.py \
+            tests/test_vnext_p0_review.py
+        env:
+          TRADING_ENV: paper
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -181,4 +208,4 @@ jobs:
       - name: Audit dependencies
         run: |
           pip install pip-audit
-          pip-audit -r requirements/base.txt --ignore-vuln GHSA-0000-0000-0000 || true
+          pip-audit -r requirements/base.txt

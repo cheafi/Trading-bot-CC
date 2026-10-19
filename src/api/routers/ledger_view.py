@@ -14,9 +14,9 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from src.api.deps import optional_api_key
+from src.api.deps import verify_sensitive_api_key
 from src.utils.numeric_parse import parse_numeric
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ async def ledger_list(
     strategy: Optional[str] = None,
     direction: Optional[str] = None,
     ticker: Optional[str] = None,
-    _=optional_api_key,
+    _: bool = Depends(verify_sensitive_api_key),
 ):
     """Return most-recent closed trades (paginated, filterable)."""
     limit = max(1, min(limit, 1000))
@@ -76,7 +76,7 @@ async def ledger_list(
 
 
 @router.get("/api/ledger/stats", tags=["ledger"])
-async def ledger_stats(_=optional_api_key):
+async def ledger_stats(_: bool = Depends(verify_sensitive_api_key)):
     """Aggregate ledger stats — count, win-rate, expectancy, by-strategy."""
     rows = _read_all()
     if not rows:
