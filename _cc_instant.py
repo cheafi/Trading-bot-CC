@@ -12,6 +12,7 @@ Architecture:
 
 import atexit
 import fcntl
+import hmac
 import http.server
 import json
 import os
@@ -434,6 +435,73 @@ def _dashboard_api_key(header_value: str | None) -> str | None:
         return None
     key = str(header_value).strip()
     return key or None
+
+
+_INSTANT_STATIC_DIR = (_REPO_ROOT / "src/api/static").resolve()
+_INSTANT_SENSITIVE_DEGRADED_GET = frozenset({"/api/portfolio/monitor"})
+_INSTANT_SENSITIVE_DEGRADED_POST = frozenset({"/api/portfolio/position"})
+
+
+def _safe_static_file(url_path: str) -> Path | None:
+    """Resolve /static/* paths under src/api/static only (no traversal)."""
+    if not url_path.startswith("/static/"):
+        return None
+    rel = urllib.parse.unquote(url_path[len("/static/") :])
+    if not rel or rel.startswith(("/", "\\")):
+        return None
+    parts = rel.replace("\\", "/").split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        return None
+    candidate = (_INSTANT_STATIC_DIR / rel).resolve()
+    try:
+        candidate.relative_to(_INSTANT_STATIC_DIR)
+    except ValueError:
+        return None
+    if candidate.is_symlink():
+        try:
+            candidate.resolve().relative_to(_INSTANT_STATIC_DIR)
+        except ValueError:
+            return None
+    if not candidate.is_file():
+        return None
+    return candidate
+
+
+def _instant_api_secret() -> str:
+    secret = (os.environ.get("API_SECRET_KEY") or "").strip()
+    if secret:
+        return secret
+    try:
+        from src.core.config import settings  # noqa: PLC0415
+
+        return (getattr(settings, "api_secret_key", None) or "").strip()
+    except Exception:
+        return ""
+
+
+def _instant_is_production() -> bool:
+    env = (os.environ.get("ENVIRONMENT") or os.environ.get("CC_ENV") or "").strip().lower()
+    if env == "production":
+        return True
+    try:
+        from src.core.config import settings  # noqa: PLC0415
+
+        return getattr(settings, "environment", "development") == "production"
+    except Exception:
+        return False
+
+
+def _instant_sensitive_auth(x_api_key: str | None) -> tuple[bool, int, str]:
+    """Fail-closed auth for instant degraded portfolio routes (no dev bypass)."""
+    secret = _instant_api_secret()
+    if not secret:
+        if _instant_is_production():
+            return False, 503, "API key not configured. Set API_SECRET_KEY."
+        return False, 401, "API key required for this endpoint."
+    key = (x_api_key or "").strip()
+    if not key or not hmac.compare_digest(key, secret):
+        return False, 401, "Invalid or missing API key"
+    return True, 200, ""
 
 
 def _cors_allow_origin() -> str:
@@ -2416,17 +2484,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_json(json.dumps(health_payload).encode())
             return
 
-        # Static files — serve locally
-        if self.path.startswith("/static/"):
-            fpath = _REPO_ROOT / "src/api" / self.path.lstrip("/")
+        path_only = self.path.split("?", 1)[0]
+        raw_post: bytes | None = None
+        if self.command == "POST":
+            cl = self.headers.get("Content-Length")
+            raw_post = self.rfile.read(int(cl)) if cl else b""
+
+        # Static files — serve locally (canonical path under src/api/static)
+        if path_only.startswith("/static/"):
+            fpath = _safe_static_file(path_only)
             body = b""
-            if fpath.is_file():
+            if fpath is not None:
                 body = _read_file_bytes(fpath)
-            if fpath.name == "cc-helpers.js" and len(body) < 50000:
+            if (
+                fpath is not None
+                and fpath.name == "cc-helpers.js"
+                and len(body) < 50000
+            ):
                 cache = _REPO_ROOT / "data/cache/cc-helpers.bundle.js"
                 if cache.is_file():
                     body = _read_file_bytes(cache)
-            if body:
+            if body and fpath is not None:
                 self.send_response(200)
                 ct = {
                     ".css": "text/css",
@@ -2444,7 +2522,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._json_error(404, "Static file not found")
             return
 
-        path_only = self.path.split("?", 1)[0]
         degrade_reason = "backend importing — full API still loading"
 
         # Always-local fast GET paths — never block the UI on a slow :8001 ranked pipeline.
@@ -2460,13 +2537,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
 
         if _mark_backend_ready():
-            if self._proxy():
+            if self._proxy(body=raw_post):
                 return
             degrade_reason = "backend proxy failed — serving cached data"
 
+        if path_only in _INSTANT_SENSITIVE_DEGRADED_GET and self.command == "GET":
+            ok, status, detail = _instant_sensitive_auth(self.headers.get("X-API-Key"))
+            if not ok:
+                self._send_json(json.dumps({"detail": detail}).encode(), status=status)
+                return
+
         if self.command == "POST":
-            cl = self.headers.get("Content-Length")
-            raw = self.rfile.read(int(cl)) if cl else b""
+            raw = raw_post if raw_post is not None else b""
+            if path_only in _INSTANT_SENSITIVE_DEGRADED_POST:
+                ok, status, detail = _instant_sensitive_auth(
+                    self.headers.get("X-API-Key")
+                )
+                if not ok:
+                    self._send_json(
+                        json.dumps({"detail": detail}).encode(), status=status
+                    )
+                    return
             if path_only == "/api/portfolio/position":
                 post_result = _degraded_portfolio_position_post(raw)
                 if post_result is not None:
@@ -2524,14 +2615,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _proxy(self) -> bool:
+    def _proxy(self, body: bytes | None = None) -> bool:
         """Forward request to uvicorn backend on BACKEND_PORT. True if response sent."""
         url = f"http://127.0.0.1:{BACKEND_PORT}{self.path}"
         try:
-            body = None
-            cl = self.headers.get("Content-Length")
-            if cl:
-                body = self.rfile.read(int(cl))
+            if body is None:
+                cl = self.headers.get("Content-Length")
+                body = self.rfile.read(int(cl)) if cl else None
 
             req = urllib.request.Request(url, data=body, method=self.command)
             req.add_header(
