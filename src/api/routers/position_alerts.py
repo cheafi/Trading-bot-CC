@@ -23,7 +23,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, Request
 
-from src.api.deps import optional_api_key, verify_api_key
+from src.api.deps import optional_api_key, verify_api_key, verify_sensitive_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -51,7 +51,10 @@ def _severity_rank(sev: str) -> int:
 
 
 @router.get("/api/portfolio/risk-alerts", tags=["portfolio"])
-async def portfolio_risk_alerts(request: Request, _=optional_api_key):
+async def portfolio_risk_alerts(
+    request: Request,
+    _: bool = Depends(verify_sensitive_api_key),
+):
     """Scan current holdings and return actionable risk alerts."""
     alerts: List[Dict[str, Any]] = []
 

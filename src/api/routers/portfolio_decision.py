@@ -9,7 +9,7 @@ from typing import Any, Dict, Tuple
 
 from fastapi import APIRouter, Depends, Request
 
-from src.api.deps import sanitize_for_json, verify_api_key
+from src.api.deps import sanitize_for_json, verify_sensitive_api_key
 from src.services.portfolio_decision_console import build_portfolio_decision
 
 logger = logging.getLogger(__name__)
@@ -86,13 +86,20 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     ibkr = payload.get("ibkr_linkage") if isinstance(payload.get("ibkr_linkage"), dict) else {}
     broker_connected = bool(ibkr.get("broker_connected"))
-    broker_truth = bool(ibkr.get("broker_truth"))
+    sync_quality = str(ibkr.get("sync_quality") or "").lower()
+    book_manual = source in ("manual", "demo-seed", "")
 
-    if broker_truth and broker_connected:
+    # Conservative: verified only when server linkage reports full broker_truth sync.
+    broker_verified = (
+        not book_manual
+        and broker_connected
+        and sync_quality == "broker_truth"
+    )
+    if broker_verified:
         truth_mode = "BROKER_VERIFIED"
     elif broker_connected:
         truth_mode = "BROKER_UNVERIFIED"
-    elif source in ("manual", "demo-seed", ""):
+    elif book_manual:
         truth_mode = "MANUAL"
     elif source == "paper":
         truth_mode = "PAPER_SIMULATION"
@@ -107,7 +114,7 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
             "read the same in-process portfolio state."
         ),
         "portfolio_truth_mode": truth_mode,
-        "broker_verified": broker_truth and broker_connected,
+        "broker_verified": broker_verified,
         "protection_note": (
             "Suggested stop/target levels are analytical only — not broker-confirmed "
             "protective orders unless explicitly reconciled elsewhere."
@@ -151,7 +158,7 @@ def _cache_put(scope: str, payload: Dict[str, Any], now: float) -> None:
 @router.get("/portfolio-decision")
 async def portfolio_decision(
     request: Request,
-    _: bool = Depends(verify_api_key),
+    _: bool = Depends(verify_sensitive_api_key),
 ):
     """Portfolio decision summary + attribution + monitor + sleeves (authenticated)."""
     api_key = request.headers.get("X-API-Key")

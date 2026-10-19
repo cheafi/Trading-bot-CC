@@ -10,9 +10,10 @@ from datetime import datetime, timezone
 from typing import List
 
 import numpy as np
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from src.api.deps import verify_sensitive_api_key
 from src.services.ibkr_service import get_ibkr_service
 from src.services.portfolio_positions import build_position_record, portfolio_header_snapshot
 
@@ -100,7 +101,11 @@ _operator_state: dict = {
 
 
 @router.post("/api/portfolio/import", tags=["portfolio"])
-async def portfolio_import(req: PortfolioImportRequest, request: Request):
+async def portfolio_import(
+    req: PortfolioImportRequest,
+    request: Request,
+    _: bool = Depends(verify_sensitive_api_key),
+):
     """Batch-import portfolio holdings — multiple stocks at once."""
     global _user_portfolio
     now = datetime.now(timezone.utc).isoformat() + "Z"
@@ -146,13 +151,16 @@ async def portfolio_import(req: PortfolioImportRequest, request: Request):
 
 
 @router.get("/api/portfolio/holdings", tags=["portfolio"])
-async def portfolio_holdings():
+async def portfolio_holdings(_: bool = Depends(verify_sensitive_api_key)):
     """Return the currently stored portfolio."""
     return _user_portfolio
 
 
 @router.post("/api/portfolio/seed-demo", tags=["portfolio"])
-async def portfolio_seed_demo(request: Request):
+async def portfolio_seed_demo(
+    request: Request,
+    _: bool = Depends(verify_sensitive_api_key),
+):
     """Seed a diversified demo portfolio for instant HISTSIM / portfolio console demo.
 
     Idempotent — overwrites any existing holdings. Pulls live prices via
@@ -217,7 +225,7 @@ async def portfolio_seed_demo(request: Request):
 
 
 @router.get("/api/portfolio/futu", tags=["portfolio"])
-async def portfolio_from_futu():
+async def portfolio_from_futu(_: bool = Depends(verify_sensitive_api_key)):
     """Auto-fetch positions from Futu OpenD and store as portfolio."""
     global _user_portfolio
     try:
@@ -269,7 +277,11 @@ async def portfolio_from_futu():
 
 
 @router.post("/api/portfolio/position", tags=["portfolio"])
-async def add_position(req: PositionAddRequest, request: Request):
+async def add_position(
+    req: PositionAddRequest,
+    request: Request,
+    _: bool = Depends(verify_sensitive_api_key),
+):
     """Add a single position (e.g., from BUY confirmation flow)."""
     global _user_portfolio
     t = req.ticker.upper().strip()
@@ -330,7 +342,10 @@ async def add_position(req: PositionAddRequest, request: Request):
 
 
 @router.put("/api/portfolio/position", tags=["portfolio"])
-async def update_position(req: PositionUpdateRequest):
+async def update_position(
+    req: PositionUpdateRequest,
+    _: bool = Depends(verify_sensitive_api_key),
+):
     """Update stop/target/shares for an existing position."""
     global _user_portfolio
     t = req.ticker.upper().strip()
@@ -361,7 +376,10 @@ async def update_position(req: PositionUpdateRequest):
 
 
 @router.delete("/api/portfolio/position/{ticker}", tags=["portfolio"])
-async def remove_position(ticker: str):
+async def remove_position(
+    ticker: str,
+    _: bool = Depends(verify_sensitive_api_key),
+):
     """Remove a position from portfolio."""
     global _user_portfolio
     t = ticker.upper().strip()
@@ -377,7 +395,10 @@ async def remove_position(ticker: str):
 
 
 @router.get("/api/portfolio/monitor", tags=["portfolio"])
-async def portfolio_monitor(request: Request):
+async def portfolio_monitor(
+    request: Request,
+    _: bool = Depends(verify_sensitive_api_key),
+):
     """Monitor all positions: live price, PnL, R-multiple, stop/target alerts."""
     holdings = _user_portfolio.get("holdings", [])
     if not holdings:

@@ -94,6 +94,21 @@ def test_portfolio_data_boundary_manual_not_broker_verified() -> None:
     assert "not broker-confirmed" in boundary["protection_note"]
 
 
+def test_portfolio_data_boundary_flags_alone_not_broker_verified() -> None:
+    portfolio_router._user_portfolio = {"source": "manual", "holdings": []}
+    boundary = portfolio_data_boundary(
+        {
+            "ibkr_linkage": {
+                "broker_connected": True,
+                "broker_truth": True,
+                "sync_quality": "mixed_local_broker",
+            }
+        }
+    )
+    assert boundary["broker_verified"] is False
+    assert boundary["portfolio_truth_mode"] == "BROKER_UNVERIFIED"
+
+
 def test_portfolio_fingerprint_reflects_source() -> None:
     portfolio_router._user_portfolio = {
         "holdings": [{"ticker": "X"}],
