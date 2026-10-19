@@ -228,10 +228,13 @@ class BrokerManager:
                 broker=str(broker or self._active_broker),
             )
 
+        import uuid
+
         from src.core.order_execution import (
             track_broker_fill,
             track_broker_order_intent,
         )
+        from src.engines.broker_reconciliation import broker_reconciliation
 
         order = OrderRequest(
             ticker=ticker,
@@ -243,18 +246,26 @@ class BrokerManager:
             market=market,
         )
 
+        client_order_id = uuid.uuid4().hex[:16]
+        local_oid = track_broker_order_intent(
+            source="broker_manager",
+            symbol=ticker,
+            side=side.value,
+            quantity=quantity,
+            client_order_id=client_order_id,
+            limit_price=limit_price,
+        )
+        if not broker_reconciliation._persist_ok:
+            raise BrokerError(
+                message="Reconciliation ledger persist failed — order not sent",
+                broker=str(broker or self._active_broker),
+            )
+
         result = await target_broker.place_order(order)
 
         # Notify callbacks
         if result.success:
-            oid = track_broker_order_intent(
-                source="broker_manager",
-                symbol=ticker,
-                side=side.value,
-                quantity=quantity,
-                order_id=result.order_id,
-                limit_price=limit_price,
-            )
+            oid = str(result.order_id or local_oid)
             filled = int(getattr(result, "filled_qty", 0) or 0)
             if filled > 0:
                 track_broker_fill(

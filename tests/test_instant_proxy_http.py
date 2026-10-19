@@ -141,8 +141,10 @@ def test_degraded_portfolio_position_post_requires_api_key(
                 "X-API-Key": "integration-test-secret-key",
             },
         )
-        assert status == 200
-        assert json.loads(raw.decode()).get("status") == "added"
+        assert status == 503
+        payload = json.loads(raw.decode())
+        assert payload.get("writes_blocked") is True
+        assert not instant._PORTFOLIO_LOCAL_PATH.is_file()
 
 
 def test_proxy_receives_pre_read_post_body(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -290,7 +292,7 @@ def test_proxy_backend_503_degraded_portfolio_still_requires_key(
         assert "positions" in json.loads(raw.decode())
 
 
-def test_proxy_backend_503_post_position_no_anonymous_mutation(
+def test_proxy_backend_503_post_position_blocks_writes_even_with_key(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
@@ -314,4 +316,17 @@ def test_proxy_backend_503_post_position_no_anonymous_mutation(
             headers={"Content-Type": "application/json"},
         )
         assert status == 401
+        status, raw = _request(
+            host,
+            port,
+            "POST",
+            "/api/portfolio/position",
+            body=body,
+            headers={
+                "Content-Type": "application/json",
+                "X-API-Key": _TEST_SECRET,
+            },
+        )
+        assert status == 503
+        assert json.loads(raw.decode()).get("writes_blocked") is True
         assert not instant._PORTFOLIO_LOCAL_PATH.is_file()

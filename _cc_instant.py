@@ -2559,11 +2559,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     )
                     return
             if path_only == "/api/portfolio/position":
-                post_result = _degraded_portfolio_position_post(raw)
-                if post_result is not None:
-                    status, post_body = post_result
-                    self._send_json(post_body, status=status)
-                    return
+                self._send_json(
+                    json.dumps(
+                        {
+                            "detail": (
+                                "Portfolio writes require the full API backend; "
+                                "instant degraded mode does not persist positions."
+                            ),
+                            "degraded": True,
+                            "writes_blocked": True,
+                        }
+                    ).encode(),
+                    status=503,
+                )
+                return
             if path_only == "/api/live/backtest":
                 bt_result = _degraded_live_backtest_post(raw)
                 if bt_result is not None:

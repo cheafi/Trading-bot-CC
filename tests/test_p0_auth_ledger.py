@@ -128,3 +128,52 @@ def test_dev_bypass_does_not_open_ledger_write(monkeypatch):
         json={"ticker": "SPY", "entry_price": 1.0, "exit_price": 2.0},
     )
     assert resp.status_code == 401
+
+
+def _dev_bypass_client(monkeypatch):
+    monkeypatch.setenv("CC_DEV_ALLOW_UNAUTH_API", "1")
+
+    class _Settings:
+        api_secret_key = ""
+        environment = "development"
+
+    monkeypatch.setattr("src.api.deps._load_settings", lambda: _Settings())
+
+    from fastapi.testclient import TestClient
+
+    from src.api.main import app
+
+    return TestClient(app)
+
+
+def test_dev_bypass_does_not_open_ibkr_connect(monkeypatch):
+    client = _dev_bypass_client(monkeypatch)
+    resp = client.post("/api/ibkr/connect", json={"mode": "paper"})
+    assert resp.status_code == 401
+
+
+def test_dev_bypass_does_not_open_ibkr_order(monkeypatch):
+    client = _dev_bypass_client(monkeypatch)
+    resp = client.post(
+        "/api/ibkr/order",
+        json={
+            "symbol": "AAPL",
+            "action": "BUY",
+            "quantity": 1,
+            "sec_type": "STK",
+            "order_type": "MKT",
+        },
+    )
+    assert resp.status_code == 401
+
+
+def test_dev_bypass_does_not_open_broker_switch(monkeypatch):
+    client = _dev_bypass_client(monkeypatch)
+    resp = client.post("/broker/switch/paper")
+    assert resp.status_code == 401
+
+
+def test_dev_bypass_does_not_open_ops_engine_start(monkeypatch):
+    client = _dev_bypass_client(monkeypatch)
+    resp = client.post("/api/ops/engine/start")
+    assert resp.status_code == 401

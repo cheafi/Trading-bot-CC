@@ -55,7 +55,9 @@ async def get_broker_status(_: bool = Depends(verify_api_key)):
 
 
 @router.post("/switch/{broker_type}")
-async def switch_broker(broker_type: str, _: bool = Depends(verify_api_key)):
+async def switch_broker(
+    broker_type: str, _: bool = Depends(verify_sensitive_api_key)
+):
     """
     Switch active broker.
 
