@@ -73,6 +73,13 @@ def test_simulation_ready_explicit_env(tmp_path, monkeypatch) -> None:
     assert eng.can_trade() is True
 
 
+def test_reconcile_detects_broker_only_positions(tmp_path) -> None:
+    eng = BrokerReconciliationEngine(snapshot_path=tmp_path / "rec_broker_only.json")
+    eng.reconcile(broker_positions={"AAPL": 100})
+    assert eng._reconciliation_status == ReconciliationStatus.MISMATCH
+    assert any(d.get("ticker") == "AAPL" for d in eng._discrepancies)
+
+
 def test_broker_empty_positions_still_compares(tmp_path) -> None:
     eng = BrokerReconciliationEngine(snapshot_path=tmp_path / "rec2.json")
     eng.record_order("o1", "AAPL", "BUY", 10)

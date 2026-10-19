@@ -22,7 +22,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from src.api.deps import verify_api_key
+from src.api.deps import verify_sensitive_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -50,9 +50,11 @@ def _utc_now_iso() -> str:
 
 
 def _performance_trust_fields(source: str) -> Dict[str, Any]:
-    """Classify rows — clients cannot self-declare broker_verified."""
+    """Classify rows — broker_verified only from reconciliation service (not API)."""
     src = (source or "manual").strip().lower()
-    if src in ("paper_sim", "paper", "simulation", "ibkr_bracket", "ibkr"):
+    if src in ("ibkr_bracket", "ibkr", "broker"):
+        tier = "broker_pending_verification"
+    elif src in ("paper_sim", "paper", "simulation"):
         tier = "paper_simulated"
     elif src in ("manual", "user", "operator"):
         tier = "manual_unverified"
@@ -71,7 +73,7 @@ def _performance_trust_fields(source: str) -> Dict[str, Any]:
 async def ledger_close_trade(
     req: CloseTradeRequest,
     request: Request,
-    _: bool = Depends(verify_api_key),
+    _: bool = Depends(verify_sensitive_api_key),
 ):
     """Append a single closed trade row to closed_trades.jsonl."""
     entry = req.entry_time or _utc_now_iso()

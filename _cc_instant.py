@@ -159,11 +159,13 @@ def _validate_instant_security() -> None:
         os.environ.get("ENVIRONMENT") or os.environ.get("CC_ENV") or "development"
     ).strip().lower()
     secret = (os.environ.get("API_SECRET_KEY") or "").strip()
-    if env == "production" and secret.lower() in _WEAK_API_SECRETS:
-        raise SystemExit(
-            "[instant] Refusing to start: ENVIRONMENT=production requires "
-            "a strong API_SECRET_KEY (not dev-secret-local or empty)."
-        )
+    if env == "production":
+        weak = secret.lower() in _WEAK_API_SECRETS or len(secret) < 16
+        if weak:
+            raise SystemExit(
+                "[instant] Refusing to start: ENVIRONMENT=production requires "
+                "API_SECRET_KEY of at least 16 characters (not dev defaults)."
+            )
 
 
 def _read_gzip_dashboard_file() -> bytes | None:

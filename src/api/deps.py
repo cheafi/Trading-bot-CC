@@ -68,8 +68,9 @@ def _load_settings():
     return settings
 
 
-async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> bool:
-    """Verify API key from X-API-Key header (fail-closed)."""
+def _require_matching_api_key(
+    x_api_key: str | None, *, allow_dev_bypass: bool
+) -> bool:
     try:
         settings = _load_settings()
     except Exception as exc:
@@ -84,19 +85,35 @@ async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> bo
                 status_code=503,
                 detail="API key not configured. Set API_SECRET_KEY.",
             )
-        if _dev_unauth_api_allowed():
+        if allow_dev_bypass and _dev_unauth_api_allowed():
             return True
         raise HTTPException(
             status_code=401,
             detail=(
-                "API key required. Set API_SECRET_KEY or "
-                "CC_DEV_ALLOW_UNAUTH_API=1 for restricted local dev only."
+                "API key required. Set API_SECRET_KEY"
+                + (
+                    " or CC_DEV_ALLOW_UNAUTH_API=1 for non-sensitive local dev only."
+                    if allow_dev_bypass
+                    else " for this endpoint."
+                )
             ),
         )
 
     if not x_api_key or x_api_key != settings.api_secret_key:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     return True
+
+
+async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> bool:
+    """Verify API key; optional CC_DEV_ALLOW_UNAUTH_API for non-sensitive routes only."""
+    return _require_matching_api_key(x_api_key, allow_dev_bypass=True)
+
+
+async def verify_sensitive_api_key(
+    x_api_key: str = Header(None, alias="X-API-Key"),
+) -> bool:
+    """Broker, ledger, and account mutations — never allow unauthenticated dev bypass."""
+    return _require_matching_api_key(x_api_key, allow_dev_bypass=False)
 
 
 async def optional_api_key(x_api_key: str = Header(None, alias="X-API-Key")):

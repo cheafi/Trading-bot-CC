@@ -30,6 +30,13 @@ def test_validate_instant_security_blocks_weak_production_secret(monkeypatch) ->
         instant._validate_instant_security()
 
 
+def test_validate_instant_security_blocks_short_production_secret(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("API_SECRET_KEY", "tooshort")
+    with pytest.raises(SystemExit):
+        instant._validate_instant_security()
+
+
 def test_validate_instant_security_allows_dev_weak_secret(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.setenv("API_SECRET_KEY", "dev-secret-local")
