@@ -3364,7 +3364,7 @@ function cc() {
 		dosFetchBannerBlockerLine() {
 			const missing = this.dosFetchBannerMissingLine()
 			const bits = ["現時只可確認結構", "不可 sizing / handoff"]
-			if (missing) bits.push(missing.replace(/^缺少 · /, "缺少 · "))
+			if (missing) bits.push(missing)
 			return bits.join(" · ")
 		},
 		dosFetchBannerExistsLine() {
@@ -8281,13 +8281,11 @@ function cc() {
 				const rr = this.parseRR(t.risk_reward || 0)
 				if (rr > 0 && (!best_rr || rr > best_rr.risk_reward)) best_rr = { ticker: t.ticker, risk_reward: rr }
 			})
-			const stock_mon = (d.near_miss || [])
-				.slice(0, 3)
-				.map((nm) => ({
-					class: "stock",
-					rule: "Upgrade watch " + (nm.ticker || ""),
-					detail: nm.upgrade_trigger || "",
-				}))
+			const stock_mon = (d.near_miss || []).slice(0, 3).map((nm) => ({
+				class: "stock",
+				rule: "Upgrade watch " + (nm.ticker || ""),
+				detail: nm.upgrade_trigger || "",
+			}))
 			const market_mon = []
 			if (regime.vix != null)
 				market_mon.push({ class: "market", rule: "VIX " + regime.vix, detail: "Reduce size if VIX >25" })

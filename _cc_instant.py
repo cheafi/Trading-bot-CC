@@ -16,6 +16,7 @@ import hmac
 import http.server
 import json
 import os
+import re
 import signal
 import sys
 import socketserver
@@ -438,6 +439,7 @@ def _dashboard_api_key(header_value: str | None) -> str | None:
 
 
 _INSTANT_STATIC_DIR = (_REPO_ROOT / "src/api/static").resolve()
+_STATIC_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _INSTANT_SENSITIVE_DEGRADED_GET = frozenset({"/api/portfolio/monitor"})
 _INSTANT_SENSITIVE_DEGRADED_POST = frozenset({"/api/portfolio/position"})
 
@@ -446,13 +448,16 @@ def _safe_static_file(url_path: str) -> Path | None:
     """Resolve /static/* paths under src/api/static only (no traversal)."""
     if not url_path.startswith("/static/"):
         return None
-    rel = urllib.parse.unquote(url_path[len("/static/") :])
-    if not rel or rel.startswith(("/", "\\")):
+    rel = urllib.parse.unquote(url_path[len("/static/") :]).replace("\\", "/")
+    if not rel or rel.startswith("/"):
         return None
-    parts = rel.replace("\\", "/").split("/")
-    if any(part in ("", ".", "..") for part in parts):
-        return None
-    candidate = (_INSTANT_STATIC_DIR / rel).resolve()
+    parts = rel.split("/")
+    candidate = _INSTANT_STATIC_DIR
+    for part in parts:
+        if not part or part in (".", "..") or not _STATIC_SEGMENT_RE.fullmatch(part):
+            return None
+        candidate = candidate / part
+    candidate = candidate.resolve()
     try:
         candidate.relative_to(_INSTANT_STATIC_DIR)
     except ValueError:
