@@ -440,36 +440,53 @@ def _dashboard_api_key(header_value: str | None) -> str | None:
 
 _INSTANT_STATIC_DIR = (_REPO_ROOT / "src/api/static").resolve()
 _STATIC_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_STATIC_FILE_ALLOWLIST: dict[str, Path] = {}
 _INSTANT_SENSITIVE_DEGRADED_GET = frozenset({"/api/portfolio/monitor"})
 _INSTANT_SENSITIVE_DEGRADED_POST = frozenset({"/api/portfolio/position"})
 
 
+def _refresh_static_allowlist() -> None:
+    """Map relative /static/* keys to pre-validated files (no runtime path join from URL)."""
+    allow: dict[str, Path] = {}
+    root = _INSTANT_STATIC_DIR
+    if not root.is_dir():
+        _STATIC_FILE_ALLOWLIST.clear()
+        return
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            resolved = path.resolve()
+            resolved.relative_to(root)
+        except ValueError:
+            continue
+        if path.is_symlink():
+            try:
+                resolved.resolve().relative_to(root)
+            except ValueError:
+                continue
+        rel_key = path.relative_to(root).as_posix()
+        if rel_key and ".." not in rel_key.split("/"):
+            allow[rel_key] = resolved
+    _STATIC_FILE_ALLOWLIST.clear()
+    _STATIC_FILE_ALLOWLIST.update(allow)
+
+
 def _safe_static_file(url_path: str) -> Path | None:
-    """Resolve /static/* paths under src/api/static only (no traversal)."""
+    """Resolve /static/* via allowlist populated from src/api/static (no traversal)."""
     if not url_path.startswith("/static/"):
         return None
-    rel = urllib.parse.unquote(url_path[len("/static/") :]).replace("\\", "/")
-    if not rel or rel.startswith("/"):
+    if not _STATIC_FILE_ALLOWLIST:
+        _refresh_static_allowlist()
+    rel = urllib.parse.unquote(url_path[len("/static/") :]).replace("\\", "/").lstrip(
+        "/"
+    )
+    if not rel or ".." in rel.split("/"):
         return None
     parts = rel.split("/")
-    candidate = _INSTANT_STATIC_DIR
-    for part in parts:
-        if not part or part in (".", "..") or not _STATIC_SEGMENT_RE.fullmatch(part):
-            return None
-        candidate = candidate / part
-    candidate = candidate.resolve()
-    try:
-        candidate.relative_to(_INSTANT_STATIC_DIR)
-    except ValueError:
+    if any(not part or not _STATIC_SEGMENT_RE.fullmatch(part) for part in parts):
         return None
-    if candidate.is_symlink():
-        try:
-            candidate.resolve().relative_to(_INSTANT_STATIC_DIR)
-        except ValueError:
-            return None
-    if not candidate.is_file():
-        return None
-    return candidate
+    return _STATIC_FILE_ALLOWLIST.get(rel)
 
 
 def _instant_api_secret() -> str:
