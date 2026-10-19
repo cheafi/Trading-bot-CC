@@ -7,12 +7,18 @@ Routers import from here instead of from main.py.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import math
 import os
 import re
+import time
 from typing import Any
 
-from fastapi import Header, HTTPException
+from fastapi import Cookie, Header, HTTPException
+
+OPERATOR_SESSION_COOKIE = "cc_operator_session"
+OPERATOR_SESSION_MAX_AGE_S = 12 * 3600
 
 _TICKER_RE = re.compile(r"^[A-Z0-9.\-^]{1,10}$")
 
@@ -109,10 +115,48 @@ async def verify_api_key(x_api_key: str = Header(None, alias="X-API-Key")) -> bo
     return _require_matching_api_key(x_api_key, allow_dev_bypass=True)
 
 
+def mint_operator_session_token(api_secret: str) -> str:
+    """Signed HttpOnly session cookie value (no API key embedded)."""
+    exp = int(time.time()) + OPERATOR_SESSION_MAX_AGE_S
+    payload = f"v1.{exp}"
+    sig = hmac.new(api_secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    return f"{payload}.{sig}"
+
+
+def verify_operator_session_token(api_secret: str, token: str | None) -> bool:
+    if not api_secret or not token:
+        return False
+    try:
+        payload, sig = token.rsplit(".", 1)
+        expected = hmac.new(
+            api_secret.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return False
+        exp = int(payload.split(".", 1)[1])
+        return time.time() <= exp
+    except (ValueError, TypeError, IndexError):
+        return False
+
+
 async def verify_sensitive_api_key(
     x_api_key: str = Header(None, alias="X-API-Key"),
+    cc_operator_session: str | None = Cookie(None, alias=OPERATOR_SESSION_COOKIE),
 ) -> bool:
     """Broker, ledger, and account mutations — never allow unauthenticated dev bypass."""
+    try:
+        settings = _load_settings()
+        secret = settings.api_secret_key or ""
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Configuration unavailable; cannot authenticate.",
+        ) from exc
+
+    if secret and x_api_key and hmac.compare_digest(x_api_key, secret):
+        return True
+    if secret and verify_operator_session_token(secret, cc_operator_session):
+        return True
     return _require_matching_api_key(x_api_key, allow_dev_bypass=False)
 
 

@@ -141,7 +141,7 @@ def test_portfolio_data_boundary_broker_verified_when_aligned() -> None:
                 "broker_connected": True,
                 "sync_quality": "broker_truth",
                 "portfolio_source": "ibkr",
-                "broker_position_count": 3,
+                "broker_position_count": 1,
                 "local_only_count": 0,
                 "last_sync": fresh,
                 "broker_account_id": "DU123",
@@ -169,6 +169,44 @@ def test_portfolio_data_boundary_stale_sync_not_broker_verified() -> None:
     )
     assert boundary["broker_verified"] is False
     assert boundary["portfolio_truth_mode"] == "BROKER_UNVERIFIED"
+
+
+def test_build_ibkr_linkage_includes_broker_account_id() -> None:
+    from src.services.portfolio_decision_console import build_ibkr_linkage
+
+    link = build_ibkr_linkage(
+        source="ibkr",
+        execution={"broker_connected": True, "broker_account_id": "DU999", "mode": "paper"},
+        positions=[{"source": "broker", "ticker": "SPY"}],
+        updated_at="2026-01-01T00:00:00Z",
+    )
+    assert link.get("broker_account_id") == "DU999"
+    assert link.get("account_id") == "DU999"
+
+
+def test_portfolio_data_boundary_misaligned_counts_not_verified() -> None:
+    from datetime import datetime, timezone
+
+    fresh = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    portfolio_router._user_portfolio = {
+        "source": "ibkr",
+        "holdings": [{"ticker": "A"}, {"ticker": "B"}],
+    }
+    boundary = portfolio_data_boundary(
+        {
+            "ibkr_linkage": {
+                "broker_connected": True,
+                "sync_quality": "broker_truth",
+                "portfolio_source": "ibkr",
+                "broker_position_count": 1,
+                "local_only_count": 0,
+                "last_sync": fresh,
+                "broker_account_id": "DU123",
+            }
+        }
+    )
+    assert boundary["broker_verified"] is False
+    assert boundary["position_quantity_reconciled"] is False
 
 
 def test_portfolio_fingerprint_reflects_source() -> None:

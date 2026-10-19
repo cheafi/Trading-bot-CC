@@ -5771,7 +5771,12 @@
           </div>
         </div>
         <div x-show="pf.authRequired" class="card card-p mb-2" style="border:1px solid var(--red);background:rgba(255,92,92,.08)">
-          <div class="text-[10px] font-bold" style="color:var(--red)" x-text="pf.authError || 'Portfolio unavailable — authentication required.'"></div>
+          <div class="text-[10px] font-bold mb-2" style="color:var(--red)" x-text="pf.authError || 'Portfolio unavailable — authentication required.'"></div>
+          <div class="text-[9px] mb-2" style="color:var(--t3)">Enter operator API key once — stored in HttpOnly session cookie, not in page source.</div>
+          <div class="flex gap-2 items-center flex-wrap">
+            <input type="password" x-model="pf.sessionKey" class="rounded px-2 py-1 text-[11px] mono flex-1 min-w-[140px]" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="API key" autocomplete="off">
+            <button type="button" class="btn-s text-[10px]" @click="establishOperatorSession()" :disabled="pf.sessionBusy">Authenticate</button>
+          </div>
         </div>
         <!-- Add Position Form -->
         <template x-if="pf.showAdd">

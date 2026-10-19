@@ -257,9 +257,14 @@ def build_ibkr_linkage(
         if broker_connected and local_only
         else "local_only"
     )
+    account_id = str(
+        execution.get("broker_account_id") or execution.get("account_id") or ""
+    ).strip()
     return {
         "source_pill": pill,
         "portfolio_source": src,
+        "broker_account_id": account_id or None,
+        "account_id": account_id or None,
         "broker_connected": broker_connected,
         "broker_mode": mode,
         "last_sync": execution.get("last_heartbeat") or updated_at,

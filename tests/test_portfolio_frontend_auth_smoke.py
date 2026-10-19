@@ -31,6 +31,15 @@ def test_cc_app_sensitive_portfolio_mutations_send_api_key() -> None:
     assert js.count('"X-API-Key": window._apiKey') >= 10
 
 
+def test_cc_app_operator_session_flow_present() -> None:
+    js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
+    html = (ROOT / "src/api/templates/index.html").read_text(encoding="utf-8")
+    assert "establishOperatorSession" in js
+    assert "/api/operator/session" in js
+    assert 'credentials: "include"' in js
+    assert "pf.sessionKey" in html
+
+
 def test_cc_app_fetch_portfolio_uses_cc_fetch_for_monitor() -> None:
     js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
     assert 'ccFetch("/api/portfolio/monitor"' in js

@@ -234,7 +234,7 @@ async def ibkr_ping(req: PingRequest):
 
 
 @router.get("/account")
-async def ibkr_account(_=Depends(verify_api_key)):
+async def ibkr_account(_=Depends(verify_sensitive_api_key)):
     """
     Fetch account summary from IB Gateway.
     Returns: NetLiquidation, cash, buying power, unrealized/realized PnL.
@@ -285,7 +285,7 @@ async def ibkr_account(_=Depends(verify_api_key)):
 
 
 @router.get("/positions")
-async def ibkr_positions(_=Depends(verify_api_key)):
+async def ibkr_positions(_=Depends(verify_sensitive_api_key)):
     """
     Fetch all open positions from IB Gateway.
     Returns list of {symbol, sec_type, position, avg_cost, unrealized_pnl}.
@@ -492,7 +492,7 @@ async def ibkr_cancel_bracket(
 
 
 @router.get("/open-orders")
-async def ibkr_open_orders(_=Depends(verify_api_key)):
+async def ibkr_open_orders(_=Depends(verify_sensitive_api_key)):
     """
     Snapshot of currently open/working orders (used by the live bracket panel poll).
     Returns list of {order_id, symbol, action, order_type, quantity, parent_id,
@@ -506,7 +506,7 @@ async def ibkr_open_orders(_=Depends(verify_api_key)):
 
 
 @router.get("/recent-fills")
-async def ibkr_recent_fills(_=Depends(verify_api_key)):
+async def ibkr_recent_fills(_=Depends(verify_sensitive_api_key)):
     """Recent execution fills captured from IB execDetails callbacks (session-local)."""
     svc = get_ibkr_service()
     if not svc.is_connected:

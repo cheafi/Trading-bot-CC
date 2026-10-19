@@ -2447,6 +2447,8 @@ function cc() {
 			loading: false,
 			authRequired: false,
 			authError: "",
+			sessionKey: "",
+			sessionBusy: false,
 			source: "manual",
 			positions: [],
 			alerts: [],
@@ -3085,6 +3087,7 @@ function cc() {
 							init.headers && typeof init.headers === "object" && !Array.isArray(init.headers)
 								? { ...init.headers }
 								: {}
+						init.credentials = init.credentials || "include"
 						init.headers = { "X-API-Key": window._apiKey || "", ...headers }
 					}
 					const extSignal = init.signal
@@ -10431,6 +10434,36 @@ function cc() {
 				this.sig.no_trade_reason = "⚠ Failed to connect to the scanner. Check if the server is running."
 			}
 		},
+		async establishOperatorSession() {
+			this.pf.sessionBusy = true
+			try {
+				const key = (this.pf.sessionKey || "").trim()
+				if (!key) {
+					this.pf.authError = "Portfolio unavailable — authentication required."
+					return
+				}
+				const r = await fetch("/api/operator/session", {
+					method: "POST",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ api_key: key }),
+				})
+				if (!r.ok) {
+					this.pf.authRequired = true
+					this.pf.authError = "Portfolio unavailable — authentication required."
+					return
+				}
+				this.pf.sessionKey = ""
+				this.pf.authRequired = false
+				this.pf.authError = ""
+				await this.fetchPortfolio()
+			} catch (e) {
+				console.warn("operator session", e)
+				this.pf.authRequired = true
+			} finally {
+				this.pf.sessionBusy = false
+			}
+		},
 		async fetchPortfolio() {
 			this.pf.loading = true
 			this.pf.authRequired = false
@@ -10456,8 +10489,8 @@ function cc() {
 				// Manual entries are kept as overlay (e.g. for stop/target metadata) but counts/equity reflect IBKR
 				try {
 					if (this.cc_status && this.cc_status.ibkr_connected) {
-						const r2 = await fetch("/api/ibkr/positions")
-						if (r2.ok) {
+						const r2 = await this.ccFetch("/api/ibkr/positions", { retries: 1 })
+						if (r2 && r2.ok) {
 							const d2 = await r2.json()
 							const brokerPositions = (d2.positions || []).map((p) => {
 								const sym = (p.symbol || p.ticker || "").toUpperCase()

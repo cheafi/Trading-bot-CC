@@ -110,6 +110,10 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
     book_manual = source in ("manual", "demo-seed", "")
     broker_positions = int(ibkr.get("broker_position_count") or 0)
     local_only_count = int(ibkr.get("local_only_count") or 0)
+    book_holdings = len(book.get("holdings") or [])
+    position_counts_aligned = (
+        broker_positions > 0 and book_holdings == broker_positions
+    )
 
     # Verified only when book source aligns with linkage, no local-only rows,
     # and linkage reports full broker_truth (not flags alone).
@@ -126,10 +130,8 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
     link_account = str(
         ibkr.get("broker_account_id") or ibkr.get("account_id") or ""
     ).strip()
-    account_identity_ok = (
-        bool(book_account)
-        and bool(link_account)
-        and book_account.upper() == link_account.upper()
+    account_identity_ok = bool(link_account) and (
+        not book_account or book_account.upper() == link_account.upper()
     )
     broker_verified = (
         not book_manual
@@ -138,6 +140,7 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
         and book_aligned_with_broker
         and _broker_sync_fresh(last_sync)
         and account_identity_ok
+        and position_counts_aligned
     )
     if broker_verified:
         truth_mode = "BROKER_VERIFIED"
@@ -160,7 +163,7 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
         "portfolio_truth_mode": truth_mode,
         "broker_verified": broker_verified,
         "broker_account_identity_verified": account_identity_ok,
-        "position_quantity_reconciled": False,
+        "position_quantity_reconciled": position_counts_aligned,
         "protection_note": (
             "Suggested stop — not submitted to broker. "
             "Stop/target levels are analytical only unless explicitly reconciled."
