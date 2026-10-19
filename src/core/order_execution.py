@@ -79,6 +79,56 @@ def record_dry_run_order(
     )
 
 
+def track_ibkr_bracket_intents(
+    *,
+    symbol: str,
+    parent_action: str,
+    child_action: str,
+    quantity: int,
+    parent_order_id: int,
+    stop_order_id: int,
+    target_order_id: int,
+    entry_price: Optional[float],
+    stop_price: float,
+    take_profit: float,
+    oca_group: str,
+) -> dict[str, str]:
+    """Persist bracket legs in reconciliation ledger before IB placeOrder."""
+    source = "ibkr_bracket"
+    parent = track_broker_order_intent(
+        source=source,
+        symbol=symbol,
+        side=parent_action,
+        quantity=int(quantity),
+        order_id=str(parent_order_id),
+        limit_price=entry_price,
+    )
+    stop = track_broker_order_intent(
+        source=source,
+        symbol=symbol,
+        side=child_action,
+        quantity=int(quantity),
+        order_id=str(stop_order_id),
+        limit_price=stop_price,
+    )
+    target = track_broker_order_intent(
+        source=source,
+        symbol=symbol,
+        side=child_action,
+        quantity=int(quantity),
+        order_id=str(target_order_id),
+        limit_price=take_profit,
+    )
+    logger.info(
+        "[Reconciliation] bracket intents oca=%s parent=%s stop=%s target=%s",
+        oca_group,
+        parent,
+        stop,
+        target,
+    )
+    return {"parent": parent, "stop": stop, "target": target}
+
+
 def track_broker_order_intent(
     *,
     source: str,

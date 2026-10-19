@@ -1410,6 +1410,30 @@ class IBKRService:
         target_ord.ocaType = 1
         target_ord.transmit = True
 
+        from src.core.order_execution import track_ibkr_bracket_intents
+        from src.engines.broker_reconciliation import broker_reconciliation
+
+        track_ibkr_bracket_intents(
+            symbol=symbol.upper(),
+            parent_action=a,
+            child_action=child_action,
+            quantity=int(quantity),
+            parent_order_id=parent_id,
+            stop_order_id=stop_id,
+            target_order_id=target_id,
+            entry_price=entry_price,
+            stop_price=stop_price,
+            take_profit=take_profit,
+            oca_group=oca_group,
+        )
+        if not broker_reconciliation._persist_ok:
+            return {
+                "error": "Reconciliation ledger persist failed — bracket not sent",
+                "parent_order_id": parent_id,
+                "stop_order_id": stop_id,
+                "target_order_id": target_id,
+            }
+
         # Drain queue, send 3 legs
         while not app._order_status_q.empty():
             app._order_status_q.get_nowait()
@@ -1430,8 +1454,15 @@ class IBKRService:
             )
         except asyncio.TimeoutError:
             parent_status = None
+            broker_reconciliation.mark_order_unknown_pending(
+                str(parent_id),
+                "Timeout waiting for bracket parent ack — verify broker state",
+            )
         self._drain_app_errors(app)
         if parent_status and parent_status.error:
+            broker_reconciliation.record_rejection(
+                str(parent_id), parent_status.error
+            )
             self._record_event(
                 "order_reject",
                 f"Bracket #{parent_id} rejected: {parent_status.error}",

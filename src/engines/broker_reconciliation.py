@@ -37,6 +37,7 @@ class OrderState(str, Enum):
     CANCELLED = "cancelled"
     REJECTED = "rejected"
     EXPIRED = "expired"
+    UNKNOWN_PENDING = "unknown_pending"
 
 
 class ReconciliationStatus(str, Enum):
@@ -221,6 +222,18 @@ class BrokerReconciliationEngine:
         rec.state = OrderState.REJECTED
         rec.discrepancy = reason
         rec.updated_at = _utcnow()
+        self._persist_snapshot()
+        return True
+
+    def mark_order_unknown_pending(self, order_id: str, reason: str = "") -> bool:
+        """Broker submit outcome unclear — block further trading until reconciled."""
+        rec = self._orders.get(order_id)
+        if not rec:
+            return False
+        rec.state = OrderState.UNKNOWN_PENDING
+        rec.discrepancy = reason or "broker ack unknown"
+        rec.updated_at = _utcnow()
+        self._reconciliation_status = ReconciliationStatus.PENDING
         self._persist_snapshot()
         return True
 
@@ -425,7 +438,13 @@ class BrokerReconciliationEngine:
         open_orders = [
             o
             for o in self._orders.values()
-            if o.state in (OrderState.PENDING, OrderState.SENT, OrderState.PARTIAL_FILL)
+            if o.state
+            in (
+                OrderState.PENDING,
+                OrderState.SENT,
+                OrderState.PARTIAL_FILL,
+                OrderState.UNKNOWN_PENDING,
+            )
         ]
         return len(open_orders) == 0
 
