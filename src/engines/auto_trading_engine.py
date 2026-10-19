@@ -612,8 +612,20 @@ class AutoTradingEngine:
             strategy_health=self.leaderboard.get_strategy_scores(),
         )
 
-        # Cache ranked results for API (JSON-safe)
-        self._cached_recommendations = [rec.to_api_dict() for rec in ranked]
+        # Cache ranked results for API (JSON-safe) with bar-level quote provenance
+        from src.core.quote_provenance import (
+            attach_bar_provenance_to_recommendation,
+            flatten_provenance_to_api_dict,
+        )
+
+        cached_rows: List[Dict[str, Any]] = []
+        for rec in ranked:
+            attach_bar_provenance_to_recommendation(
+                rec,
+                self._last_price_data.get(rec.ticker),
+            )
+            cached_rows.append(flatten_provenance_to_api_dict(rec.to_api_dict()))
+        self._cached_recommendations = cached_rows
         self._cached_regime = self._regime_state
         self._cached_leaderboard = self.leaderboard.get_strategy_scores()
 

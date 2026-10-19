@@ -70,6 +70,13 @@ class DailyDecisionEngine:
                         rec.risk_reward_ratio = round(abs(tp - rec.entry_price) / risk, 2)
             if isinstance(row.get("trust"), dict):
                 rec.trust = dict(row["trust"])
+            from src.core.quote_provenance import (
+                apply_provenance_to_metadata,
+                provenance_from_mapping,
+            )
+
+            prov = provenance_from_mapping(row)
+            apply_provenance_to_metadata(rec.metadata, prov)
             rec.recommendation_id = str(row.get("recommendation_id") or rec.recommendation_id)
             rec.why_now = str(row.get("why_now") or rec.why_now or "")
             out.append(rec)
