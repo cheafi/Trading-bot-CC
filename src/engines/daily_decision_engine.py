@@ -13,6 +13,7 @@ from src.core.models import TradeRecommendation
 from src.core.trade_decision import (
     DailyDecisionPipelineResult,
     TradeDecision,
+    normalize_regime_state,
     trade_decision_from_recommendation,
 )
 from src.engines.opportunity_ensembler import OpportunityEnsembler
@@ -41,13 +42,8 @@ class DailyDecisionEngine:
         self, regime_input: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         if regime_input:
-            return dict(regime_input)
-        return {
-            "regime": "UNKNOWN",
-            "should_trade": True,
-            "entropy": 0.5,
-            "no_trade_reason": "",
-        }
+            return normalize_regime_state(regime_input)
+        return normalize_regime_state(None)
 
     def _dicts_to_recommendations(
         self, rows: List[Dict[str, Any]]
@@ -72,6 +68,8 @@ class DailyDecisionEngine:
                     risk = abs(rec.entry_price - rec.stop_price)
                     if risk > 0:
                         rec.risk_reward_ratio = round(abs(tp - rec.entry_price) / risk, 2)
+            if isinstance(row.get("trust"), dict):
+                rec.trust = dict(row["trust"])
             rec.recommendation_id = str(row.get("recommendation_id") or rec.recommendation_id)
             rec.why_now = str(row.get("why_now") or rec.why_now or "")
             out.append(rec)
@@ -101,19 +99,24 @@ class DailyDecisionEngine:
             trade_decision_from_recommendation(r, regime=regime_state)
             for r in ranked[: self._max_decisions]
         ]
-        actionable = [
-            d
-            for d in decisions
-            if d.action in ("BUY", "ADD")
-            and d.execution_readiness.value == "requires_approval"
-        ]
-        top_3 = decisions[: self._top_n]
+        actionable = [d for d in decisions if d.is_actionable]
+        watchlist = [d for d in decisions if not d.is_actionable]
+        top_3 = actionable[: self._top_n]
         no_trade = len(actionable) == 0
-        summary = (
-            "No qualifying setups after regime and evidence gates."
-            if no_trade
-            else f"{len(actionable)} setup(s) require explicit approval before any order."
-        )
+        if no_trade:
+            summary = (
+                "No qualifying setups after regime, quote provenance, and evidence gates."
+            )
+            if not regime_state.get("should_trade", False):
+                summary = (
+                    "NO TRADE — market regime not actionable "
+                    f"({regime_state.get('no_trade_reason') or 'should_trade=False'})."
+                )
+        else:
+            summary = (
+                f"{len(actionable)} setup(s) require explicit human approval "
+                "(not broker execution authorization)."
+            )
         return DailyDecisionPipelineResult(
             market_regime=str(regime_state.get("regime") or "UNKNOWN"),
             regime_should_trade=bool(regime_state.get("should_trade", False)),
@@ -121,6 +124,7 @@ class DailyDecisionEngine:
             no_trade_summary=summary,
             decisions=decisions,
             top_3=top_3,
+            watchlist=watchlist,
         )
 
 
