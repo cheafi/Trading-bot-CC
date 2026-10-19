@@ -5,7 +5,24 @@ from __future__ import annotations
 import hashlib
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
+
+_BROKER_SYNC_MAX_AGE_SEC = 900.0
+
+
+def _broker_sync_fresh(last_sync: str) -> bool:
+    if not last_sync:
+        return False
+    try:
+        raw = str(last_sync).strip().replace("Z", "+00:00")
+        ts = datetime.fromisoformat(raw)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - ts).total_seconds()
+        return 0 <= age <= _BROKER_SYNC_MAX_AGE_SEC
+    except Exception:
+        return False
 
 from fastapi import APIRouter, Depends, Request
 
@@ -87,13 +104,26 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
     ibkr = payload.get("ibkr_linkage") if isinstance(payload.get("ibkr_linkage"), dict) else {}
     broker_connected = bool(ibkr.get("broker_connected"))
     sync_quality = str(ibkr.get("sync_quality") or "").lower()
+    link_source = str(ibkr.get("portfolio_source") or "").lower()
     book_manual = source in ("manual", "demo-seed", "")
+    broker_positions = int(ibkr.get("broker_position_count") or 0)
+    local_only_count = int(ibkr.get("local_only_count") or 0)
 
-    # Conservative: verified only when server linkage reports full broker_truth sync.
+    # Verified only when book source aligns with linkage, no local-only rows,
+    # and linkage reports full broker_truth (not flags alone).
+    book_aligned_with_broker = (
+        link_source == source
+        and source in ("ibkr", "futu", "broker")
+        and broker_positions > 0
+        and local_only_count == 0
+    )
+    last_sync = str(ibkr.get("last_sync") or "")
     broker_verified = (
         not book_manual
         and broker_connected
         and sync_quality == "broker_truth"
+        and book_aligned_with_broker
+        and _broker_sync_fresh(last_sync)
     )
     if broker_verified:
         truth_mode = "BROKER_VERIFIED"

@@ -109,6 +109,62 @@ def test_portfolio_data_boundary_flags_alone_not_broker_verified() -> None:
     assert boundary["portfolio_truth_mode"] == "BROKER_UNVERIFIED"
 
 
+def test_portfolio_data_boundary_broker_truth_without_alignment_unverified() -> None:
+    portfolio_router._user_portfolio = {"source": "ibkr", "holdings": [{"ticker": "A"}]}
+    boundary = portfolio_data_boundary(
+        {
+            "ibkr_linkage": {
+                "broker_connected": True,
+                "sync_quality": "broker_truth",
+                "portfolio_source": "manual",
+                "broker_position_count": 5,
+                "local_only_count": 0,
+            }
+        }
+    )
+    assert boundary["broker_verified"] is False
+    assert boundary["portfolio_truth_mode"] == "BROKER_UNVERIFIED"
+
+
+def test_portfolio_data_boundary_broker_verified_when_aligned() -> None:
+    from datetime import datetime, timezone
+
+    fresh = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    portfolio_router._user_portfolio = {"source": "ibkr", "holdings": [{"ticker": "A"}]}
+    boundary = portfolio_data_boundary(
+        {
+            "ibkr_linkage": {
+                "broker_connected": True,
+                "sync_quality": "broker_truth",
+                "portfolio_source": "ibkr",
+                "broker_position_count": 3,
+                "local_only_count": 0,
+                "last_sync": fresh,
+            }
+        }
+    )
+    assert boundary["broker_verified"] is True
+    assert boundary["portfolio_truth_mode"] == "BROKER_VERIFIED"
+
+
+def test_portfolio_data_boundary_stale_sync_not_broker_verified() -> None:
+    portfolio_router._user_portfolio = {"source": "ibkr", "holdings": [{"ticker": "A"}]}
+    boundary = portfolio_data_boundary(
+        {
+            "ibkr_linkage": {
+                "broker_connected": True,
+                "sync_quality": "broker_truth",
+                "portfolio_source": "ibkr",
+                "broker_position_count": 3,
+                "local_only_count": 0,
+                "last_sync": "2020-01-01T00:00:00Z",
+            }
+        }
+    )
+    assert boundary["broker_verified"] is False
+    assert boundary["portfolio_truth_mode"] == "BROKER_UNVERIFIED"
+
+
 def test_portfolio_fingerprint_reflects_source() -> None:
     portfolio_router._user_portfolio = {
         "holdings": [{"ticker": "X"}],

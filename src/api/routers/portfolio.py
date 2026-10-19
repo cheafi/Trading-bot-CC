@@ -699,6 +699,7 @@ async def operator_status():
 async def operator_set_throttle(
     throttle: str = Query(..., description="Throttle state"),
     reason: str = Query("manual", description="Reason for change"),
+    _auth: bool = Depends(verify_sensitive_api_key),
 ):
     """Set operator throttle state (kill switch / sizing control)."""
     valid = {"NORMAL", "STARTER_ONLY", "HALF_SIZE", "HEDGE_ONLY", "NO_TRADE"}
@@ -716,6 +717,7 @@ async def operator_set_throttle(
 async def operator_kill_switch(
     enabled: bool = Query(...),
     reason: str = Query("emergency", description="Reason"),
+    _auth: bool = Depends(verify_sensitive_api_key),
 ):
     """Emergency kill switch — stops all new trading."""
     _operator_state["kill_switch"] = enabled
