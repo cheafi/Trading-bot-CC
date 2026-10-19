@@ -211,8 +211,10 @@ async def place_order(
     from src.brokers.broker_manager import get_broker_manager
     from src.core.execution_gateway import (
         ExecutionGatewayError,
+        ExecutionIdempotencyConflictError,
         ExecutionInFlightError,
         ExecutionPersistError,
+        ExecutionUnknownSubmittedError,
         SubmitOrderCommand,
         execution_gateway,
     )
@@ -245,9 +247,16 @@ async def place_order(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ExecutionPersistError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        status = 503
+        if getattr(exc, "broker_may_have_executed", False):
+            status = 503
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
     except ExecutionInFlightError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ExecutionIdempotencyConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ExecutionUnknownSubmittedError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ExecutionGatewayError as exc:
         status = 403 if exc.code in ("trade_gate", "live_trading_disabled") else 400
         raise HTTPException(status_code=status, detail=str(exc)) from exc

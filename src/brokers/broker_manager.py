@@ -250,10 +250,22 @@ class BrokerManager:
         )
 
         if skip_ledger_intent:
+            from src.core.execution_gateway_context import gateway_adapter_active
+
+            if not gateway_adapter_active():
+                raise BrokerError(
+                    message="skip_ledger_intent requires ExecutionGateway adapter context",
+                    broker=str(broker or self._active_broker),
+                )
             local_oid = str(ledger_order_id or "").strip()
             if not local_oid:
                 raise BrokerError(
                     message="ledger_order_id required when skip_ledger_intent=True",
+                    broker=str(broker or self._active_broker),
+                )
+            if local_oid not in broker_reconciliation._orders:
+                raise BrokerError(
+                    message="ledger_order_id not found in reconciliation ledger",
                     broker=str(broker or self._active_broker),
                 )
         else:
