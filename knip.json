@@ -10,7 +10,11 @@
 		"src/extension.ts",
 		"scripts/**",
 		"apps/cli/scripts/**",
-		"apps/web-roo-code/next-sitemap.config.cjs"
+		"apps/web-roo-code/next-sitemap.config.cjs",
+		"check_page*.js",
+		"check_syntax*.js",
+		"data/cache/**",
+		"playwright.config.ts"
 	],
 	"workspaces": {
 		"src": {
@@ -21,7 +25,11 @@
 			"entry": ["src/index.tsx"],
 			"project": ["src/**/*.{ts,tsx}", "../src/shared/*.ts"]
 		},
-		"packages/{build,cloud,evals,ipc,telemetry,types}": {
+		"packages/build": {
+			"entry": ["src/index.ts"],
+			"project": ["src/**/*.ts"]
+		},
+		"packages/{cloud,evals,ipc,telemetry,types}": {
 			"project": ["src/**/*.ts"]
 		}
 	}
