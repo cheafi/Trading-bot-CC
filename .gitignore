@@ -9,8 +9,10 @@ mock/
 
 .DS_Store
 
-# Build outputs
+# Build outputs (keep workspace package packages/build tracked)
 build/
+!packages/build/
+!packages/build/**
 .next/
 .nuxt/
 .cache/
