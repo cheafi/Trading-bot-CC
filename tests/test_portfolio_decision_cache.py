@@ -1,69 +1,105 @@
-"""Portfolio decision router — scoped cache and fail-closed regime flags."""
+"""Portfolio decision router — cache lifecycle, regime parsing, deployment boundary."""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import time
 
 from src.api.routers import portfolio as portfolio_router
 from src.api.routers.portfolio_decision import (
     _CACHE_BY_SCOPE,
     _CACHE_TS_BY_SCOPE,
+    _TTL,
     fail_closed_should_trade,
+    portfolio_data_boundary,
     portfolio_decision_cache_scope,
+    portfolio_fingerprint,
+    verified_principal_hash,
+    _cache_get,
+    _cache_put,
 )
 
 
-def _mock_request(*, api_key: str = "", host: str = "127.0.0.1") -> MagicMock:
-    req = MagicMock()
-    headers = {}
-    if api_key:
-        headers["X-API-Key"] = api_key
-    req.headers = headers
-    client = MagicMock()
-    client.host = host
-    req.client = client
-    return req
+def test_verified_principal_hash_is_not_raw_key() -> None:
+    h = verified_principal_hash("super-secret-key")
+    assert h != "super-secret-key"
+    assert len(h) == 24
 
 
-def test_cache_scope_differs_by_api_key() -> None:
+def test_cache_scope_uses_book_revision_not_ip() -> None:
     portfolio_router._user_portfolio = {
         "holdings": [{"ticker": "AAPL"}],
         "source": "manual",
         "updated_at": "2026-03-01T00:00:00Z",
     }
-    a = portfolio_decision_cache_scope(_mock_request(api_key="key-a"))
-    b = portfolio_decision_cache_scope(_mock_request(api_key="key-b"))
+    principal = verified_principal_hash("same-key")
+    a = portfolio_decision_cache_scope(principal_hash=principal)
+    portfolio_router._user_portfolio["updated_at"] = "2026-03-02T00:00:00Z"
+    b = portfolio_decision_cache_scope(principal_hash=principal)
     assert a != b
 
 
-def test_cache_scope_changes_when_portfolio_updates() -> None:
+def test_same_principal_same_book_same_scope() -> None:
     portfolio_router._user_portfolio = {
         "holdings": [],
         "source": "manual",
-        "updated_at": "t1",
+        "updated_at": "fixed",
     }
-    first = portfolio_decision_cache_scope(_mock_request(api_key="same"))
-    portfolio_router._user_portfolio["updated_at"] = "t2"
-    second = portfolio_decision_cache_scope(_mock_request(api_key="same"))
-    assert first != second
+    p = verified_principal_hash("k")
+    assert portfolio_decision_cache_scope(principal_hash=p) == portfolio_decision_cache_scope(
+        principal_hash=p
+    )
 
 
-def test_fail_closed_should_trade_missing_key() -> None:
+def test_fail_closed_should_trade_missing_and_none() -> None:
     assert fail_closed_should_trade({}) is False
     assert fail_closed_should_trade({"regime": "NEUTRAL"}) is False
+    assert fail_closed_should_trade({"should_trade": None}) is False
 
 
-def test_fail_closed_should_trade_explicit() -> None:
+def test_fail_closed_should_trade_strict_bool_only() -> None:
     assert fail_closed_should_trade({"should_trade": True}) is True
     assert fail_closed_should_trade({"should_trade": False}) is False
+    assert fail_closed_should_trade({"should_trade": "true"}) is False
+    assert fail_closed_should_trade({"should_trade": "false"}) is False
+    assert fail_closed_should_trade({"should_trade": 1}) is False
+    assert fail_closed_should_trade({"should_trade": 0}) is False
 
 
-def test_scoped_cache_storage_isolated() -> None:
+def test_cache_expired_not_returned() -> None:
     _CACHE_BY_SCOPE.clear()
     _CACHE_TS_BY_SCOPE.clear()
-    _CACHE_BY_SCOPE["scope-a"] = {"marker": "A"}
-    _CACHE_TS_BY_SCOPE["scope-a"] = 1.0
-    _CACHE_BY_SCOPE["scope-b"] = {"marker": "B"}
-    _CACHE_TS_BY_SCOPE["scope-b"] = 1.0
-    assert _CACHE_BY_SCOPE["scope-a"]["marker"] == "A"
-    assert _CACHE_BY_SCOPE["scope-b"]["marker"] == "B"
+    scope = "test-scope"
+    _cache_put(scope, {"ok": True}, time.time() - _TTL - 1)
+    hit, payload = _cache_get(scope, time.time())
+    assert hit is False
+    assert payload is None
+
+
+def test_cache_fresh_hit() -> None:
+    _CACHE_BY_SCOPE.clear()
+    _CACHE_TS_BY_SCOPE.clear()
+    scope = "fresh"
+    _cache_put(scope, {"marker": 1}, time.time())
+    hit, payload = _cache_get(scope, time.time())
+    assert hit is True
+    assert payload == {"marker": 1}
+
+
+def test_portfolio_data_boundary_manual_not_broker_verified() -> None:
+    portfolio_router._user_portfolio = {"source": "manual", "holdings": []}
+    boundary = portfolio_data_boundary({"ibkr_linkage": {"broker_connected": False}})
+    assert boundary["portfolio_truth_mode"] == "MANUAL"
+    assert boundary["broker_verified"] is False
+    assert boundary["multi_tenant_data_isolation"] is False
+    assert "not broker-confirmed" in boundary["protection_note"]
+
+
+def test_portfolio_fingerprint_reflects_source() -> None:
+    portfolio_router._user_portfolio = {
+        "holdings": [{"ticker": "X"}],
+        "source": "demo-seed",
+        "updated_at": "t",
+    }
+    fp = portfolio_fingerprint()
+    assert "demo-seed" in fp
+    assert "1:" in fp

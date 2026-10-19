@@ -7,9 +7,9 @@ import logging
 import time
 from typing import Any, Dict, Tuple
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
-from src.api.deps import sanitize_for_json
+from src.api.deps import sanitize_for_json, verify_api_key
 from src.services.portfolio_decision_console import build_portfolio_decision
 
 logger = logging.getLogger(__name__)
@@ -18,27 +18,15 @@ router = APIRouter(prefix="/api/v7", tags=["v7-surfaces"])
 
 _CACHE_BY_SCOPE: Dict[str, Dict[str, Any]] = {}
 _CACHE_TS_BY_SCOPE: Dict[str, float] = {}
-_TTL = 60
+_TTL = 60.0
+_MAX_CACHE_ENTRIES = 32
+
+# Process-global manual book (see portfolio.py). Not multi-tenant data isolation.
+_DEPLOYMENT_MODEL = "single_operator_global_book"
 
 
-def portfolio_decision_cache_scope(request: Request) -> str:
-    """
-    Isolate cached portfolio-decision payloads per operator context.
-
-    Uses API key (when present), client identity, and current manual portfolio
-    fingerprint so one request cannot receive another scope's cached book.
-    """
-    auth = (
-        request.headers.get("X-API-Key")
-        or request.headers.get("Authorization")
-        or ""
-    ).strip()
-    client_host = ""
-    if request.client and request.client.host:
-        client_host = request.client.host
-    operator = auth or f"anon:{client_host or 'unknown'}"
-
-    holdings_fp = "0:"
+def portfolio_fingerprint() -> str:
+    """Revision token for the shared in-process portfolio book."""
     try:
         from src.api.routers import portfolio as _pf
 
@@ -46,25 +34,104 @@ def portfolio_decision_cache_scope(request: Request) -> str:
         holdings = book.get("holdings") or []
         updated = str(book.get("updated_at") or "")
         source = str(book.get("source") or "")
-        holdings_fp = f"{source}:{len(holdings)}:{updated}"
+        return f"{source}:{len(holdings)}:{updated}"
     except Exception:
-        holdings_fp = "unavailable"
+        return "unavailable"
 
-    raw = f"{operator}|{holdings_fp}"
+
+def verified_principal_hash(api_key: str | None) -> str:
+    """One-way operator fingerprint — never store or log raw API keys in cache keys."""
+    if not api_key:
+        return "anonymous"
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:24]
+
+
+def portfolio_decision_cache_scope(*, principal_hash: str) -> str:
+    """
+    Response cache partition for the single shared portfolio book.
+
+    This prevents stale summaries after book updates. It does NOT isolate holdings
+    between different authenticated clients — all share `_user_portfolio`.
+    """
+    raw = f"{principal_hash}|{_DEPLOYMENT_MODEL}|{portfolio_fingerprint()}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
 def fail_closed_should_trade(regime: Dict[str, Any]) -> bool:
-    """Missing regime permission defaults to no new trading (fail-closed)."""
+    """
+    Regime permission for new entries — strict bool True only.
+
+    Not execution authorization; downstream gates still apply.
+    """
     if not regime:
         return False
     if "should_trade" not in regime:
         return False
-    return bool(regime.get("should_trade"))
+    val = regime.get("should_trade")
+    if val is None:
+        return False
+    if isinstance(val, bool):
+        return val is True
+    return False
+
+
+def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Explicit trust boundary for portfolio tab consumers."""
+    try:
+        from src.api.routers import portfolio as _pf
+
+        source = str((_pf._user_portfolio or {}).get("source") or "manual").lower()
+    except Exception:
+        source = "manual"
+
+    ibkr = payload.get("ibkr_linkage") if isinstance(payload.get("ibkr_linkage"), dict) else {}
+    broker_connected = bool(ibkr.get("broker_connected"))
+    broker_truth = bool(ibkr.get("broker_truth"))
+
+    if broker_truth and broker_connected:
+        truth_mode = "BROKER_VERIFIED"
+    elif broker_connected:
+        truth_mode = "BROKER_UNVERIFIED"
+    elif source in ("manual", "demo-seed", ""):
+        truth_mode = "MANUAL"
+    elif source == "paper":
+        truth_mode = "PAPER_SIMULATION"
+    else:
+        truth_mode = "UNAVAILABLE"
+
+    return {
+        "deployment_model": _DEPLOYMENT_MODEL,
+        "multi_tenant_data_isolation": False,
+        "cache_note": (
+            "Response cache tracks book revision only; all authenticated clients "
+            "read the same in-process portfolio state."
+        ),
+        "portfolio_truth_mode": truth_mode,
+        "broker_verified": broker_truth and broker_connected,
+        "protection_note": (
+            "Suggested stop/target levels are analytical only — not broker-confirmed "
+            "protective orders unless explicitly reconciled elsewhere."
+        ),
+    }
+
+
+def _cache_evict_expired(now: float) -> None:
+    expired = [
+        scope
+        for scope, ts in list(_CACHE_TS_BY_SCOPE.items())
+        if now - ts >= _TTL
+    ]
+    for scope in expired:
+        _CACHE_BY_SCOPE.pop(scope, None)
+        _CACHE_TS_BY_SCOPE.pop(scope, None)
 
 
 def _cache_get(scope: str, now: float) -> Tuple[bool, Dict[str, Any] | None]:
     ts = _CACHE_TS_BY_SCOPE.get(scope, 0.0)
+    if scope in _CACHE_BY_SCOPE and now - ts >= _TTL:
+        _CACHE_BY_SCOPE.pop(scope, None)
+        _CACHE_TS_BY_SCOPE.pop(scope, None)
+        return False, None
     payload = _CACHE_BY_SCOPE.get(scope)
     if payload and now - ts < _TTL:
         return True, payload
@@ -72,20 +139,31 @@ def _cache_get(scope: str, now: float) -> Tuple[bool, Dict[str, Any] | None]:
 
 
 def _cache_put(scope: str, payload: Dict[str, Any], now: float) -> None:
+    _cache_evict_expired(now)
+    while len(_CACHE_BY_SCOPE) >= _MAX_CACHE_ENTRIES and _CACHE_TS_BY_SCOPE:
+        oldest = min(_CACHE_TS_BY_SCOPE, key=_CACHE_TS_BY_SCOPE.get)
+        _CACHE_BY_SCOPE.pop(oldest, None)
+        _CACHE_TS_BY_SCOPE.pop(oldest, None)
     _CACHE_BY_SCOPE[scope] = payload
     _CACHE_TS_BY_SCOPE[scope] = now
 
 
 @router.get("/portfolio-decision")
-async def portfolio_decision(request: Request):
-    """Portfolio decision summary + attribution + monitor + sleeves."""
+async def portfolio_decision(
+    request: Request,
+    _: bool = Depends(verify_api_key),
+):
+    """Portfolio decision summary + attribution + monitor + sleeves (authenticated)."""
+    api_key = request.headers.get("X-API-Key")
+    principal = verified_principal_hash(api_key)
     now = time.time()
-    scope = portfolio_decision_cache_scope(request)
+    scope = portfolio_decision_cache_scope(principal_hash=principal)
     hit, cached = _cache_get(scope, now)
     if hit and cached is not None:
         return cached
 
     payload = await build_portfolio_decision(request)
+    payload["portfolio_data_boundary"] = portfolio_data_boundary(payload)
     try:
         from src.services.cc_state import build_cc_state
 
@@ -108,5 +186,6 @@ async def portfolio_decision(request: Request):
     except Exception:
         pass
     out = sanitize_for_json(payload)
-    _cache_put(scope, out, now)
+    if isinstance(out, dict) and out.get("portfolio_data_boundary"):
+        _cache_put(scope, out, now)
     return out
