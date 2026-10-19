@@ -103,15 +103,29 @@ class ExecutionGateway:
             return "none"
         return type(active).__name__
 
+    async def _resolve_account_scope(self, manager: BrokerManager) -> str:
+        active = manager.active_broker
+        if isinstance(active, PaperBroker):
+            return "PAPER_SIMULATION"
+        try:
+            info = await manager.get_account()
+            account_scope = str(getattr(info, "account_id", "") or "").strip().upper()
+        except Exception as exc:
+            raise ExecutionGatewayError(
+                "Broker account could not be verified — order not sent",
+                code="account_scope_unverified",
+            ) from exc
+        if not account_scope:
+            raise ExecutionGatewayError(
+                "Broker account id missing — order not sent",
+                code="account_scope_unverified",
+            )
+        return account_scope
+
     async def _payload_hash(
         self, command: SubmitOrderCommand, manager: BrokerManager
     ) -> str:
-        account_scope = ""
-        try:
-            info = await manager.get_account()
-            account_scope = str(getattr(info, "account_id", "") or "")
-        except Exception:
-            pass
+        account_scope = await self._resolve_account_scope(manager)
         return fingerprint_order_payload(
             ticker=command.ticker,
             side=command.side.value,
@@ -230,6 +244,15 @@ class ExecutionGateway:
                 )
             raise ExecutionPersistError(
                 "Reconciliation ledger persist failed — order not sent"
+            )
+
+        if not self._idempotency.mark_broker_submit_started(key):
+            broker_reconciliation.mark_order_unknown_pending(
+                local_oid,
+                "Could not persist broker-submit marker — reconcile before retry",
+            )
+            raise ExecutionPersistError(
+                "Broker submit marker persist failed — order not sent",
             )
 
         adapter_token = enter_gateway_adapter()

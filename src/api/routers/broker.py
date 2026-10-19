@@ -271,7 +271,13 @@ async def place_order(
             503, code="broker_outcome_unknown", message=str(exc)
         ) from exc
     except ExecutionGatewayError as exc:
-        status = 403 if exc.code in ("trade_gate", "live_trading_disabled") else 400
+        status = (
+            403
+            if exc.code in ("trade_gate", "live_trading_disabled")
+            else 400
+        )
+        if exc.code == "account_scope_unverified":
+            status = 503
         raise execution_http_error(status, code=exc.code, message=str(exc)) from exc
     except HTTPException:
         raise

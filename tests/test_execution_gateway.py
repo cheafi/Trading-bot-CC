@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from src.brokers.base import OrderResult, OrderSide, OrderStatus, OrderType
@@ -217,7 +219,7 @@ async def test_mark_unknown_persist_fail_blocks_same_process_retry(
 
     def _flaky_save() -> bool:
         calls["n"] += 1
-        if calls["n"] == 2:
+        if calls["n"] == 3:
             return False
         return real_save()
 
@@ -254,15 +256,14 @@ async def test_complete_persist_fail_survives_restart(tmp_path, monkeypatch) -> 
     manager = _PaperManager()
 
     real_save = store._save
-    attempts = {"n": 0}
 
-    def _flaky_save() -> bool:
-        attempts["n"] += 1
-        if attempts["n"] == 2:
-            return False
+    def _fail_completed_write() -> bool:
+        for row in store._records.values():
+            if row.get("status") == "completed":
+                return False
         return real_save()
 
-    monkeypatch.setattr(store, "_save", _flaky_save)
+    monkeypatch.setattr(store, "_save", _fail_completed_write)
     cmd = SubmitOrderCommand(
         ticker="SPY",
         side=OrderSide.BUY,
@@ -281,3 +282,105 @@ async def test_complete_persist_fail_survives_restart(tmp_path, monkeypatch) -> 
     with pytest.raises(ExecutionUnknownSubmittedError):
         await gw2.submit(cmd, manager=manager)
     assert manager.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_complete_double_persist_fail_emergency_restart(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("CC_RECON_SIMULATION_READY", "1")
+    snap = tmp_path / "ledger.json"
+    idem = tmp_path / "idem.json"
+    eng = BrokerReconciliationEngine(snapshot_path=snap)
+    eng.mark_simulation_ready()
+    monkeypatch.setattr(
+        "src.engines.broker_reconciliation.broker_reconciliation", eng
+    )
+    store = IdempotencyStore(path=idem)
+    gw = ExecutionGateway(idempotency=store)
+    manager = _PaperManager()
+    real_save = store._save
+
+    def _fail_completed_and_unknown_writes() -> bool:
+        for row in store._records.values():
+            if row.get("status") in ("completed", "unknown_submitted"):
+                return False
+        return real_save()
+
+    monkeypatch.setattr(store, "_save", _fail_completed_and_unknown_writes)
+    cmd = SubmitOrderCommand(
+        ticker="SPY",
+        side=OrderSide.BUY,
+        quantity=1,
+        order_type=OrderType.MARKET,
+        idempotency_key="idem-key-007",
+    )
+    with pytest.raises(ExecutionPersistError):
+        await gw.submit(cmd, manager=manager)
+    assert (tmp_path / "idem_emergency.json").exists()
+    reloaded = IdempotencyStore(path=idem)
+    row = reloaded.get("idem-key-007") or {}
+    assert row.get("status") == "unknown_submitted"
+    gw2 = ExecutionGateway(idempotency=reloaded)
+    with pytest.raises(ExecutionUnknownSubmittedError):
+        await gw2.submit(cmd, manager=manager)
+    assert manager.calls == 1
+
+
+def test_in_flight_broker_started_blocks_after_reload(tmp_path) -> None:
+    path = tmp_path / "idem.json"
+    path.write_text(
+        json.dumps(
+            {
+                "records": {
+                    "key-7777": {
+                        "status": "in_flight",
+                        "broker_submit_started": True,
+                        "payload_hash": "abc",
+                        "local_order_id": "key-7777",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = IdempotencyStore(path=path)
+    assert (
+        store.begin("key-7777", local_order_id="key-7777", payload_hash="abc")
+        == "unknown_blocked"
+    )
+
+
+@pytest.mark.asyncio
+async def test_account_scope_fail_closed_for_non_paper(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CC_RECON_SIMULATION_READY", "1")
+    snap = tmp_path / "ledger.json"
+    idem = tmp_path / "idem.json"
+    eng = BrokerReconciliationEngine(snapshot_path=snap)
+    eng.mark_simulation_ready()
+    monkeypatch.setattr(
+        "src.engines.broker_reconciliation.broker_reconciliation", eng
+    )
+    store = IdempotencyStore(path=idem)
+    gw = ExecutionGateway(idempotency=store)
+
+    class _LiveishManager(_PaperManager):
+        async def get_account(self):
+            raise RuntimeError("no account")
+
+    manager = _LiveishManager()
+    manager.active_broker = object()
+
+    cmd = SubmitOrderCommand(
+        ticker="SPY",
+        side=OrderSide.BUY,
+        quantity=1,
+        order_type=OrderType.MARKET,
+        idempotency_key="idem-key-008",
+    )
+    from src.core.execution_gateway import ExecutionGatewayError
+
+    with pytest.raises(ExecutionGatewayError) as exc:
+        await gw.submit(cmd, manager=manager)
+    assert exc.value.code == "account_scope_unverified"
+    assert manager.calls == 0

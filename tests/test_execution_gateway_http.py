@@ -77,6 +77,19 @@ class _MockManager:
         )
 
 
+def test_broker_order_legacy_client_without_header_gets_422(
+    monkeypatch, tmp_path
+) -> None:
+    """Clients that omit X-Idempotency-Key must receive 422 (breaking change guard)."""
+    client, api_key, _, _ = _sensitive_client(monkeypatch, tmp_path)
+    resp = client.post(
+        "/broker/order",
+        params={"ticker": "SPY", "side": "buy", "quantity": 1},
+        headers={"X-API-Key": api_key},
+    )
+    assert resp.status_code == 422
+
+
 def test_broker_order_missing_idempotency_header_returns_422(
     monkeypatch, tmp_path
 ) -> None:

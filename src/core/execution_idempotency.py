@@ -68,16 +68,56 @@ class IdempotencyStore:
         self._lock = threading.Lock()
         self._load()
 
+    def _emergency_path(self) -> Path:
+        return self._path.with_name(f"{self._path.stem}_emergency.json")
+
     def _load(self) -> None:
-        if not self._path.exists():
+        if self._path.exists():
+            try:
+                raw = json.loads(self._path.read_text(encoding="utf-8"))
+                rows = raw.get("records") if isinstance(raw, dict) else {}
+                if isinstance(rows, dict):
+                    self._records = {
+                        str(k): v for k, v in rows.items() if isinstance(v, dict)
+                    }
+            except Exception:
+                self._persist_ok = False
+        self._apply_emergency_overlays()
+
+    def _apply_emergency_overlays(self) -> None:
+        path = self._emergency_path()
+        if not path.exists():
             return
         try:
-            raw = json.loads(self._path.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8"))
             rows = raw.get("records") if isinstance(raw, dict) else {}
-            if isinstance(rows, dict):
-                self._records = {str(k): v for k, v in rows.items() if isinstance(v, dict)}
+            if not isinstance(rows, dict):
+                return
+            for key, row in rows.items():
+                if isinstance(row, dict):
+                    self._records[str(key)] = row
         except Exception:
             self._persist_ok = False
+
+    def _persist_emergency_tombstone(self, key: str, row: Dict[str, Any]) -> bool:
+        path = self._emergency_path()
+        try:
+            existing: Dict[str, Any] = {"records": {}}
+            if path.exists():
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict) and isinstance(loaded.get("records"), dict):
+                    existing["records"] = dict(loaded["records"])
+            tomb = dict(row)
+            tomb["status"] = STATUS_UNKNOWN_SUBMITTED
+            tomb["unknown_reason"] = tomb.get("unknown_reason") or "result_persist_failed"
+            tomb["updated_at"] = _utcnow()
+            existing["records"][key] = tomb
+            existing["updated_at"] = _utcnow()
+            atomic_write_text(path, json.dumps(existing, indent=2))
+            self._records[key] = tomb
+            return True
+        except Exception:
+            return False
 
     def _save(self) -> bool:
         try:
@@ -117,6 +157,8 @@ class IdempotencyStore:
                 if status == STATUS_UNKNOWN_SUBMITTED:
                     return "unknown_blocked"
                 if status == STATUS_IN_FLIGHT:
+                    if existing.get("broker_submit_started"):
+                        return "unknown_blocked"
                     return "in_flight"
 
             self._records[key] = {
@@ -146,8 +188,19 @@ class IdempotencyStore:
             row["unknown_reason"] = "result_persist_failed"
             row["response"] = response
             row["updated_at"] = _utcnow()
-            self._save()
+            if not self._save():
+                self._persist_emergency_tombstone(key, dict(row))
             return False
+
+    def mark_broker_submit_started(self, key: str) -> bool:
+        """Persisted marker: broker adapter may have been invoked."""
+        with self._lock:
+            row = self._records.get(key)
+            if not row or row.get("status") != STATUS_IN_FLIGHT:
+                return False
+            row["broker_submit_started"] = True
+            row["updated_at"] = _utcnow()
+            return self._save()
 
     def mark_unknown_submitted(
         self, key: str, *, reason: str, partial_response: Optional[Dict[str, Any]] = None
@@ -164,7 +217,7 @@ class IdempotencyStore:
             row["updated_at"] = _utcnow()
             if self._save():
                 return True
-            # Memory retains UNKNOWN — same process must block retry even if disk stale.
+            self._persist_emergency_tombstone(key, dict(row))
             return False
 
     def abort(self, key: str) -> bool:
