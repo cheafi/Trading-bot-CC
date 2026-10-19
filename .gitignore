@@ -9,10 +9,17 @@ mock/
 
 .DS_Store
 
-# Build outputs (keep workspace package packages/build tracked)
+# Build outputs (keep @roo-code/build sources; ignore its dist/node_modules)
 build/
 !packages/build/
-!packages/build/**
+!packages/build/package.json
+!packages/build/eslint.config.mjs
+!packages/build/tsconfig.json
+!packages/build/vitest.config.ts
+!packages/build/src/
+packages/build/dist/
+packages/build/node_modules/
+packages/build/.turbo/
 .next/
 .nuxt/
 .cache/
