@@ -26,7 +26,7 @@ def _broker_sync_fresh(last_sync: str) -> bool:
 
 from fastapi import APIRouter, Depends, Request
 
-from src.api.deps import sanitize_for_json, verify_sensitive_api_key
+from src.api.deps import sanitize_for_json, verify_portfolio_api_key
 from src.services.portfolio_decision_console import build_portfolio_decision
 
 logger = logging.getLogger(__name__)
@@ -123,22 +123,25 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
         and broker_positions > 0
         and local_only_count == 0
     )
-    last_sync = str(ibkr.get("last_sync") or "")
+    snapshot_at = str(ibkr.get("holdings_snapshot_at") or "")
     book_account = str(
         book.get("broker_account_id") or book.get("account_id") or ""
     ).strip()
     link_account = str(
         ibkr.get("broker_account_id") or ibkr.get("account_id") or ""
     ).strip()
-    account_identity_ok = bool(link_account) and (
-        not book_account or book_account.upper() == link_account.upper()
+    account_identity_ok = (
+        bool(book_account)
+        and bool(link_account)
+        and book_account.upper() == link_account.upper()
     )
+    snapshot_fresh = bool(snapshot_at) and _broker_sync_fresh(snapshot_at)
     broker_verified = (
         not book_manual
         and broker_connected
         and sync_quality == "broker_truth"
         and book_aligned_with_broker
-        and _broker_sync_fresh(last_sync)
+        and snapshot_fresh
         and account_identity_ok
         and position_counts_aligned
     )
@@ -163,7 +166,10 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
         "portfolio_truth_mode": truth_mode,
         "broker_verified": broker_verified,
         "broker_account_identity_verified": account_identity_ok,
-        "position_quantity_reconciled": position_counts_aligned,
+        "position_count_aligned": position_counts_aligned,
+        "position_symbol_qty_reconciled": False,
+        "holdings_snapshot_at": snapshot_at or None,
+        "broker_heartbeat_at": ibkr.get("broker_heartbeat_at"),
         "protection_note": (
             "Suggested stop — not submitted to broker. "
             "Stop/target levels are analytical only unless explicitly reconciled."
@@ -211,7 +217,7 @@ def _cache_put(scope: str, payload: Dict[str, Any], now: float) -> None:
 @router.get("/portfolio-decision")
 async def portfolio_decision(
     request: Request,
-    _: bool = Depends(verify_sensitive_api_key),
+    _: bool = Depends(verify_portfolio_api_key),
 ):
     """Portfolio decision summary + attribution + monitor + sleeves (authenticated)."""
     api_key = request.headers.get("X-API-Key")

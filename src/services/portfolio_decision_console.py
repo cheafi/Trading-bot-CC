@@ -260,6 +260,8 @@ def build_ibkr_linkage(
     account_id = str(
         execution.get("broker_account_id") or execution.get("account_id") or ""
     ).strip()
+    holdings_snapshot_at = updated_at or None
+    broker_heartbeat_at = execution.get("last_heartbeat") or None
     return {
         "source_pill": pill,
         "portfolio_source": src,
@@ -267,7 +269,9 @@ def build_ibkr_linkage(
         "account_id": account_id or None,
         "broker_connected": broker_connected,
         "broker_mode": mode,
-        "last_sync": execution.get("last_heartbeat") or updated_at,
+        "holdings_snapshot_at": holdings_snapshot_at,
+        "broker_heartbeat_at": broker_heartbeat_at,
+        "last_sync": holdings_snapshot_at or broker_heartbeat_at,
         "sync_quality": sync_quality,
         "sync_lag_note": (
             "Broker session active"

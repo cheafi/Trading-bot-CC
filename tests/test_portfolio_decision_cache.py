@@ -143,12 +143,13 @@ def test_portfolio_data_boundary_broker_verified_when_aligned() -> None:
                 "portfolio_source": "ibkr",
                 "broker_position_count": 1,
                 "local_only_count": 0,
-                "last_sync": fresh,
+                "holdings_snapshot_at": fresh,
                 "broker_account_id": "DU123",
             }
         }
     )
     assert boundary["broker_verified"] is True
+    assert boundary["position_symbol_qty_reconciled"] is False
     assert boundary["broker_account_identity_verified"] is True
     assert boundary["portfolio_truth_mode"] == "BROKER_VERIFIED"
 
@@ -163,12 +164,59 @@ def test_portfolio_data_boundary_stale_sync_not_broker_verified() -> None:
                 "portfolio_source": "ibkr",
                 "broker_position_count": 3,
                 "local_only_count": 0,
-                "last_sync": "2020-01-01T00:00:00Z",
+                "holdings_snapshot_at": "2020-01-01T00:00:00Z",
             }
         }
     )
     assert boundary["broker_verified"] is False
     assert boundary["portfolio_truth_mode"] == "BROKER_UNVERIFIED"
+
+
+def test_portfolio_data_boundary_heartbeat_without_snapshot_not_verified() -> None:
+    from datetime import datetime, timezone
+
+    fresh = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    portfolio_router._user_portfolio = {
+        "source": "ibkr",
+        "holdings": [{"ticker": "A"}],
+        "broker_account_id": "DU123",
+    }
+    boundary = portfolio_data_boundary(
+        {
+            "ibkr_linkage": {
+                "broker_connected": True,
+                "sync_quality": "broker_truth",
+                "portfolio_source": "ibkr",
+                "broker_position_count": 1,
+                "local_only_count": 0,
+                "broker_heartbeat_at": fresh,
+                "broker_account_id": "DU123",
+            }
+        }
+    )
+    assert boundary["broker_verified"] is False
+
+
+def test_portfolio_data_boundary_missing_local_account_not_verified() -> None:
+    from datetime import datetime, timezone
+
+    fresh = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    portfolio_router._user_portfolio = {"source": "ibkr", "holdings": [{"ticker": "A"}]}
+    boundary = portfolio_data_boundary(
+        {
+            "ibkr_linkage": {
+                "broker_connected": True,
+                "sync_quality": "broker_truth",
+                "portfolio_source": "ibkr",
+                "broker_position_count": 1,
+                "local_only_count": 0,
+                "holdings_snapshot_at": fresh,
+                "broker_account_id": "DU123",
+            }
+        }
+    )
+    assert boundary["broker_account_identity_verified"] is False
+    assert boundary["broker_verified"] is False
 
 
 def test_build_ibkr_linkage_includes_broker_account_id() -> None:
@@ -206,7 +254,8 @@ def test_portfolio_data_boundary_misaligned_counts_not_verified() -> None:
         }
     )
     assert boundary["broker_verified"] is False
-    assert boundary["position_quantity_reconciled"] is False
+    assert boundary["position_count_aligned"] is False
+    assert boundary["position_symbol_qty_reconciled"] is False
 
 
 def test_portfolio_fingerprint_reflects_source() -> None:

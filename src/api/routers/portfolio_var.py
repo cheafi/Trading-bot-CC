@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from src.api.deps import verify_sensitive_api_key
+from src.api.deps import verify_portfolio_write
 from src.services.var_historical_service import compute_historical_var
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class VarHistRequest(BaseModel):
 async def var_historical(
     req: VarHistRequest,
     request: Request,
-    _: bool = Depends(verify_sensitive_api_key),
+    _: bool = Depends(verify_portfolio_write),
 ):
     """Compute historical-sim VaR from real 1y daily returns of supplied positions."""
     mds = getattr(request.app.state, "market_data", None)

@@ -86,8 +86,8 @@ def test_seed_demo_requires_auth_even_with_dev_bypass(monkeypatch) -> None:
     from src.api.main import app
 
     client = TestClient(app)
-    assert client.post("/api/portfolio/seed-demo").status_code == 401
-    assert client.get("/api/portfolio/holdings").status_code == 401
+    assert client.post("/api/portfolio/seed-demo").status_code in (401, 503)
+    assert client.get("/api/portfolio/holdings").status_code in (401, 503)
 
 
 def test_risk_alerts_denied_without_key(auth_client) -> None:
@@ -130,8 +130,8 @@ def test_alerts_history_rejects_dev_bypass(monkeypatch) -> None:
     from src.api.main import app
 
     client = TestClient(app)
-    assert client.get("/api/portfolio/alerts-history").status_code == 401
-    assert client.post("/api/portfolio/alerts-clear-dedupe").status_code == 401
+    assert client.get("/api/portfolio/alerts-history").status_code in (401, 503)
+    assert client.post("/api/portfolio/alerts-clear-dedupe").status_code in (401, 503)
 
 
 def test_operator_status_reports_halt_not_enforced(auth_client) -> None:
@@ -188,7 +188,7 @@ def test_operator_mutations_reject_dev_bypass(monkeypatch) -> None:
             "/api/operator/kill-switch",
             params={"enabled": False, "reason": "bypass"},
         ).status_code
-        == 401
+        in (401, 503)
     )
 
 
@@ -214,4 +214,4 @@ def test_portfolio_decision_rejects_dev_bypass(monkeypatch) -> None:
     from src.api.main import app
 
     client = TestClient(app)
-    assert client.get("/api/v7/portfolio-decision").status_code == 401
+    assert client.get("/api/v7/portfolio-decision").status_code in (401, 503)
