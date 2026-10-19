@@ -103,7 +103,15 @@ class ExecutionGateway:
             return "none"
         return type(active).__name__
 
-    def _payload_hash(self, command: SubmitOrderCommand, manager: BrokerManager) -> str:
+    async def _payload_hash(
+        self, command: SubmitOrderCommand, manager: BrokerManager
+    ) -> str:
+        account_scope = ""
+        try:
+            info = await manager.get_account()
+            account_scope = str(getattr(info, "account_id", "") or "")
+        except Exception:
+            pass
         return fingerprint_order_payload(
             ticker=command.ticker,
             side=command.side.value,
@@ -112,6 +120,7 @@ class ExecutionGateway:
             limit_price=command.limit_price,
             stop_price=command.stop_price,
             broker_scope=self._broker_scope(manager),
+            account_scope=account_scope,
         )
 
     def _replay_if_completed(
@@ -151,7 +160,7 @@ class ExecutionGateway:
                 "Idempotency store unavailable — order not sent"
             )
 
-        payload_hash = self._payload_hash(command, manager)
+        payload_hash = await self._payload_hash(command, manager)
         replay = self._replay_if_completed(key, payload_hash)
         if replay is not None:
             return replay
@@ -186,12 +195,18 @@ class ExecutionGateway:
         try:
             await self._assert_live_policy(manager)
         except ExecutionGatewayError:
-            self._idempotency.abort(key)
+            if not self._idempotency.abort(key):
+                raise ExecutionPersistError(
+                    "Idempotency abort persist failed — reconcile before retry"
+                )
             raise
 
         gate = self._trade_gate.evaluate(ticker=ticker)
         if not gate.allowed:
-            self._idempotency.abort(key)
+            if not self._idempotency.abort(key):
+                raise ExecutionPersistError(
+                    "Idempotency abort persist failed — reconcile before retry"
+                )
             raise ExecutionGatewayError(
                 "; ".join(gate.hard_blocks) or "Trade gate blocked",
                 code="trade_gate",
@@ -209,7 +224,10 @@ class ExecutionGateway:
             limit_price=command.limit_price,
         )
         if not broker_reconciliation._persist_ok:
-            self._idempotency.abort(key)
+            if not self._idempotency.abort(key):
+                raise ExecutionPersistError(
+                    "Idempotency abort persist failed after ledger failure"
+                )
             raise ExecutionPersistError(
                 "Reconciliation ledger persist failed — order not sent"
             )
@@ -240,9 +258,14 @@ class ExecutionGateway:
                 "execution_path": GATEWAY_SOURCE,
                 "message": reason,
             }
-            self._idempotency.mark_unknown_submitted(
+            if not self._idempotency.mark_unknown_submitted(
                 key, reason=reason, partial_response=partial
-            )
+            ):
+                raise ExecutionPersistError(
+                    "Could not persist unknown submission state — "
+                    "do not retry; reconcile with broker",
+                    broker_may_have_executed=True,
+                )
             raise ExecutionUnknownSubmittedError(
                 "Broker outcome unknown — do not retry with same idempotency key",
                 record=partial,

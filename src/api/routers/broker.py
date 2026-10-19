@@ -209,6 +209,7 @@ async def place_order(
     """
     from src.brokers.base import OrderSide, OrderType
     from src.brokers.broker_manager import get_broker_manager
+    from src.api.execution_errors import execution_http_error
     from src.core.execution_gateway import (
         ExecutionGatewayError,
         ExecutionIdempotencyConflictError,
@@ -245,21 +246,33 @@ async def place_order(
         return await execution_gateway.submit(command, manager=manager)
 
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise execution_http_error(400, code="validation_error", message=str(exc)) from exc
     except ExecutionPersistError as exc:
-        status = 503
-        if getattr(exc, "broker_may_have_executed", False):
-            status = 503
-        raise HTTPException(status_code=status, detail=str(exc)) from exc
+        raise execution_http_error(
+            503,
+            code="persist_failed",
+            message=str(exc),
+            extra={
+                "broker_may_have_executed": bool(
+                    getattr(exc, "broker_may_have_executed", False)
+                )
+            },
+        ) from exc
     except ExecutionInFlightError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise execution_http_error(
+            409, code="idempotency_in_flight", message=str(exc)
+        ) from exc
     except ExecutionIdempotencyConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise execution_http_error(
+            409, code="idempotency_conflict", message=str(exc)
+        ) from exc
     except ExecutionUnknownSubmittedError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise execution_http_error(
+            503, code="broker_outcome_unknown", message=str(exc)
+        ) from exc
     except ExecutionGatewayError as exc:
         status = 403 if exc.code in ("trade_gate", "live_trading_disabled") else 400
-        raise HTTPException(status_code=status, detail=str(exc)) from exc
+        raise execution_http_error(status, code=exc.code, message=str(exc)) from exc
     except HTTPException:
         raise
     except Exception as e:

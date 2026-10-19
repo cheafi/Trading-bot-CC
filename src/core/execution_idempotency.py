@@ -37,6 +37,7 @@ def fingerprint_order_payload(
     limit_price: Optional[float],
     stop_price: Optional[float],
     broker_scope: str,
+    account_scope: str = "",
 ) -> str:
     """Stable hash for idempotency key binding."""
     canonical = {
@@ -47,6 +48,7 @@ def fingerprint_order_payload(
         "limit_price": limit_price,
         "stop_price": stop_price,
         "broker_scope": str(broker_scope or ""),
+        "account_scope": str(account_scope or "").upper(),
     }
     raw = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -138,7 +140,14 @@ class IdempotencyStore:
             row["status"] = STATUS_COMPLETED
             row["response"] = response
             row["updated_at"] = _utcnow()
-            return self._save()
+            if self._save():
+                return True
+            row["status"] = STATUS_UNKNOWN_SUBMITTED
+            row["unknown_reason"] = "result_persist_failed"
+            row["response"] = response
+            row["updated_at"] = _utcnow()
+            self._save()
+            return False
 
     def mark_unknown_submitted(
         self, key: str, *, reason: str, partial_response: Optional[Dict[str, Any]] = None
@@ -153,16 +162,23 @@ class IdempotencyStore:
             if partial_response is not None:
                 row["response"] = partial_response
             row["updated_at"] = _utcnow()
-            return self._save()
+            if self._save():
+                return True
+            # Memory retains UNKNOWN — same process must block retry even if disk stale.
+            return False
 
-    def abort(self, key: str) -> None:
+    def abort(self, key: str) -> bool:
         """Release in-flight reservation only before broker submit."""
         with self._lock:
             row = self._records.get(key)
             if not row or row.get("status") != STATUS_IN_FLIGHT:
-                return
+                return True
+            snapshot = dict(row)
             del self._records[key]
-            self._save()
+            if self._save():
+                return True
+            self._records[key] = snapshot
+            return False
 
 
 idempotency_store = IdempotencyStore()

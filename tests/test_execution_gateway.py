@@ -197,3 +197,87 @@ def test_begin_persist_failed_rolls_back_memory(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(store, "_save", _fail_save)
     assert store.begin("key-0003", local_order_id="key-0003", payload_hash="h") == "persist_failed"
     assert "key-0003" not in store._records
+
+
+@pytest.mark.asyncio
+async def test_mark_unknown_persist_fail_blocks_same_process_retry(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("CC_RECON_SIMULATION_READY", "1")
+    snap = tmp_path / "ledger.json"
+    idem = tmp_path / "idem.json"
+    eng = BrokerReconciliationEngine(snapshot_path=snap)
+    eng.mark_simulation_ready()
+    monkeypatch.setattr(
+        "src.engines.broker_reconciliation.broker_reconciliation", eng
+    )
+    store = IdempotencyStore(path=idem)
+    real_save = store._save
+    calls = {"n": 0}
+
+    def _flaky_save() -> bool:
+        calls["n"] += 1
+        if calls["n"] == 2:
+            return False
+        return real_save()
+
+    monkeypatch.setattr(store, "_save", _flaky_save)
+    gw = ExecutionGateway(idempotency=store)
+    manager = _PaperManager(fail=True)
+    cmd = SubmitOrderCommand(
+        ticker="SPY",
+        side=OrderSide.BUY,
+        quantity=1,
+        order_type=OrderType.MARKET,
+        idempotency_key="idem-key-005",
+    )
+    with pytest.raises(ExecutionPersistError) as first_exc:
+        await gw.submit(cmd, manager=manager)
+    assert first_exc.value.broker_may_have_executed is True
+    with pytest.raises(ExecutionUnknownSubmittedError):
+        await gw.submit(cmd, manager=manager)
+    assert manager.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_complete_persist_fail_survives_restart(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CC_RECON_SIMULATION_READY", "1")
+    snap = tmp_path / "ledger.json"
+    idem = tmp_path / "idem.json"
+    eng = BrokerReconciliationEngine(snapshot_path=snap)
+    eng.mark_simulation_ready()
+    monkeypatch.setattr(
+        "src.engines.broker_reconciliation.broker_reconciliation", eng
+    )
+    store = IdempotencyStore(path=idem)
+    gw = ExecutionGateway(idempotency=store)
+    manager = _PaperManager()
+
+    real_save = store._save
+    attempts = {"n": 0}
+
+    def _flaky_save() -> bool:
+        attempts["n"] += 1
+        if attempts["n"] == 2:
+            return False
+        return real_save()
+
+    monkeypatch.setattr(store, "_save", _flaky_save)
+    cmd = SubmitOrderCommand(
+        ticker="SPY",
+        side=OrderSide.BUY,
+        quantity=1,
+        order_type=OrderType.MARKET,
+        idempotency_key="idem-key-006",
+    )
+    with pytest.raises(ExecutionPersistError):
+        await gw.submit(cmd, manager=manager)
+    assert manager.calls == 1
+
+    reloaded = IdempotencyStore(path=idem)
+    row = reloaded.get("idem-key-006") or {}
+    assert row.get("status") == "unknown_submitted"
+    gw2 = ExecutionGateway(idempotency=reloaded)
+    with pytest.raises(ExecutionUnknownSubmittedError):
+        await gw2.submit(cmd, manager=manager)
+    assert manager.calls == 1
