@@ -209,7 +209,10 @@ def quote_age_seconds(
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return max(0.0, (now - dt).total_seconds())
+    age = (now - dt).total_seconds()
+    if age < 0:
+        return None
+    return age
 
 
 def price_matches_quote(

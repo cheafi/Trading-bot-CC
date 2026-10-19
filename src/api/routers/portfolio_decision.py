@@ -94,10 +94,12 @@ def fail_closed_should_trade(regime: Dict[str, Any]) -> bool:
 
 def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Explicit trust boundary for portfolio tab consumers."""
+    book: Dict[str, Any] = {}
     try:
         from src.api.routers import portfolio as _pf
 
-        source = str((_pf._user_portfolio or {}).get("source") or "manual").lower()
+        book = _pf._user_portfolio if isinstance(_pf._user_portfolio, dict) else {}
+        source = str(book.get("source") or "manual").lower()
     except Exception:
         source = "manual"
 
@@ -118,12 +120,24 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
         and local_only_count == 0
     )
     last_sync = str(ibkr.get("last_sync") or "")
+    book_account = str(
+        book.get("broker_account_id") or book.get("account_id") or ""
+    ).strip()
+    link_account = str(
+        ibkr.get("broker_account_id") or ibkr.get("account_id") or ""
+    ).strip()
+    account_identity_ok = (
+        bool(book_account)
+        and bool(link_account)
+        and book_account.upper() == link_account.upper()
+    )
     broker_verified = (
         not book_manual
         and broker_connected
         and sync_quality == "broker_truth"
         and book_aligned_with_broker
         and _broker_sync_fresh(last_sync)
+        and account_identity_ok
     )
     if broker_verified:
         truth_mode = "BROKER_VERIFIED"
@@ -145,9 +159,15 @@ def portfolio_data_boundary(payload: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "portfolio_truth_mode": truth_mode,
         "broker_verified": broker_verified,
+        "broker_account_identity_verified": account_identity_ok,
+        "position_quantity_reconciled": False,
         "protection_note": (
-            "Suggested stop/target levels are analytical only — not broker-confirmed "
-            "protective orders unless explicitly reconciled elsewhere."
+            "Suggested stop — not submitted to broker. "
+            "Stop/target levels are analytical only unless explicitly reconciled."
+        ),
+        "api_key_exposure_note": (
+            "Single-operator deployments may inject API credentials into the dashboard "
+            "template; this is not safe for public internet exposure."
         ),
     }
 

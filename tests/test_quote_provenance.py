@@ -176,9 +176,30 @@ def test_index_to_utc_iso_rejects_garbage() -> None:
     assert index_to_utc_iso("not-a-date") is None
 
 
-def test_quote_age_seconds_future_returns_none_or_zero() -> None:
+def test_quote_age_seconds_future_returns_none() -> None:
     future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat().replace(
         "+00:00", "Z"
     )
-    prov = provenance_from_mapping({"price_timestamp": future, "price_source": "x"})
-    assert prov.quote_timestamp == future
+    assert quote_age_seconds(future) is None
+
+
+def test_future_dated_quote_blocks_actionable_buy() -> None:
+    future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    rec = TradeRecommendation.from_dict(
+        {
+            "ticker": "AAPL",
+            "direction": "LONG",
+            "entry_price": 100,
+            "stop_price": 95,
+            "target_price": 110,
+            "price_timestamp": future,
+            "price_source": "market_data:live_quote",
+            "quote_price": 100,
+        }
+    )
+    d = trade_decision_from_recommendation(rec, regime=_tradeable_regime())
+    assert d.data_freshness == DataFreshness.UNVERIFIED
+    assert d.action != "BUY"
+    assert not d.is_actionable

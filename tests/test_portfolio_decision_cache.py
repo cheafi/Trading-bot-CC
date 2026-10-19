@@ -91,7 +91,7 @@ def test_portfolio_data_boundary_manual_not_broker_verified() -> None:
     assert boundary["portfolio_truth_mode"] == "MANUAL"
     assert boundary["broker_verified"] is False
     assert boundary["multi_tenant_data_isolation"] is False
-    assert "not broker-confirmed" in boundary["protection_note"]
+    assert "not submitted to broker" in boundary["protection_note"]
 
 
 def test_portfolio_data_boundary_flags_alone_not_broker_verified() -> None:
@@ -130,7 +130,11 @@ def test_portfolio_data_boundary_broker_verified_when_aligned() -> None:
     from datetime import datetime, timezone
 
     fresh = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    portfolio_router._user_portfolio = {"source": "ibkr", "holdings": [{"ticker": "A"}]}
+    portfolio_router._user_portfolio = {
+        "source": "ibkr",
+        "holdings": [{"ticker": "A"}],
+        "broker_account_id": "DU123",
+    }
     boundary = portfolio_data_boundary(
         {
             "ibkr_linkage": {
@@ -140,10 +144,12 @@ def test_portfolio_data_boundary_broker_verified_when_aligned() -> None:
                 "broker_position_count": 3,
                 "local_only_count": 0,
                 "last_sync": fresh,
+                "broker_account_id": "DU123",
             }
         }
     )
     assert boundary["broker_verified"] is True
+    assert boundary["broker_account_identity_verified"] is True
     assert boundary["portfolio_truth_mode"] == "BROKER_VERIFIED"
 
 

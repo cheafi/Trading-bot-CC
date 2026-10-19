@@ -20,6 +20,13 @@ def test_cc_app_portfolio_decision_uses_cc_fetch_with_api_key_header() -> None:
     assert '"X-API-Key": window._apiKey' in js
 
 
+def test_cc_app_fetch_portfolio_uses_cc_fetch_for_monitor() -> None:
+    js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
+    assert 'ccFetch("/api/portfolio/monitor"' in js
+    assert "pf.authRequired" in js
+    assert "Portfolio unavailable — authentication required." in js
+
+
 def test_cc_app_alerts_history_sends_api_key_header() -> None:
     js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
     assert "/api/portfolio/alerts-history" in js

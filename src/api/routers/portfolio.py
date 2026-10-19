@@ -678,6 +678,10 @@ async def operator_status():
     """Get current operator console state."""
     return {
         "state": _operator_state,
+        "execution_halt_enforced": False,
+        "halt_enforcement_note": (
+            "Operator halt requested — execution enforcement not verified."
+        ),
         "throttle_options": [
             "NORMAL",
             "STARTER_ONLY",

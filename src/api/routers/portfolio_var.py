@@ -10,10 +10,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from src.api.deps import optional_api_key
+from src.api.deps import verify_sensitive_api_key
 from src.services.var_historical_service import compute_historical_var
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,11 @@ class VarHistRequest(BaseModel):
 
 
 @router.post("/api/portfolio/var-historical", tags=["portfolio"])
-async def var_historical(req: VarHistRequest, request: Request, _=optional_api_key):
+async def var_historical(
+    req: VarHistRequest,
+    request: Request,
+    _: bool = Depends(verify_sensitive_api_key),
+):
     """Compute historical-sim VaR from real 1y daily returns of supplied positions."""
     mds = getattr(request.app.state, "market_data", None)
     if mds is None:

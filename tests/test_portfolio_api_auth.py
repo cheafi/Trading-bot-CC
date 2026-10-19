@@ -25,6 +25,18 @@ def auth_client(monkeypatch):
     return TestClient(app)
 
 
+def test_monitor_denied_without_key(auth_client) -> None:
+    assert auth_client.get("/api/portfolio/monitor").status_code == 401
+
+
+def test_var_historical_denied_without_key(auth_client) -> None:
+    resp = auth_client.post(
+        "/api/portfolio/var-historical",
+        json={"positions": [{"ticker": "SPY"}], "equity": 100000},
+    )
+    assert resp.status_code == 401
+
+
 def test_holdings_denied_without_key(auth_client) -> None:
     resp = auth_client.get("/api/portfolio/holdings")
     assert resp.status_code == 401
@@ -120,6 +132,14 @@ def test_alerts_history_rejects_dev_bypass(monkeypatch) -> None:
     client = TestClient(app)
     assert client.get("/api/portfolio/alerts-history").status_code == 401
     assert client.post("/api/portfolio/alerts-clear-dedupe").status_code == 401
+
+
+def test_operator_status_reports_halt_not_enforced(auth_client) -> None:
+    resp = auth_client.get("/api/operator/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body.get("execution_halt_enforced") is False
+    assert "enforcement not verified" in (body.get("halt_enforcement_note") or "").lower()
 
 
 def test_operator_throttle_denied_without_key(auth_client) -> None:

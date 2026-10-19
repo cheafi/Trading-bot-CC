@@ -160,6 +160,8 @@ function cc() {
 		playbookFocusTicker: "",
 		pf: {
 			loading: false,
+			authRequired: false,
+			authError: "",
 			source: "manual",
 			positions: [],
 			alerts: [],
@@ -889,7 +891,9 @@ function cc() {
 						detail = j.detail || j.error || detail
 					} catch (_e) {}
 					const state =
-						this.normalizeFetchError(String(detail)) || (r.status === 503 ? "stale" : "failed_fetch")
+						r.status === 401
+							? "auth_required"
+							: this.normalizeFetchError(String(detail)) || (r.status === 503 ? "stale" : "failed_fetch")
 					const msg = this.surfaceFetchStateMessage(
 						state,
 						this.normalizeFetchError(String(detail)) ? null : detail,
@@ -1872,6 +1876,12 @@ function cc() {
 					title: "資料載入中 · Loading",
 					explanation: "即時資料仍在載入；唔好把快取內容當成 deploy authority。",
 					next_action: "等抓取完成，或者 refresh 分頁。",
+				},
+				auth_required: {
+					badge: "AUTH REQUIRED",
+					title: "Portfolio unavailable",
+					explanation: "Portfolio unavailable — authentication required.",
+					next_action: "Reload after the server injects a valid API key (trusted operator only).",
 				},
 				failed_fetch: {
 					badge: "FETCH FAILED",
@@ -8134,8 +8144,19 @@ function cc() {
 		},
 		async fetchPortfolio() {
 			this.pf.loading = true
+			this.pf.authRequired = false
+			this.pf.authError = ""
 			try {
-				const r = await fetch("/api/portfolio/monitor")
+				const r = await this.ccFetch("/api/portfolio/monitor", { retries: 1, backoff: 400 })
+				if (!r) throw new Error("failed_fetch")
+				if (r.status === 401) {
+					this.pf.authRequired = true
+					this.pf.authError = "Portfolio unavailable — authentication required."
+					this.pf.positions = []
+					this.pf.summary = null
+					this.pf.alerts = []
+					return
+				}
 				if (!r.ok) throw 0
 				const d = await r.json()
 				this.pf.positions = this.mergeLocalPortfolioHoldings(d.positions || [])
@@ -8225,6 +8246,7 @@ function cc() {
 				} catch (_) {}
 			} catch (e) {
 				console.warn("Portfolio fetch error:", e)
+				if (this.pf.authRequired) return
 				const local = this.hydratePortfolioFromLocal()
 				if (local && local.holdings && local.holdings.length) {
 					this.pf.positions = local.holdings
@@ -8254,6 +8276,12 @@ function cc() {
 			this.pfDecisionLoading = true
 			try {
 				const r = await this.ccFetch("/api/v7/portfolio-decision", { retries: 3, backoff: 500 })
+				if (r && r.status === 401) {
+					this.pf.authRequired = true
+					this.pf.authError = "Portfolio unavailable — authentication required."
+					this.pfDecision = null
+					return
+				}
 				if (r && r.ok) this.pfDecision = await r.json()
 				try {
 					const ddPct =
