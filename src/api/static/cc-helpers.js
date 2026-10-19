@@ -3677,7 +3677,10 @@ function cc() {
 			try {
 				const r = await fetch("/api/portfolio/position", {
 					method: "PUT",
-					headers: { "Content-Type": "application/json" },
+					headers: {
+						"Content-Type": "application/json",
+						"X-API-Key": window._apiKey || "",
+					},
 					body: JSON.stringify({ ticker: t, stop_price: stop }),
 				})
 				if (r.ok) {
@@ -10878,7 +10881,10 @@ function cc() {
 				}
 				const r = await fetch("/api/portfolio/var-historical", {
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
+					headers: {
+						"Content-Type": "application/json",
+						"X-API-Key": window._apiKey || "",
+					},
 					body: JSON.stringify(body),
 				})
 				if (!r.ok) throw new Error("HTTP " + r.status)
@@ -11095,7 +11101,10 @@ function cc() {
 		async removePosition(ticker) {
 			if (!confirm("Remove " + ticker + " from portfolio?")) return
 			try {
-				await fetch("/api/portfolio/position/" + ticker, { method: "DELETE" })
+				await fetch("/api/portfolio/position/" + encodeURIComponent(ticker), {
+					method: "DELETE",
+					headers: { "X-API-Key": window._apiKey || "" },
+				})
 				await this.fetchPortfolio()
 			} catch (e) {
 				console.warn(e)
@@ -11111,7 +11120,10 @@ function cc() {
 			try {
 				const r = await fetch("/api/portfolio/position", {
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
+					headers: {
+						"Content-Type": "application/json",
+						"X-API-Key": window._apiKey || "",
+					},
 					body: JSON.stringify({
 						ticker: this.dos.ticker,
 						shares: parseFloat(shares),
@@ -12129,8 +12141,8 @@ function cc() {
 		},
 		async ibkrFetchPortfolioCompare() {
 			try {
-				const r = await fetch("/api/portfolio/monitor")
-				if (!r.ok) return
+				const r = await this.ccFetch("/api/portfolio/monitor", { retries: 1 })
+				if (!r || !r.ok) return
 				const d = await r.json()
 				const manual = (d.positions || []).length
 				const broker = (this.ibkr.positions || []).length

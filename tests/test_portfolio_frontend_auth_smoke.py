@@ -20,6 +20,17 @@ def test_cc_app_portfolio_decision_uses_cc_fetch_with_api_key_header() -> None:
     assert '"X-API-Key": window._apiKey' in js
 
 
+def test_cc_app_sensitive_portfolio_mutations_send_api_key() -> None:
+    js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
+    for needle in (
+        'fetch("/api/portfolio/var-historical"',
+        'fetch("/api/portfolio/position/"',
+        'method: "DELETE"',
+    ):
+        assert needle in js
+    assert js.count('"X-API-Key": window._apiKey') >= 10
+
+
 def test_cc_app_fetch_portfolio_uses_cc_fetch_for_monitor() -> None:
     js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
     assert 'ccFetch("/api/portfolio/monitor"' in js
