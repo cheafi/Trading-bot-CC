@@ -10,6 +10,7 @@ completeness — not a calibrated win probability or estimated hit rate.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -87,10 +88,16 @@ class TradeDecision(BaseModel):
     @property
     def is_actionable(self) -> bool:
         """Qualifies for top actionable list (human approval workflow only)."""
+        prices_ok = True
+        for px in (self.stop_loss, self.take_profit_1, self.risk_reward_ratio):
+            if px is not None and not math.isfinite(float(px)):
+                prices_ok = False
+                break
         return (
             self.action == "BUY"
             and self.execution_readiness == ExecutionReadiness.REQUIRES_APPROVAL
             and self.data_freshness == DataFreshness.VERIFIED
+            and prices_ok
         )
 
 
@@ -155,6 +162,25 @@ def regime_allows_new_entries(regime: Dict[str, Any]) -> bool:
     return True
 
 
+def _valid_positive_finite(value: Any) -> bool:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(num) and num > 0
+
+
+def _normalize_quote_source(source: Optional[str]) -> Optional[str]:
+    if source is None:
+        return None
+    cleaned = str(source).strip()
+    if not cleaned:
+        return None
+    if cleaned.lower() in {"unknown", "none", "n/a", "na", "null", "undefined"}:
+        return None
+    return cleaned
+
+
 def _original_dict(rec: TradeRecommendation) -> Dict[str, Any]:
     meta = getattr(rec, "metadata", {}) or {}
     orig = meta.get("_original_dict") if isinstance(meta, dict) else {}
@@ -183,13 +209,12 @@ def _quote_provenance(rec: TradeRecommendation) -> Tuple[Optional[str], Optional
         or trust.get("source")
     )
     mode = str(trust.get("mode") or "").upper()
-    if not source and mode in ("LIVE", "DELAYED"):
-        source = f"trust_mode:{mode.lower()}"
     freshness = trust.get("freshness") or orig.get("data_freshness")
     if ts is not None:
         ts = str(ts).strip() or None
-    if source is not None:
-        source = str(source).strip() or None
+    source = _normalize_quote_source(source)
+    if not source and mode in ("LIVE", "DELAYED"):
+        source = f"trust_mode:{mode.lower()}"
     return ts, source, str(freshness).upper() if freshness else None
 
 
@@ -225,11 +250,14 @@ def _explicit_stale_flags(rec: TradeRecommendation, trust_freshness: Optional[st
 
 def _long_price_geometry(rec: TradeRecommendation) -> Tuple[bool, str, Optional[float], Optional[float]]:
     """Long-only geometry; target only from explicit fields (no synthetic TP)."""
-    entry = float(rec.entry_price or 0)
-    stop = float(rec.stop_price or 0)
-    if entry <= 0:
+    try:
+        entry = float(rec.entry_price or 0)
+        stop = float(rec.stop_price or 0)
+    except (TypeError, ValueError):
+        return False, "invalid_entry", None, None
+    if not _valid_positive_finite(entry):
         return False, "missing_entry", None, None
-    if stop <= 0:
+    if not _valid_positive_finite(stop):
         return False, "missing_stop", None, None
     direction = str(rec.direction or "LONG").upper()
     if direction not in ("LONG", "BUY"):
@@ -245,18 +273,20 @@ def _long_price_geometry(rec: TradeRecommendation) -> Tuple[bool, str, Optional[
             target = float(target_raw)
         except (TypeError, ValueError):
             return False, "invalid_target", None, None
-    if target is None or target <= 0:
+    if not _valid_positive_finite(target):
         return False, "missing_target", None, None
     if target <= entry:
         return False, "target_not_above_entry", None, None
 
     risk = entry - stop
-    if risk <= 0:
+    if not math.isfinite(risk) or risk <= 0:
         return False, "non_positive_risk", None, None
     reward = target - entry
-    if reward <= 0:
+    if not math.isfinite(reward) or reward <= 0:
         return False, "non_positive_reward", None, None
     rr = round(reward / risk, 2)
+    if not math.isfinite(rr):
+        return False, "invalid_risk_reward", None, None
     return True, "", target, rr
 
 
@@ -491,8 +521,12 @@ def trade_decision_from_recommendation(
         action=elig.action,
         market_regime=regime_label,
         entry_trigger=rec.entry_logic or rec.why_now or "",
-        entry_range=f"{rec.entry_price:.2f}" if rec.entry_price > 0 else None,
-        stop_loss=rec.stop_price if rec.stop_price > 0 else None,
+        entry_range=(
+            f"{rec.entry_price:.2f}"
+            if _valid_positive_finite(rec.entry_price)
+            else None
+        ),
+        stop_loss=rec.stop_price if _valid_positive_finite(rec.stop_price) else None,
         take_profit_1=elig.target,
         take_profit_2=None,
         risk_reward_ratio=elig.risk_reward_ratio,
@@ -500,7 +534,11 @@ def trade_decision_from_recommendation(
         evidence=list(rec.evidence or [])[:8],
         counter_arguments=elig.counter[:6],
         invalidation_reason=rec.suppression_reason or rec.why_not_trade or "",
-        signal_quality=max(0.0, min(1.0, rec.composite_score)),
+        signal_quality=(
+            max(0.0, min(1.0, rec.composite_score))
+            if math.isfinite(rec.composite_score)
+            else 0.0
+        ),
         evidence_quality=_evidence_quality_score(
             elig.freshness, rec, has_quote_provenance=has_provenance
         ),

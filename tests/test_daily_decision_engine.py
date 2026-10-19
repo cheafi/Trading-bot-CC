@@ -242,6 +242,22 @@ def test_no_trade_when_regime_blocks() -> None:
     assert all(not d.is_actionable for d in out.decisions)
 
 
+def test_nan_prices_never_actionable() -> None:
+    eng = DailyDecisionEngine()
+    row = _base_candidate(entry_price=float("nan"), stop_price=95.0)
+    d = eng.build([row], regime=_tradeable_regime()).decisions[0]
+    assert not d.is_actionable
+    assert d.action != "BUY"
+
+
+def test_invalid_source_metadata_not_verified() -> None:
+    eng = DailyDecisionEngine()
+    row = _base_candidate(price_source="unknown", trust={})
+    d = eng.build([row], regime=_tradeable_regime()).decisions[0]
+    assert d.data_freshness == DataFreshness.UNVERIFIED
+    assert not d.is_actionable
+
+
 def test_buy_and_readiness_share_eligibility() -> None:
     """Displayed BUY must match REQUIRES_APPROVAL readiness."""
     eng = DailyDecisionEngine()
