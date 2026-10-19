@@ -1240,11 +1240,8 @@ class IBKRService:
         while not app._order_status_q.empty():
             app._order_status_q.get_nowait()
 
-        app.placeOrder(order_id, contract, order)
-        logger.info(
-            f"[IBKR] placeOrder id={order_id} {action} {quantity}x {symbol} {order_type}"
-        )
         from src.core.order_execution import track_broker_fill, track_broker_order_intent
+        from src.engines.broker_reconciliation import broker_reconciliation
 
         track_broker_order_intent(
             source="ibkr_service",
@@ -1253,6 +1250,17 @@ class IBKRService:
             quantity=int(quantity),
             order_id=str(order_id),
             limit_price=limit_price,
+        )
+        if not broker_reconciliation._persist_ok:
+            return OrderResult(
+                order_id=order_id,
+                status="Rejected",
+                error="Reconciliation ledger persist failed — order not sent",
+            )
+
+        app.placeOrder(order_id, contract, order)
+        logger.info(
+            f"[IBKR] placeOrder id={order_id} {action} {quantity}x {symbol} {order_type}"
         )
 
         try:

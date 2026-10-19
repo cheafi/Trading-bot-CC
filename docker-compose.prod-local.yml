@@ -34,9 +34,10 @@ services:
       - DECISION_JOURNAL_PATH=/tmp/tradingai/decision_journal.jsonl
       - EXPERT_TRACK_RECORD_PATH=/tmp/tradingai/expert_track_record.json
       - CLOSED_TRADES_PATH=/tmp/tradingai/closed_trades.jsonl
+      - ENVIRONMENT=production
       - CC_ENV=production
       - LOG_LEVEL=INFO
-      - API_SECRET_KEY=${API_SECRET_KEY:-dev-secret-local}
+      - API_SECRET_KEY=${API_SECRET_KEY:?Set API_SECRET_KEY in .env for prod-local}
       - RUNNING_IN_DOCKER=1
       # Optional local LLM — enable Docker Model Runner + copy vars from config/docker-models.env.example
       # - LOCAL_LLM_ENABLED=auto
