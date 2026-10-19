@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from fastapi import APIRouter, Request
 
@@ -15,18 +16,75 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v7", tags=["v7-surfaces"])
 
-_CACHE: Dict[str, Any] = {}
-_CACHE_TS = 0.0
+_CACHE_BY_SCOPE: Dict[str, Dict[str, Any]] = {}
+_CACHE_TS_BY_SCOPE: Dict[str, float] = {}
 _TTL = 60
+
+
+def portfolio_decision_cache_scope(request: Request) -> str:
+    """
+    Isolate cached portfolio-decision payloads per operator context.
+
+    Uses API key (when present), client identity, and current manual portfolio
+    fingerprint so one request cannot receive another scope's cached book.
+    """
+    auth = (
+        request.headers.get("X-API-Key")
+        or request.headers.get("Authorization")
+        or ""
+    ).strip()
+    client_host = ""
+    if request.client and request.client.host:
+        client_host = request.client.host
+    operator = auth or f"anon:{client_host or 'unknown'}"
+
+    holdings_fp = "0:"
+    try:
+        from src.api.routers import portfolio as _pf
+
+        book = _pf._user_portfolio or {}
+        holdings = book.get("holdings") or []
+        updated = str(book.get("updated_at") or "")
+        source = str(book.get("source") or "")
+        holdings_fp = f"{source}:{len(holdings)}:{updated}"
+    except Exception:
+        holdings_fp = "unavailable"
+
+    raw = f"{operator}|{holdings_fp}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def fail_closed_should_trade(regime: Dict[str, Any]) -> bool:
+    """Missing regime permission defaults to no new trading (fail-closed)."""
+    if not regime:
+        return False
+    if "should_trade" not in regime:
+        return False
+    return bool(regime.get("should_trade"))
+
+
+def _cache_get(scope: str, now: float) -> Tuple[bool, Dict[str, Any] | None]:
+    ts = _CACHE_TS_BY_SCOPE.get(scope, 0.0)
+    payload = _CACHE_BY_SCOPE.get(scope)
+    if payload and now - ts < _TTL:
+        return True, payload
+    return False, None
+
+
+def _cache_put(scope: str, payload: Dict[str, Any], now: float) -> None:
+    _CACHE_BY_SCOPE[scope] = payload
+    _CACHE_TS_BY_SCOPE[scope] = now
 
 
 @router.get("/portfolio-decision")
 async def portfolio_decision(request: Request):
     """Portfolio decision summary + attribution + monitor + sleeves."""
-    global _CACHE, _CACHE_TS
     now = time.time()
-    if _CACHE and now - _CACHE_TS < _TTL:
-        return _CACHE
+    scope = portfolio_decision_cache_scope(request)
+    hit, cached = _cache_get(scope, now)
+    if hit and cached is not None:
+        return cached
+
     payload = await build_portfolio_decision(request)
     try:
         from src.services.cc_state import build_cc_state
@@ -35,7 +93,9 @@ async def portfolio_decision(request: Request):
         decision_authority = today.get("decision_authority") or {}
         regime = today.get("market_regime") or {}
         tradeability = str(regime.get("tradeability") or "WAIT")
-        should_trade = bool(regime.get("should_trade", True))
+        should_trade = fail_closed_should_trade(
+            regime if isinstance(regime, dict) else {}
+        )
         trust = today.get("trust") if isinstance(today.get("trust"), dict) else None
         payload["cc_state"] = build_cc_state(
             tradeability=tradeability,
@@ -48,6 +108,5 @@ async def portfolio_decision(request: Request):
     except Exception:
         pass
     out = sanitize_for_json(payload)
-    _CACHE = out
-    _CACHE_TS = now
+    _cache_put(scope, out, now)
     return out
