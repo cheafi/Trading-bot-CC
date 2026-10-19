@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import http.client
+import io
 import json
 import threading
+import urllib.error
+import urllib.parse
+import urllib.request
 from contextlib import contextmanager
 from typing import Iterator
 
 import pytest
 
 import _cc_instant as instant
+
+_TEST_SECRET = "integration-test-secret-key"
 
 
 @contextmanager
@@ -168,3 +174,144 @@ def test_proxy_receives_pre_read_post_body(monkeypatch: pytest.MonkeyPatch) -> N
 def test_safe_static_file_rejects_traversal() -> None:
     assert instant._safe_static_file("/static/../../_cc_instant.py") is None
     assert instant._safe_static_file("/static/foo/../../../etc/passwd") is None
+
+
+def test_static_symlink_outside_root_rejected(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    static = tmp_path / "static"
+    static.mkdir()
+    outside = tmp_path / "outside-secret.txt"
+    outside.write_text("leaked", encoding="utf-8")
+    (static / "escape-link.txt").symlink_to(outside)
+    monkeypatch.setattr(instant, "_INSTANT_STATIC_DIR", static.resolve())
+
+    assert instant._safe_static_file("/static/escape-link.txt") is None
+    with _instant_http_server(monkeypatch) as (host, port):
+        status, body = _request(host, port, "GET", "/static/escape-link.txt")
+        assert status == 404
+        assert b"leaked" not in body
+
+
+def _install_mock_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    mode: str,
+) -> None:
+    """Simulate uvicorn on :8001 for proxy integration tests."""
+
+    class _Resp:
+        def __init__(self, status: int, payload: bytes) -> None:
+            self.status = status
+            self._payload = payload
+            self.headers = {"Content-Type": "application/json"}
+
+        def read(self) -> bytes:
+            return self._payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def urlopen(req: urllib.request.Request, timeout: float = 20):
+        path = urllib.parse.urlparse(req.full_url).path
+        key = (req.get_header("X-api-key") or "").strip()
+
+        if mode == "backend_401":
+            detail = b'{"detail":"Invalid or missing API key"}'
+            raise urllib.error.HTTPError(
+                req.full_url, 401, "Unauthorized", {}, io.BytesIO(detail)
+            )
+
+        if mode == "backend_503":
+            detail = b'{"detail":"Service unavailable"}'
+            raise urllib.error.HTTPError(
+                req.full_url, 503, "Unavailable", {}, io.BytesIO(detail)
+            )
+
+        if mode == "backend_ok":
+            if key != _TEST_SECRET:
+                detail = b'{"detail":"Invalid or missing API key"}'
+                raise urllib.error.HTTPError(
+                    req.full_url, 401, "Unauthorized", {}, io.BytesIO(detail)
+                )
+            if path == "/api/portfolio/monitor":
+                payload = json.dumps({"positions": [], "source": "fastapi-proxy"}).encode()
+                return _Resp(200, payload)
+            return _Resp(200, b'{"ok":true}')
+
+        raise AssertionError(f"unknown mock backend mode: {mode}")
+
+    monkeypatch.setattr(instant.urllib.request, "urlopen", urlopen)
+
+
+def test_proxy_backend_up_forwards_auth_to_fastapi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("API_SECRET_KEY", _TEST_SECRET)
+    _install_mock_backend(monkeypatch, mode="backend_ok")
+
+    with _instant_http_server(monkeypatch, backend_ready=True) as (host, port):
+        status, raw = _request(host, port, "GET", "/api/portfolio/monitor")
+        assert status == 401
+
+        status, raw = _request(
+            host,
+            port,
+            "GET",
+            "/api/portfolio/monitor",
+            headers={"X-API-Key": _TEST_SECRET},
+        )
+        assert status == 200
+        assert json.loads(raw.decode()).get("source") == "fastapi-proxy"
+
+
+def test_proxy_backend_503_degraded_portfolio_still_requires_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("API_SECRET_KEY", _TEST_SECRET)
+    _install_mock_backend(monkeypatch, mode="backend_503")
+
+    with _instant_http_server(monkeypatch, backend_ready=True) as (host, port):
+        status, raw = _request(host, port, "GET", "/api/portfolio/monitor")
+        assert status == 401
+        assert "positions" not in json.loads(raw.decode())
+
+        status, raw = _request(
+            host,
+            port,
+            "GET",
+            "/api/portfolio/monitor",
+            headers={"X-API-Key": _TEST_SECRET},
+        )
+        assert status == 200
+        assert "positions" in json.loads(raw.decode())
+
+
+def test_proxy_backend_503_post_position_no_anonymous_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("API_SECRET_KEY", _TEST_SECRET)
+    monkeypatch.setattr(
+        instant, "_PORTFOLIO_LOCAL_PATH", tmp_path / "portfolio_local_holdings.json"
+    )
+    _install_mock_backend(monkeypatch, mode="backend_503")
+
+    body = json.dumps(
+        {"ticker": "MSFT", "shares": 2, "entry_price": 50.0}
+    ).encode()
+
+    with _instant_http_server(monkeypatch, backend_ready=True) as (host, port):
+        status, _ = _request(
+            host,
+            port,
+            "POST",
+            "/api/portfolio/position",
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        assert status == 401
+        assert not instant._PORTFOLIO_LOCAL_PATH.is_file()
