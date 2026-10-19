@@ -33,7 +33,9 @@ jobs:
             tests/test_instant_proxy_security.py \
             tests/test_instant_proxy_http.py \
             tests/test_p0_auth_ledger.py \
-            tests/test_vnext_p0_review.py
+            tests/test_vnext_p0_review.py \
+            tests/test_transactional_oms_v1.py \
+            tests/test_order_execution_reconciliation.py
         env:
           TRADING_ENV: paper
 
