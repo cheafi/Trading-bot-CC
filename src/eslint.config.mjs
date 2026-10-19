@@ -30,6 +30,7 @@ export default [
 		},
 	},
 	{
-		ignores: ["webview-ui", "out"],
+		// Clarity Console dashboard assets (browser globals) — not VS Code extension TS.
+		ignores: ["webview-ui", "out", "api/static/**"],
 	},
 ]
