@@ -143,13 +143,27 @@ def _read_template_bytes() -> bytes:
 
 
 def _patch_dashboard_api_key(plain: bytes) -> bytes:
-    """Instant server serves raw template — replace Jinja api_key token."""
-    key = os.environ.get("API_SECRET_KEY", "dev-secret-local")
+    """Instant server serves raw template — never embed API_SECRET_KEY in HTML."""
     token = b"window._apiKey = {{ api_key|tojson|safe }};"
     if token in plain:
-        repl = ("window._apiKey = " + json.dumps(key) + ";").encode()
-        return plain.replace(token, repl)
+        return plain.replace(token, b'window._apiKey = "";')
     return plain
+
+
+_WEAK_API_SECRETS = frozenset({"", "dev-secret-local", "changeme", "change-me"})
+
+
+def _validate_instant_security() -> None:
+    """Fail fast when production-like runs use weak or missing secrets."""
+    env = (
+        os.environ.get("ENVIRONMENT") or os.environ.get("CC_ENV") or "development"
+    ).strip().lower()
+    secret = (os.environ.get("API_SECRET_KEY") or "").strip()
+    if env == "production" and secret.lower() in _WEAK_API_SECRETS:
+        raise SystemExit(
+            "[instant] Refusing to start: ENVIRONMENT=production requires "
+            "a strong API_SECRET_KEY (not dev-secret-local or empty)."
+        )
 
 
 def _read_gzip_dashboard_file() -> bytes | None:
@@ -413,18 +427,19 @@ def _proxy_timeout(path: str) -> int:
 
 
 def _dashboard_api_key(header_value: str | None) -> str | None:
-    """Return the API key the local dashboard proxy should send upstream.
+    """Forward client X-API-Key only — never inject server API_SECRET_KEY."""
+    if header_value is None:
+        return None
+    key = str(header_value).strip()
+    return key or None
 
-    The static dashboard historically falls back to ``dev-secret-local``. In
-    prod-local runs the real key can be supplied from ``.env`` and differ from
-    that fallback, which caused authenticated Ops panels to stay blank with
-    401s. Keep the real key server-side and only rewrite the known dashboard
-    fallback inside this local proxy.
-    """
-    actual = os.environ.get("API_SECRET_KEY") or None
-    if actual and (not header_value or header_value == "dev-secret-local"):
-        return actual
-    return header_value
+
+def _cors_allow_origin() -> str:
+    """Restrict cross-origin API access; override with CC_INSTANT_CORS_ORIGIN."""
+    custom = os.environ.get("CC_INSTANT_CORS_ORIGIN", "").strip()
+    if custom:
+        return custom
+    return "http://127.0.0.1:8000"
 
 
 def _load_snapshot():
@@ -2278,7 +2293,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             pass
 
     def _cors_headers(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", _cors_allow_origin())
         self.send_header(
             "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
         )
@@ -2770,6 +2785,8 @@ def _log_main_exit() -> None:
 def main() -> None:
     if not _acquire_single_instance():
         sys.exit(0)
+
+    _validate_instant_security()
 
     # Clear stale listeners from a crashed prior instance (we hold the singleton lock)
     _kill_port(PORT)

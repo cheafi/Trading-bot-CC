@@ -50,23 +50,17 @@ def _utc_now_iso() -> str:
 
 
 def _performance_trust_fields(source: str) -> Dict[str, Any]:
-    """Classify rows for downstream Sharpe / learning — not all sources are official PnL."""
+    """Classify rows — clients cannot self-declare broker_verified."""
     src = (source or "manual").strip().lower()
-    if src in ("ibkr_bracket", "ibkr", "broker_verified"):
-        tier = "broker_verified"
-        verified_at = _utc_now_iso()
-    elif src in ("paper_sim", "paper", "simulation"):
+    if src in ("paper_sim", "paper", "simulation", "ibkr_bracket", "ibkr"):
         tier = "paper_simulated"
-        verified_at = None
     elif src in ("manual", "user", "operator"):
         tier = "manual_unverified"
-        verified_at = None
     else:
         tier = "research_hypothetical"
-        verified_at = None
     return {
         "performance_tier": tier,
-        "verified_at": verified_at,
+        "verified_at": None,
         "execution_id": "",
         "account_id": "",
         "strategy_version": "",
