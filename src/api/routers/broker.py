@@ -18,7 +18,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
 from src.api.deps import verify_api_key, verify_sensitive_api_key
 
@@ -198,21 +198,27 @@ async def place_order(
     order_type: str = "market",
     limit_price: Optional[float] = None,
     stop_price: Optional[float] = None,
+    x_idempotency_key: str = Header(..., alias="X-Idempotency-Key"),
     _: bool = Depends(verify_sensitive_api_key),
 ):
     """
-    Place a trading order through the active broker.
+    Place a trading order through the unified execution gateway.
 
-    Args:
-        ticker: Stock symbol
-        side: 'buy' or 'sell'
-        quantity: Number of shares
-        order_type: 'market', 'limit', 'stop'
-        limit_price: For limit orders
-        stop_price: For stop orders
+    Requires ``X-Idempotency-Key`` (8–128 chars). Replays return the same payload
+    without a second broker submission.
     """
     from src.brokers.base import OrderSide, OrderType
     from src.brokers.broker_manager import get_broker_manager
+    from src.api.execution_errors import execution_http_error
+    from src.core.execution_gateway import (
+        ExecutionGatewayError,
+        ExecutionIdempotencyConflictError,
+        ExecutionInFlightError,
+        ExecutionPersistError,
+        ExecutionUnknownSubmittedError,
+        SubmitOrderCommand,
+        execution_gateway,
+    )
 
     try:
         try:
@@ -228,25 +234,51 @@ async def place_order(
             )
 
         manager = await get_broker_manager()
-        result = await manager.place_order(
+        command = SubmitOrderCommand(
             ticker=ticker.upper(),
             side=order_side,
             quantity=quantity,
             order_type=order_type_enum,
+            idempotency_key=x_idempotency_key,
             limit_price=limit_price,
             stop_price=stop_price,
         )
+        return await execution_gateway.submit(command, manager=manager)
 
-        return {
-            "success": result.success,
-            "order_id": result.order_id,
-            "status": result.status.value,
-            "filled_qty": result.filled_qty,
-            "avg_fill_price": result.avg_fill_price,
-            "message": result.message,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-
+    except ValueError as exc:
+        raise execution_http_error(400, code="validation_error", message=str(exc)) from exc
+    except ExecutionPersistError as exc:
+        raise execution_http_error(
+            503,
+            code="persist_failed",
+            message=str(exc),
+            extra={
+                "broker_may_have_executed": bool(
+                    getattr(exc, "broker_may_have_executed", False)
+                )
+            },
+        ) from exc
+    except ExecutionInFlightError as exc:
+        raise execution_http_error(
+            409, code="idempotency_in_flight", message=str(exc)
+        ) from exc
+    except ExecutionIdempotencyConflictError as exc:
+        raise execution_http_error(
+            409, code="idempotency_conflict", message=str(exc)
+        ) from exc
+    except ExecutionUnknownSubmittedError as exc:
+        raise execution_http_error(
+            503, code="broker_outcome_unknown", message=str(exc)
+        ) from exc
+    except ExecutionGatewayError as exc:
+        status = (
+            403
+            if exc.code in ("trade_gate", "live_trading_disabled")
+            else 400
+        )
+        if exc.code == "account_scope_unverified":
+            status = 503
+        raise execution_http_error(status, code=exc.code, message=str(exc)) from exc
     except HTTPException:
         raise
     except Exception as e:
