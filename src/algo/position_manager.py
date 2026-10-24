@@ -39,28 +39,28 @@ class PositionStatus(str, Enum):
 @dataclass
 class Position:
     """Represents an open or closed trading position."""
-    
+
     # Identification
     ticker: str
     strategy_id: str
     position_id: str = ""
-    
+
     # Entry
     entry_price: float = 0.0
     entry_date: Optional[datetime] = None
     entry_reason: str = ""
-    
+
     # Size
     shares: int = 0
     position_value: float = 0.0
     risk_amount: float = 0.0
-    
+
     # Stops and targets
     stop_loss_price: float = 0.0
     take_profit_price: float = 0.0
     trailing_stop_price: float = 0.0
     atr_at_entry: float = 0.0
-    
+
     # Multi-target exits (scale out)
     target_1r_price: float = 0.0    # First target at 1R
     target_2r_price: float = 0.0    # Second target at 2R
@@ -68,67 +68,94 @@ class Position:
     partial_exit_1r: bool = False   # Has taken profit at 1R?
     partial_exit_2r: bool = False   # Has taken profit at 2R?
     original_shares: int = 0        # Track original size for partial exits
-    
+
     # Time limits
     max_hold_days: int = 40
     min_hold_days: int = 3
-    
+
     # Current status
     status: PositionStatus = PositionStatus.OPEN
     current_price: float = 0.0
     unrealized_pnl: float = 0.0
     unrealized_pnl_pct: float = 0.0
-    
+
     # Exit
     exit_price: float = 0.0
     exit_date: Optional[datetime] = None
     exit_reason: str = ""
     realized_pnl: float = 0.0
     realized_pnl_pct: float = 0.0
-    
+
     # Metadata
     sector: str = ""
     notes: str = ""
     direction: str = "long"  # Sprint 27: "long" or "short"
-    
+
     def __post_init__(self):
         if not self.position_id:
             self.position_id = f"{self.ticker}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
+
     @property
     def days_held(self) -> int:
-        """Calculate trading days held."""
+        """Completed exchange sessions held (NYSE calendar, holiday-aware)."""
+
         if not self.entry_date:
             return 0
         end_date = self.exit_date or datetime.now()
-        # Rough approximation: 5 trading days per week
-        days = (end_date - self.entry_date).days
-        return int(days * 5 / 7)
-    
+        from src.core.trading_calendar import (  # noqa: PLC0415
+            trading_days_between,
+        )
+
+        return trading_days_between(self.entry_date, end_date)
+
     @property
     def reward_risk_ratio(self) -> float:
         """Calculate reward/risk ratio."""
         if self.risk_amount == 0:
             return 0.0
         return self.unrealized_pnl / self.risk_amount if self.status == PositionStatus.OPEN else self.realized_pnl / self.risk_amount
-    
+
     def update_price(self, current_price: float):
-        """Update position with current price."""
+        """Update position with current price.
+
+        Fail-closed: an invalid quote (NaN / Inf / negative / zero / missing)
+        is rejected rather than written into P&L state. A single NaN here
+        propagates into portfolio equity and permanently corrupts drawdown,
+        because every comparison against NaN is False.
+        """
+
+        from src.core.price_validation import (  # noqa: PLC0415
+            InvalidPriceError,
+            validate_price,
+        )
+
+        ok, code = validate_price(current_price)
+        if not ok:
+            raise InvalidPriceError(code, "current_price", current_price)
+        current_price = float(current_price)
+
         self.current_price = current_price
         if self.direction == "short":
             self.unrealized_pnl = (self.entry_price - current_price) * self.shares
             self.unrealized_pnl_pct = (
                 (self.entry_price - current_price) / self.entry_price * 100
-                if self.entry_price > 0 else 0
+                if self.entry_price > 0
+                else 0
             )
         else:
             self.unrealized_pnl = (current_price - self.entry_price) * self.shares
             self.unrealized_pnl_pct = (
                 (current_price - self.entry_price) / self.entry_price * 100
-                if self.entry_price > 0 else 0
+                if self.entry_price > 0
+                else 0
             )
-    
-    def update_trailing_stop(self, current_price: float, trail_pct: float = 0.02, activation_pct: float = 0.03):
+
+    def update_trailing_stop(
+        self,
+        current_price: float,
+        trail_pct: float = 0.02,
+        activation_pct: float = 0.03,
+    ):
         """Update trailing stop with tiered tightening at higher profits."""
         if self.entry_price <= 0:
             return
@@ -148,8 +175,10 @@ class Position:
 
             new_trail_stop = current_price * (1 + effective_trail)
             # For shorts, trailing stop should move DOWN (tighter)
-            if (self.trailing_stop_price <= 0
-                    or new_trail_stop < self.trailing_stop_price):
+            if (
+                self.trailing_stop_price <= 0
+                or new_trail_stop < self.trailing_stop_price
+            ):
                 self.trailing_stop_price = new_trail_stop
         else:
             current_gain = (current_price - self.entry_price) / self.entry_price
@@ -167,11 +196,22 @@ class Position:
             new_trail_stop = current_price * (1 - effective_trail)
             if new_trail_stop > self.trailing_stop_price:
                 self.trailing_stop_price = new_trail_stop
-    
-    def check_exit_conditions(self, current_price: float, current_date: datetime) -> Tuple[bool, str]:
+
+    def check_exit_conditions(
+        self, current_price: float, current_date: datetime
+    ) -> Tuple[bool, str]:
         """
         Check if position should be exited (full or partial).
-        
+
+        This is a PURE QUERY: it reports a detected exit condition and must
+        not mutate exit state. A price merely *touching* a target is not an
+        execution. Previously this method set ``partial_exit_1r = True`` and
+        moved the stop to breakeven on a touch, so a rejected or failed exit
+        order silently consumed the partial-exit slot forever and moved the
+        operator's stop without any fill.
+
+        Call :meth:`commit_partial_exit` only after a fill is confirmed.
+
         Returns:
             (should_exit, reason)
             Partial exits use reason prefix 'partial_'
@@ -182,15 +222,22 @@ class Position:
             # Short: stop is ABOVE entry, targets BELOW
             if self.stop_loss_price > 0 and current_price >= self.stop_loss_price:
                 return True, "stop_loss"
-            if self.trailing_stop_price > 0 and current_price >= self.trailing_stop_price:
+            if (
+                self.trailing_stop_price > 0
+                and current_price >= self.trailing_stop_price
+            ):
                 return True, "trailing_stop"
-            if self.target_1r_price > 0 and current_price <= self.target_1r_price and not self.partial_exit_1r:
-                self.partial_exit_1r = True
-                if self.entry_price < self.stop_loss_price:
-                    self.stop_loss_price = self.entry_price
+            if (
+                self.target_1r_price > 0
+                and current_price <= self.target_1r_price
+                and not self.partial_exit_1r
+            ):
                 return True, "partial_1r"
-            if self.target_2r_price > 0 and current_price <= self.target_2r_price and not self.partial_exit_2r:
-                self.partial_exit_2r = True
+            if (
+                self.target_2r_price > 0
+                and current_price <= self.target_2r_price
+                and not self.partial_exit_2r
+            ):
                 return True, "partial_2r"
             if self.target_3r_price > 0 and current_price <= self.target_3r_price:
                 return True, "take_profit_3r"
@@ -200,31 +247,81 @@ class Position:
             # Long: stop is BELOW entry, targets ABOVE
             if current_price <= self.stop_loss_price:
                 return True, "stop_loss"
-            if self.trailing_stop_price > 0 and current_price <= self.trailing_stop_price:
+            if (
+                self.trailing_stop_price > 0
+                and current_price <= self.trailing_stop_price
+            ):
                 return True, "trailing_stop"
-            if self.target_1r_price > 0 and current_price >= self.target_1r_price and not self.partial_exit_1r:
-                self.partial_exit_1r = True
-                if self.entry_price > self.stop_loss_price:
-                    self.stop_loss_price = self.entry_price
+            if (
+                self.target_1r_price > 0
+                and current_price >= self.target_1r_price
+                and not self.partial_exit_1r
+            ):
                 return True, "partial_1r"
-            if self.target_2r_price > 0 and current_price >= self.target_2r_price and not self.partial_exit_2r:
-                self.partial_exit_2r = True
+            if (
+                self.target_2r_price > 0
+                and current_price >= self.target_2r_price
+                and not self.partial_exit_2r
+            ):
                 return True, "partial_2r"
             if self.target_3r_price > 0 and current_price >= self.target_3r_price:
                 return True, "take_profit_3r"
             if self.take_profit_price > 0 and current_price >= self.take_profit_price:
                 return True, "take_profit"
 
-        # Max hold time (direction-agnostic)
+        # Max hold time (direction-agnostic).
+        # max_hold_days is expressed in TRADING days (see
+        # src.core.risk_limits.SignalThresholds.max_hold_*), so it must be
+        # compared against sessions elapsed, not calendar days. The previous
+        # calendar-day comparison exited roughly 40% early.
         if self.entry_date:
-            days_held = (current_date - self.entry_date).days
-            if days_held >= self.max_hold_days:
+            from src.core.trading_calendar import (  # noqa: PLC0415
+                trading_days_between,
+            )
+
+            sessions_held = trading_days_between(self.entry_date, current_date)
+            if sessions_held >= self.max_hold_days:
                 return True, "max_hold_time"
-        
+
         return False, ""
-    
+
+    def commit_partial_exit(self, reason: str) -> bool:
+        """Record a partial exit AFTER its fill has been confirmed.
+
+        Separating detection from confirmation is what makes the exit path
+        idempotent: a duplicate fill event for the same level returns False
+        and changes nothing, and a rejected order leaves the level available
+        for the next poll.
+
+        Moving the stop to breakeven happens here — never on a price touch —
+        because the risk profile only actually changes once shares are sold.
+
+        Returns:
+            True if this call transitioned the level from pending to filled.
+        """
+        if reason == "partial_1r":
+            if self.partial_exit_1r:
+                return False  # duplicate fill event — ignore
+            self.partial_exit_1r = True
+            # Breakeven stop is now justified: part of the risk is realised.
+            if self.direction == "short":
+                if self.stop_loss_price > self.entry_price > 0:
+                    self.stop_loss_price = self.entry_price
+            elif 0 < self.stop_loss_price < self.entry_price:
+                self.stop_loss_price = self.entry_price
+            return True
+        if reason == "partial_2r":
+            if self.partial_exit_2r:
+                return False
+            self.partial_exit_2r = True
+            return True
+        return False
+
     def close_position(self, exit_price: float, exit_date: datetime, reason: str):
-        """Close the position."""
+        """Close the position at a CONFIRMED fill price."""
+        from src.core.price_validation import require_price  # noqa: PLC0415
+
+        exit_price = require_price(exit_price, field="exit_price")
         self.exit_price = exit_price
         self.exit_date = exit_date
         self.exit_reason = reason
@@ -232,15 +329,17 @@ class Position:
             self.realized_pnl = (self.entry_price - exit_price) * self.shares
             self.realized_pnl_pct = (
                 (self.entry_price - exit_price) / self.entry_price * 100
-                if self.entry_price > 0 else 0
+                if self.entry_price > 0
+                else 0
             )
         else:
             self.realized_pnl = (exit_price - self.entry_price) * self.shares
             self.realized_pnl_pct = (
                 (exit_price - self.entry_price) / self.entry_price * 100
-                if self.entry_price > 0 else 0
+                if self.entry_price > 0
+                else 0
             )
-        
+
         # Set status based on reason
         if reason == "stop_loss" or reason == "trailing_stop":
             self.status = PositionStatus.STOPPED_OUT
@@ -264,8 +363,8 @@ class RiskParameters:
     account_size: float = 100000.0
 
     # Risk per trade
-    risk_per_trade_pct: float = 1.0       # 1% risk per trade
-    max_risk_per_trade_pct: float = 2.0   # Hard cap at 2%
+    risk_per_trade_pct: float = 1.0  # 1% risk per trade
+    max_risk_per_trade_pct: float = 2.0  # Hard cap at 2%
 
     # Position limits — aligned with RISK.max_position_pct (5%)
     max_position_size_pct: float = 5.0  # Max 5% in one position (was 10%)
@@ -278,18 +377,18 @@ class RiskParameters:
 
     # Drawdown limits — aligned with RISK.max_drawdown_pct (15%)
     max_daily_loss_pct: float = 3.0  # Aligned with RISK.daily_loss_limit_pct
-    max_weekly_loss_pct: float = 7.0      # Stop trading after 7% weekly loss
+    max_weekly_loss_pct: float = 7.0  # Stop trading after 7% weekly loss
     max_total_drawdown_pct: float = 15.0  # Aligned with RISK.max_drawdown_pct
 
     # Scaling
-    scale_down_after_losses: int = 3      # Reduce size after 3 consecutive losses
-    scale_factor: float = 0.5             # Scale to 50% after losses
+    scale_down_after_losses: int = 3  # Reduce size after 3 consecutive losses
+    scale_factor: float = 0.5  # Scale to 50% after losses
 
 
 class PositionManager:
     """
     Manages positions and calculates optimal position sizes.
-    
+
     Key responsibilities:
     1. Calculate position sizes based on risk
     2. Track open positions
@@ -297,124 +396,128 @@ class PositionManager:
     4. Enforce risk rules
     5. Track performance metrics
     """
-    
+
     def __init__(self, params: Optional[RiskParameters] = None):
         """Initialize position manager."""
         self.params = params or RiskParameters()
         self.positions: Dict[str, Position] = {}
         self.closed_positions: List[Position] = []
-        
+
         # Performance tracking
         self.daily_pnl: Dict[str, float] = {}
         self.consecutive_losses: int = 0
         self.peak_equity: float = self.params.account_size
         self.current_equity: float = self.params.account_size
-        
+
         self.logger = logging.getLogger(__name__)
-    
+
     # ========== Position Sizing ==========
-    
+
     def calculate_position_size(
         self,
         ticker: str,
         entry_price: float,
         stop_loss_price: float,
         atr: Optional[float] = None,
-        sector: str = ""
+        sector: str = "",
     ) -> Dict[str, Any]:
         """
         Calculate optimal position size based on risk.
-        
+
         Uses the formula:
         Shares = (Account * Risk%) / (Entry - Stop)
-        
+
         Args:
             ticker: Stock ticker
             entry_price: Planned entry price
             stop_loss_price: Stop loss price
             atr: Average True Range (optional, for ATR-based stops)
             sector: Stock sector for exposure checks
-        
+
         Returns:
             Dict with shares, position_value, risk_amount, etc.
         """
         # Check if we can take a new position
         can_trade, reason = self.can_open_position(ticker, sector)
         if not can_trade:
-            return {
-                'shares': 0,
-                'can_trade': False,
-                'reason': reason
-            }
-        
+            return {"shares": 0, "can_trade": False, "reason": reason}
+
         # Calculate risk per share
         risk_per_share = abs(entry_price - stop_loss_price)
         if risk_per_share <= 0:
             return {
-                'shares': 0,
-                'can_trade': False,
-                'reason': 'Invalid stop loss (must be below entry)'
+                "shares": 0,
+                "can_trade": False,
+                "reason": "Invalid stop loss (must be below entry)",
             }
-        
+
         # Adjust risk % based on consecutive losses
         risk_pct = self.params.risk_per_trade_pct
         if self.consecutive_losses >= self.params.scale_down_after_losses:
             risk_pct *= self.params.scale_factor
-            self.logger.info(f"Scaling down risk to {risk_pct}% after {self.consecutive_losses} consecutive losses")
-        
+            self.logger.info(
+                f"Scaling down risk to {risk_pct}% after {self.consecutive_losses} consecutive losses"
+            )
+
         # Calculate risk amount
         risk_amount = self.current_equity * (risk_pct / 100)
-        
+
         # Calculate shares
         shares = int(risk_amount / risk_per_share)
-        
+
         # Check position size limits
         position_value = shares * entry_price
-        max_position_value = self.current_equity * (self.params.max_position_size_pct / 100)
-        
+        max_position_value = self.current_equity * (
+            self.params.max_position_size_pct / 100
+        )
+
         if position_value > max_position_value:
             shares = int(max_position_value / entry_price)
             position_value = shares * entry_price
-            self.logger.info(f"Position size capped at {self.params.max_position_size_pct}% of equity")
-        
+            self.logger.info(
+                f"Position size capped at {self.params.max_position_size_pct}% of equity"
+            )
+
         # Check total exposure
         current_exposure = self._get_total_exposure()
-        max_additional = (self.params.max_total_exposure_pct / 100 * self.current_equity) - current_exposure
-        
+        max_additional = (
+            self.params.max_total_exposure_pct / 100 * self.current_equity
+        ) - current_exposure
+
         if position_value > max_additional:
             shares = int(max_additional / entry_price)
             position_value = shares * entry_price
             self.logger.info("Position size reduced due to total exposure limit")
-        
+
         if shares <= 0:
             return {
-                'shares': 0,
-                'can_trade': False,
-                'reason': 'Position size too small after applying limits'
+                "shares": 0,
+                "can_trade": False,
+                "reason": "Position size too small after applying limits",
             }
-        
+
         # Calculate R-based multi-target prices
         r_unit = risk_per_share  # 1R = risk per share
         target_1r = entry_price + (r_unit * 1.0)
         target_2r = entry_price + (r_unit * 2.0)
         target_3r = entry_price + (r_unit * 3.0)
-        
+
         return {
-            'can_trade': True,
-            'shares': shares,
-            'position_value': position_value,
-            'risk_amount': shares * risk_per_share,
-            'risk_pct': (shares * risk_per_share) / self.current_equity * 100,
-            'entry_price': entry_price,
-            'stop_loss_price': stop_loss_price,
-            'target_1r': target_1r,
-            'target_2r': target_2r,
-            'target_3r': target_3r,
-            'target_price': target_2r,  # Default full target at 2R
-            'reward_risk_ratio': 2.0,
-            'pct_of_account': position_value / self.current_equity * 100,
+            "can_trade": True,
+            "shares": shares,
+            "position_value": position_value,
+            "risk_amount": shares * risk_per_share,
+            "risk_pct": (shares * risk_per_share) / self.current_equity * 100,
+            "entry_price": entry_price,
+            "stop_loss_price": stop_loss_price,
+            "target_1r": target_1r,
+            "target_2r": target_2r,
+            "target_3r": target_3r,
+            "target_price": target_2r,  # Default full target at 2R
+            "reward_risk_ratio": 2.0,
+            "pct_of_account": position_value / self.current_equity * 100,
         }
-    
+
     # ========== Sprint 31: Correlation Guard ==========
 
     def get_correlated_count(
@@ -469,7 +572,9 @@ class PositionManager:
         with ``max_correlated`` or more existing positions.
         """
         n = self.get_correlated_count(
-            candidate_ticker, price_data, threshold,
+            candidate_ticker,
+            price_data,
+            threshold,
         )
         if n >= max_correlated:
             return False, (
@@ -485,62 +590,68 @@ class PositionManager:
         entry_price: float,
         atr: float,
         atr_multiplier: float = 2.0,
-        sector: str = ""
+        sector: str = "",
     ) -> Dict[str, Any]:
         """
         Calculate position size using ATR-based stops.
-        
+
         Stop is placed ATR * multiplier below entry.
         """
         stop_loss_price = entry_price - (atr * atr_multiplier)
-        return self.calculate_position_size(ticker, entry_price, stop_loss_price, atr, sector)
-    
+        return self.calculate_position_size(
+            ticker, entry_price, stop_loss_price, atr, sector
+        )
+
     # ========== Position Management ==========
-    
+
     def can_open_position(self, ticker: str, sector: str = "") -> Tuple[bool, str]:
         """
         Check if we can open a new position.
-        
+
         Returns:
             (can_open, reason)
         """
         # Check if already have position in this ticker
         if ticker in self.positions:
             return False, f"Already have position in {ticker}"
-        
+
         # Check max positions
         if len(self.positions) >= self.params.max_open_positions:
             return False, f"Max positions ({self.params.max_open_positions}) reached"
-        
+
         # Check sector exposure
         if sector:
             sector_exposure = self._get_sector_exposure(sector)
             if sector_exposure >= self.params.max_sector_exposure_pct:
-                return False, f"Max sector exposure ({self.params.max_sector_exposure_pct}%) reached for {sector}"
-        
+                return (
+                    False,
+                    f"Max sector exposure ({self.params.max_sector_exposure_pct}%) reached for {sector}",
+                )
+
         # Check drawdown limits
         drawdown = self._get_current_drawdown()
         if drawdown >= self.params.max_total_drawdown_pct:
-            return False, f"Max drawdown ({self.params.max_total_drawdown_pct}%) reached - trading paused"
-        
+            return (
+                False,
+                f"Max drawdown ({self.params.max_total_drawdown_pct}%) reached - trading paused",
+            )
+
         # Check daily loss limit
         daily_loss = self._get_daily_pnl()
         if daily_loss <= -self.params.max_daily_loss_pct:
             return False, (
-                f"Daily loss limit "
-                f"({self.params.max_daily_loss_pct}%) reached"
+                f"Daily loss limit " f"({self.params.max_daily_loss_pct}%) reached"
             )
 
         # Check weekly loss limit
         weekly_loss = self._get_weekly_pnl()
         if weekly_loss <= -self.params.max_weekly_loss_pct:
             return False, (
-                f"Weekly loss limit "
-                f"({self.params.max_weekly_loss_pct}%) reached"
+                f"Weekly loss limit " f"({self.params.max_weekly_loss_pct}%) reached"
             )
 
         return True, ""
-    
+
     def open_position(
         self,
         ticker: str,
@@ -557,7 +668,7 @@ class PositionManager:
     ) -> Position:
         """
         Open a new position.
-        
+
         Returns:
             Position object
         """
@@ -578,7 +689,7 @@ class PositionManager:
             sector=sector,
             direction=direction,
         )
-        
+
         # Set multi-target R levels (direction-aware)
         risk_per_share = abs(entry_price - stop_loss_price)
         if risk_per_share > 0:
@@ -590,31 +701,28 @@ class PositionManager:
                 position.target_1r_price = entry_price + risk_per_share
                 position.target_2r_price = entry_price + (risk_per_share * 2)
                 position.target_3r_price = entry_price + (risk_per_share * 3)
-        
+
         self.positions[ticker] = position
         self.logger.info(
             f"Opened position: {ticker} @ ${entry_price:.2f}, "
             f"{shares} shares, stop ${stop_loss_price:.2f}"
         )
-        
+
         return position
-    
+
     def close_position(
-        self,
-        ticker: str,
-        exit_price: float,
-        reason: str = "manual"
+        self, ticker: str, exit_price: float, reason: str = "manual"
     ) -> Optional[Position]:
         """
         Close an existing position.
-        
+
         Returns:
             Closed Position object or None if not found
         """
         if ticker not in self.positions:
             self.logger.warning(f"No position found for {ticker}")
             return None
-        
+
         position = self.positions[ticker]
         position.close_position(exit_price, datetime.now(), reason)
 
@@ -624,20 +732,18 @@ class PositionManager:
             self.peak_equity = self.current_equity
 
         # --- FIX: update daily and weekly PnL ledgers ---
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = datetime.now().strftime("%Y-%m-%d")
         self.daily_pnl[today] = (
-            self.daily_pnl.get(today, 0.0)
-            + position.realized_pnl_pct
+            self.daily_pnl.get(today, 0.0) + position.realized_pnl_pct
         )
         try:
-            week_key = datetime.now().strftime('%Y-W%W')
+            week_key = datetime.now().strftime("%Y-W%W")
         except Exception:
             week_key = today[:7]
-        if not hasattr(self, 'weekly_pnl'):
+        if not hasattr(self, "weekly_pnl"):
             self.weekly_pnl = {}
         self.weekly_pnl[week_key] = (
-            self.weekly_pnl.get(week_key, 0.0)
-            + position.realized_pnl_pct
+            self.weekly_pnl.get(week_key, 0.0) + position.realized_pnl_pct
         )
 
         # Track consecutive losses
@@ -649,94 +755,107 @@ class PositionManager:
         # Move to closed positions
         self.closed_positions.append(position)
         del self.positions[ticker]
-        
+
         self.logger.info(
             f"Closed position: {ticker} @ ${exit_price:.2f}, "
             f"P/L: ${position.realized_pnl:.2f} ({position.realized_pnl_pct:.2f}%), "
             f"Reason: {reason}"
         )
-        
+
         return position
-    
+
     def update_all_positions(self, prices: Dict[str, float], current_date: datetime):
         """
         Update all positions with current prices and check exit conditions.
-        
+
         Args:
             prices: Dict of ticker -> current price
             current_date: Current date for time-based exits
-        
+
         Returns:
             List of positions that should be closed
         """
         positions_to_close = []
-        
+
         for ticker, position in self.positions.items():
             if ticker in prices:
                 current_price = prices[ticker]
-                
+
                 # Update trailing stop
                 position.update_trailing_stop(
-                    current_price,
-                    trail_pct=0.02,
-                    activation_pct=0.03
+                    current_price, trail_pct=0.02, activation_pct=0.03
                 )
-                
+
                 # Check exit conditions
-                should_exit, reason = position.check_exit_conditions(current_price, current_date)
-                
+                should_exit, reason = position.check_exit_conditions(
+                    current_price, current_date
+                )
+
                 if should_exit:
                     if reason.startswith("partial_"):
-                        # Partial exit: sell 1/3 of position
-                        partial_shares = max(
-                            1, position.shares // 3
+                        # Partial exit: sell 1/3 of position.
+                        # The level is only marked consumed once the fill is
+                        # confirmed, so a rejected order is retried on the
+                        # next poll instead of being silently lost.
+                        partial_shares = max(1, position.shares // 3)
+                        fill = self.reduce_position(
+                            ticker,
+                            partial_shares,
+                            current_price,
+                            reason,
                         )
-                        self.reduce_position(
-                            ticker, partial_shares,
-                            current_price, reason,
-                        )
+                        if fill is not None:
+                            position.commit_partial_exit(reason)
+                        else:
+                            self.logger.warning(
+                                f"{ticker}: {reason} not filled; level "
+                                f"remains open for retry"
+                            )
                     else:
-                        positions_to_close.append({
-                            'ticker': ticker,
-                            'price': current_price,
-                            'reason': reason,
-                        })
-        
+                        positions_to_close.append(
+                            {
+                                "ticker": ticker,
+                                "price": current_price,
+                                "reason": reason,
+                            }
+                        )
+
         return positions_to_close
-    
+
     # ========== Exposure Calculations ==========
-    
+
     def _get_total_exposure(self) -> float:
         """Get total exposure (sum of position values)."""
         return sum(p.position_value for p in self.positions.values())
-    
+
     def _get_sector_exposure(self, sector: str) -> float:
         """Get exposure to a specific sector as percentage of equity."""
         sector_value = sum(
-            p.position_value for p in self.positions.values()
-            if p.sector == sector
+            p.position_value for p in self.positions.values() if p.sector == sector
         )
-        return (sector_value / self.current_equity * 100) if self.current_equity > 0 else 0
-    
+        return (
+            (sector_value / self.current_equity * 100) if self.current_equity > 0 else 0
+        )
+
     def _get_current_drawdown(self) -> float:
         """Get current drawdown from peak as percentage."""
         if self.peak_equity <= 0:
             return 0.0
         return (self.peak_equity - self.current_equity) / self.peak_equity * 100
-    
+
     def _get_daily_pnl(self) -> float:
         """Get today P/L as percentage of equity."""
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = datetime.now().strftime("%Y-%m-%d")
         return self.daily_pnl.get(today, 0.0)
 
     def _get_weekly_pnl(self) -> float:
         """Get this week P/L as percentage of equity."""
-        if not hasattr(self, 'weekly_pnl'):
+        if not hasattr(self, "weekly_pnl"):
             self.weekly_pnl = {}
         try:
-            week_key = datetime.now().strftime('%Y-W%W')
+            week_key = datetime.now().strftime("%Y-W%W")
         except Exception:
-            week_key = datetime.now().strftime('%Y-%m-%d')[:7]
+            week_key = datetime.now().strftime("%Y-%m-%d")[:7]
         return self.weekly_pnl.get(week_key, 0.0)
 
     def reduce_position(
@@ -757,14 +876,39 @@ class PositionManager:
             return None
 
         pos = self.positions[ticker]
+
+        from src.core.price_validation import (  # noqa: PLC0415
+            InvalidPriceError,
+            require_price,
+        )
+
+        try:
+            exit_price = require_price(exit_price, field="exit_price")
+        except InvalidPriceError as exc:
+            self.logger.error(
+                f"{ticker}: rejected partial exit on invalid price " f"({exc.code})"
+            )
+            return None
+
+        if shares_to_sell <= 0:
+            self.logger.warning(
+                f"{ticker}: ignoring non-positive partial size " f"{shares_to_sell}"
+            )
+            return None
+
         if shares_to_sell >= pos.shares:
             return self.close_position(ticker, exit_price, reason)
 
-        # Partial exit
-        pnl_per_share = exit_price - pos.entry_price
+        # Partial exit. Short positions profit when price FALLS, so the sign
+        # must follow the direction; the previous long-only formula booked
+        # inverted P&L for every short partial exit.
+        if pos.direction == "short":
+            pnl_per_share = pos.entry_price - exit_price
+        else:
+            pnl_per_share = exit_price - pos.entry_price
         partial_pnl = pnl_per_share * shares_to_sell
         partial_pnl_pct = (
-            pnl_per_share / pos.entry_price * 100
+            pnl_per_share / pos.entry_price * 100 if pos.entry_price > 0 else 0.0
         )
 
         # Update position
@@ -798,11 +942,11 @@ class PositionManager:
             f"{pos.shares} shares remaining"
         )
         return partial_pnl
-    
+
     def get_exposure_report(self) -> Dict[str, Any]:
         """Get comprehensive exposure report."""
         total_exposure = self._get_total_exposure()
-        
+
         # Sector breakdown
         sector_exposure = {}
         for p in self.positions.values():
@@ -810,16 +954,16 @@ class PositionManager:
             if sector not in sector_exposure:
                 sector_exposure[sector] = 0.0
             sector_exposure[sector] += p.position_value
-        
+
         # Convert to percentages
         sector_pct = {
             sector: (value / self.current_equity * 100)
             for sector, value in sector_exposure.items()
         }
-        
+
         # Unrealized P/L
         unrealized_pnl = sum(p.unrealized_pnl for p in self.positions.values())
-        
+
         return {
             'account_size': self.params.account_size,
             'current_equity': self.current_equity,
@@ -836,9 +980,9 @@ class PositionManager:
             'consecutive_losses': self.consecutive_losses,
             'risk_scaling': self.params.scale_factor if self.consecutive_losses >= self.params.scale_down_after_losses else 1.0,
         }
-    
+
     # ========== Performance Tracking ==========
-    
+
     def get_performance_stats(self) -> Dict[str, Any]:
         """Get performance statistics for closed positions."""
         if not self.closed_positions:
@@ -850,16 +994,16 @@ class PositionManager:
                 'profit_factor': 0.0,
                 'total_pnl': 0.0,
             }
-        
+
         wins = [p for p in self.closed_positions if p.realized_pnl > 0]
         losses = [p for p in self.closed_positions if p.realized_pnl <= 0]
-        
+
         total_wins = sum(p.realized_pnl for p in wins)
         total_losses = abs(sum(p.realized_pnl for p in losses))
-        
+
         avg_win = total_wins / len(wins) if wins else 0.0
         avg_loss = total_losses / len(losses) if losses else 0.0
-        
+
         return {
             'total_trades': len(self.closed_positions),
             'winning_trades': len(wins),
@@ -877,7 +1021,7 @@ class PositionManager:
             'avg_hold_days': sum(p.days_held for p in self.closed_positions) / len(self.closed_positions),
             'max_drawdown_pct': self._get_current_drawdown(),
         }
-    
+
     def get_open_positions_summary(self) -> List[Dict[str, Any]]:
         """Get summary of all open positions."""
         return [

@@ -62,8 +62,17 @@ class UniverseFilter:
             "earnings_blackout_days": 2,
         }
 
-    def __init__(self, overrides: Optional[Dict] = None):
+    def __init__(
+        self,
+        overrides: Optional[Dict] = None,
+        require_market_cap: bool = True,
+    ):
+        """``require_market_cap=False`` permits research/backtest universes
+        where fundamentals are unavailable. Execution paths must leave it
+        enabled so missing data cannot create false eligibility.
+        """
         self.gates = {**self.DEFAULT_GATES, **(overrides or {})}
+        self.require_market_cap = require_market_cap
         self.logger = logging.getLogger(__name__)
         self._rejection_log: List[Dict] = []
 
@@ -117,7 +126,17 @@ class UniverseFilter:
 
             price = row.get("close", row.get("sma_20", 0)) or 0
             avg_vol = row.get("volume_sma_20", 0) or 0
-            mkt_cap = row.get("market_cap", float("inf")) or float("inf")
+            # Data quality: a missing/invalid market cap must NOT satisfy the
+            # min_market_cap gate. Previously defaulted to +inf, which silently
+            # admitted every name lacking fundamentals. Treat as MISSING and
+            # reject unless the caller explicitly opts out (research mode).
+            raw_mkt_cap = row.get("market_cap", None)
+            try:
+                mkt_cap = float(raw_mkt_cap) if raw_mkt_cap is not None else None
+            except (TypeError, ValueError):
+                mkt_cap = None
+            if mkt_cap is not None and not (0 < mkt_cap < float("inf")):
+                mkt_cap = None
             history_len = len(tf)
 
             dollar_vol = price * avg_vol
@@ -132,7 +151,11 @@ class UniverseFilter:
             if avg_vol < self.gates["min_avg_volume_20d"]:
                 rejections[ticker] = f"avg_vol {avg_vol:,.0f} < {self.gates['min_avg_volume_20d']:,.0f}"
                 continue
-            if mkt_cap < self.gates["min_market_cap"]:
+            if mkt_cap is None:
+                if self.require_market_cap:
+                    rejections[ticker] = "mkt_cap MISSING (data quality)"
+                    continue
+            elif mkt_cap < self.gates["min_market_cap"]:
                 rejections[ticker] = f"mkt_cap ${mkt_cap:,.0f} < ${self.gates['min_market_cap']:,.0f}"
                 continue
             if history_len < self.gates["min_history_days"]:

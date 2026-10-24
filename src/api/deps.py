@@ -111,7 +111,7 @@ def _require_matching_api_key(
             ),
         )
 
-    if not x_api_key or x_api_key != settings.api_secret_key:
+    if not _header_api_key_valid(settings.api_secret_key, x_api_key):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     return True
 
@@ -279,6 +279,8 @@ async def optional_api_key(x_api_key: str = Header(None, alias="X-API-Key")):
         settings = _load_settings()
     except Exception:
         return None
-    if settings.api_secret_key and x_api_key != settings.api_secret_key:
+    if settings.api_secret_key and not _header_api_key_valid(
+        settings.api_secret_key, x_api_key
+    ):
         return None
     return x_api_key
