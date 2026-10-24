@@ -10,6 +10,7 @@
     <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
     <script src="/static/cc-helpers.js"></script>
     <script src="/static/cc-i18n.js" defer></script>
+    <!-- API key: trusted single-operator LAN only — not safe for public internet deployment. -->
     <script id="cc-api-key" type="application/json">{{ api_key|tojson|safe }}</script>
     <script>
     window._apiKey=(function(){
@@ -5767,6 +5768,14 @@
           <div class="flex gap-2">
             <button @click="fetchPortfolio()" class="btn-s text-[10px]" :disabled="pf.loading">🔄</button>
             <button @click="pf.showAdd=!pf.showAdd" class="btn-s text-[10px]" style="background:var(--green);color:#0d1117;font-weight:700">+ Add Position</button>
+          </div>
+        </div>
+        <div x-show="pf.authRequired" class="card card-p mb-2" style="border:1px solid var(--red);background:rgba(255,92,92,.08)">
+          <div class="text-[10px] font-bold mb-2" style="color:var(--red)" x-text="pf.authError || 'Portfolio unavailable — authentication required.'"></div>
+          <div class="text-[9px] mb-2" style="color:var(--t3)">Enter operator API key once — stored in HttpOnly session cookie, not in page source.</div>
+          <div class="flex gap-2 items-center flex-wrap">
+            <input type="password" x-model="pf.sessionKey" class="rounded px-2 py-1 text-[11px] mono flex-1 min-w-[140px]" style="background:var(--s2);color:var(--t1);border:1px solid var(--bd)" placeholder="API key" autocomplete="off">
+            <button type="button" class="btn-s text-[10px]" @click="establishOperatorSession()" :disabled="pf.sessionBusy">Authenticate</button>
           </div>
         </div>
         <!-- Add Position Form -->

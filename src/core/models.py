@@ -1217,7 +1217,9 @@ class TradeRecommendation(BaseModel):
         d["action_state"] = self.action_state
         if self.confidence_layers:
             d["confidence_layers"] = self.confidence_layers
-        return d
+        from src.core.quote_provenance import flatten_provenance_to_api_dict
+
+        return flatten_provenance_to_api_dict(d)
 
     def to_entry_snapshot(self) -> Dict[str, Any]:
         """Extract ML entry snapshot for learning loop / DB.
@@ -1386,6 +1388,10 @@ class TradeRecommendation(BaseModel):
 
         # Stash original dict in metadata (preserves _signal_obj etc.)
         rec.metadata["_original_dict"] = d
+        from src.core.quote_provenance import apply_provenance_to_metadata, provenance_from_mapping
+
+        prov = provenance_from_mapping(d)
+        apply_provenance_to_metadata(rec.metadata, prov)
         return rec
 
 

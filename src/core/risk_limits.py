@@ -22,12 +22,60 @@ import os
 from dataclasses import dataclass, field
 
 
-def _env_float(key: str, default: float) -> float:
-    return float(os.environ.get(key, default))
+class RiskConfigError(ValueError):
+    """Raised when risk configuration is financially unsafe or unparseable."""
 
 
-def _env_int(key: str, default: int) -> int:
-    return int(os.environ.get(key, default))
+def _env_float(
+    key: str,
+    default: float,
+    *,
+    lo: float | None = None,
+    hi: float | None = None,
+) -> float:
+    """Parse a float env override, failing loudly on unsafe values.
+
+    A malformed or out-of-range risk parameter must never silently fall back
+    to a permissive default — that is how a typo becomes an uncapped
+    position size.
+    """
+    raw = os.environ.get(key)
+    if raw is None:
+        value = float(default)
+    else:
+        try:
+            value = float(str(raw).strip())
+        except (TypeError, ValueError) as exc:
+            raise RiskConfigError(f"{key}={raw!r} is not a valid number.") from exc
+    if value != value or value in (float("inf"), float("-inf")):
+        raise RiskConfigError(f"{key} must be finite, got {value!r}.")
+    if lo is not None and value < lo:
+        raise RiskConfigError(f"{key}={value} is below minimum {lo}.")
+    if hi is not None and value > hi:
+        raise RiskConfigError(f"{key}={value} exceeds maximum {hi}.")
+    return value
+
+
+def _env_int(
+    key: str,
+    default: int,
+    *,
+    lo: int | None = None,
+    hi: int | None = None,
+) -> int:
+    raw = os.environ.get(key)
+    if raw is None:
+        value = int(default)
+    else:
+        try:
+            value = int(str(raw).strip())
+        except (TypeError, ValueError) as exc:
+            raise RiskConfigError(f"{key}={raw!r} is not a valid integer.") from exc
+    if lo is not None and value < lo:
+        raise RiskConfigError(f"{key}={value} is below minimum {lo}.")
+    if hi is not None and value > hi:
+        raise RiskConfigError(f"{key}={value} exceeds maximum {hi}.")
+    return value
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -41,23 +89,29 @@ class PortfolioRiskLimits:
 
     # ── Position limits ──
     max_position_pct: float = field(
-        default_factory=lambda: _env_float("RISK_MAX_POSITION_PCT", 0.05)
+        default_factory=lambda: _env_float(
+            "RISK_MAX_POSITION_PCT", 0.05, lo=0.001, hi=1.0
+        )
     )  # 5% max single-name weight
     max_positions: int = field(
-        default_factory=lambda: _env_int("RISK_MAX_POSITIONS", 10)
+        default_factory=lambda: _env_int("RISK_MAX_POSITIONS", 10, lo=1, hi=200)
     )
     max_sector_pct: float = field(
-        default_factory=lambda: _env_float("RISK_MAX_SECTOR_PCT", 0.30)
+        default_factory=lambda: _env_float("RISK_MAX_SECTOR_PCT", 0.30, lo=0.01, hi=1.0)
     )  # 30% max in any sector
     max_correlated_names: int = 3  # max names in a correlation bucket
 
     # ── Drawdown circuit breakers ──
     max_drawdown_pct: float = field(
-        default_factory=lambda: _env_float("RISK_MAX_DRAWDOWN_PCT", 0.15)
+        default_factory=lambda: _env_float(
+            "RISK_MAX_DRAWDOWN_PCT", 0.15, lo=0.01, hi=0.90
+        )
     )  # 15% → kill switch, no new trades
     drawdown_warning_pct: float = 0.08  # 8% → reduce size by 50%
     daily_loss_limit_pct: float = field(
-        default_factory=lambda: _env_float("RISK_DAILY_LOSS_LIMIT_PCT", 0.03)
+        default_factory=lambda: _env_float(
+            "RISK_DAILY_LOSS_LIMIT_PCT", 0.03, lo=0.001, hi=0.50
+        )
     )  # 3% daily loss → halt trading
 
     # ── Exposure limits ──
@@ -150,7 +204,7 @@ class BacktestDefaults:
     """Default parameters for backtest engine."""
 
     account_size: float = field(
-        default_factory=lambda: _env_float("BACKTEST_ACCOUNT_SIZE", 100_000)
+        default_factory=lambda: _env_float("BACKTEST_ACCOUNT_SIZE", 100_000, lo=1.0)
     )
     commission_per_share: float = 0.005
     min_commission: float = 1.00
@@ -172,25 +226,31 @@ class UniverseFilterGates:
     """
 
     min_price: float = field(
-        default_factory=lambda: _env_float("UNIVERSE_MIN_PRICE", 5.0)
+        default_factory=lambda: _env_float("UNIVERSE_MIN_PRICE", 5.0, lo=0.0)
     )  # No penny stocks
     min_dollar_vol_20d: float = field(
-        default_factory=lambda: _env_float("UNIVERSE_MIN_DOLLAR_VOL", 5_000_000)
+        default_factory=lambda: _env_float("UNIVERSE_MIN_DOLLAR_VOL", 5_000_000, lo=0.0)
     )  # $5M daily dollar volume
     min_avg_volume_20d: int = field(
-        default_factory=lambda: _env_int("UNIVERSE_MIN_AVG_VOL", 200_000)
+        default_factory=lambda: _env_int("UNIVERSE_MIN_AVG_VOL", 200_000, lo=0)
     )  # 200K shares/day
     max_spread_pct: float = field(
-        default_factory=lambda: _env_float("UNIVERSE_MAX_SPREAD_PCT", 1.0)
+        default_factory=lambda: _env_float(
+            "UNIVERSE_MAX_SPREAD_PCT", 1.0, lo=0.0, hi=100.0
+        )
     )  # (high-low)/close proxy < 1%
     min_market_cap: float = field(
-        default_factory=lambda: _env_float("UNIVERSE_MIN_MARKET_CAP", 500_000_000)
+        default_factory=lambda: _env_float(
+            "UNIVERSE_MIN_MARKET_CAP", 500_000_000, lo=0.0
+        )
     )  # $500M market cap
     min_history_days: int = field(
-        default_factory=lambda: _env_int("UNIVERSE_MIN_HISTORY_DAYS", 60)
+        default_factory=lambda: _env_int("UNIVERSE_MIN_HISTORY_DAYS", 60, lo=1)
     )
     earnings_blackout_days: int = field(
-        default_factory=lambda: _env_int("UNIVERSE_EARNINGS_BLACKOUT_DAYS", 2)
+        default_factory=lambda: _env_int(
+            "UNIVERSE_EARNINGS_BLACKOUT_DAYS", 2, lo=0, hi=30
+        )
     )
 
     def as_dict(self) -> dict:
@@ -219,17 +279,25 @@ class VIXThresholds:
     """
 
     low: float = field(
-        default_factory=lambda: _env_float("VIX_LOW", 14.0)
+        default_factory=lambda: _env_float("VIX_LOW", 14.0, lo=0.0, hi=200.0)
     )  # Below this → calm / RISK_ON
     mid: float = field(
-        default_factory=lambda: _env_float("VIX_MID", 20.0)
+        default_factory=lambda: _env_float("VIX_MID", 20.0, lo=0.0, hi=200.0)
     )  # Transition zone
     high: float = field(
-        default_factory=lambda: _env_float("VIX_HIGH", 28.0)
+        default_factory=lambda: _env_float("VIX_HIGH", 28.0, lo=0.0, hi=200.0)
     )  # Elevated → reduce size
     crisis: float = field(
-        default_factory=lambda: _env_float("VIX_CRISIS", 35.0)
+        default_factory=lambda: _env_float("VIX_CRISIS", 35.0, lo=0.0, hi=200.0)
     )  # Crisis → NO TRADE (overrides all signals)
+
+    def __post_init__(self) -> None:
+        if not self.low < self.mid < self.high < self.crisis:
+            raise RiskConfigError(
+                "VIX thresholds must be strictly increasing: "
+                f"low={self.low} mid={self.mid} "
+                f"high={self.high} crisis={self.crisis}"
+            )
 
 
 # ═══════════════════════════════════════════════════════════════

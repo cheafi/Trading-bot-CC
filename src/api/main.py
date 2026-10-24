@@ -6219,6 +6219,9 @@ from src.api.routers.portfolio import router as portfolio_router
 
 app.include_router(intel_router)
 app.include_router(portfolio_router)
+from src.api.routers.operator_session import router as operator_session_router
+
+app.include_router(operator_session_router)
 from src.api.routers.decision import router as decision_router
 
 app.include_router(decision_router)

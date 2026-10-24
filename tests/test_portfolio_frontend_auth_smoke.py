@@ -1,0 +1,55 @@
+"""Smoke checks: dashboard JS uses server-injected key, not hardcoded secrets."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_index_injects_api_key_from_template_not_static_secret() -> None:
+    html = (ROOT / "src/api/templates/index.html").read_text(encoding="utf-8")
+    assert "cc-api-key" in html
+    assert "{{ api_key" in html
+    assert "API_SECRET_KEY" not in html
+
+
+def test_cc_app_portfolio_decision_uses_cc_fetch_with_api_key_header() -> None:
+    js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
+    assert 'ccFetch("/api/v7/portfolio-decision"' in js
+    assert '"X-API-Key": window._apiKey' in js
+
+
+def test_cc_app_sensitive_portfolio_mutations_send_api_key() -> None:
+    js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
+    for needle in (
+        'fetch("/api/portfolio/var-historical"',
+        'fetch("/api/portfolio/position/"',
+        'method: "DELETE"',
+    ):
+        assert needle in js
+    assert js.count('"X-API-Key": window._apiKey') >= 10
+
+
+def test_cc_app_operator_session_flow_present() -> None:
+    js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
+    html = (ROOT / "src/api/templates/index.html").read_text(encoding="utf-8")
+    assert "establishOperatorSession" in js
+    assert "/api/operator/session" in js
+    assert 'credentials: "include"' in js
+    assert "pf.sessionKey" in html
+
+
+def test_cc_app_fetch_portfolio_uses_cc_fetch_for_monitor() -> None:
+    js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
+    assert 'ccFetch("/api/portfolio/monitor"' in js
+    assert "pf.authRequired" in js
+    assert "Portfolio unavailable — authentication required." in js
+
+
+def test_cc_app_alerts_history_sends_api_key_header() -> None:
+    js = (ROOT / "src/api/static/cc-app.js").read_text(encoding="utf-8")
+    assert "/api/portfolio/alerts-history" in js
+    idx = js.index("/api/portfolio/alerts-history")
+    snippet = js[max(0, idx - 200) : idx + 200]
+    assert "window._apiKey" in snippet

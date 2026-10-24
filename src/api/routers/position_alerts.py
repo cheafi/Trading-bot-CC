@@ -23,7 +23,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, Request
 
-from src.api.deps import optional_api_key, verify_api_key
+from src.api.deps import verify_portfolio_api_key, verify_portfolio_write
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -51,7 +51,10 @@ def _severity_rank(sev: str) -> int:
 
 
 @router.get("/api/portfolio/risk-alerts", tags=["portfolio"])
-async def portfolio_risk_alerts(request: Request, _=optional_api_key):
+async def portfolio_risk_alerts(
+    request: Request,
+    _: bool = Depends(verify_portfolio_api_key),
+):
     """Scan current holdings and return actionable risk alerts."""
     alerts: List[Dict[str, Any]] = []
 
@@ -261,7 +264,10 @@ async def portfolio_risk_alerts(request: Request, _=optional_api_key):
 
 
 @router.get("/api/portfolio/alerts-history", tags=["portfolio"])
-async def alerts_history(limit: int = 50, _=optional_api_key):
+async def alerts_history(
+    limit: int = 50,
+    _: bool = Depends(verify_portfolio_api_key),
+):
     """Tail the persistent alerts log (data/alerts.jsonl)."""
     rows: List[Dict[str, Any]] = []
     try:
@@ -286,7 +292,7 @@ async def alerts_history(limit: int = 50, _=optional_api_key):
 
 
 @router.post("/api/portfolio/alerts-clear-dedupe", tags=["portfolio"])
-async def alerts_clear_dedupe(_: bool = Depends(verify_api_key)):
+async def alerts_clear_dedupe(_: bool = Depends(verify_portfolio_write)):
     """Wipe in-memory de-dupe map — next scan re-pushes all active alerts."""
     n = len(_DISPATCHED)
     _DISPATCHED.clear()
@@ -294,7 +300,10 @@ async def alerts_clear_dedupe(_: bool = Depends(verify_api_key)):
 
 
 @router.post("/api/portfolio/alerts-rotate", tags=["portfolio"])
-async def alerts_rotate(keep: int = 5000, _: bool = Depends(verify_api_key)):
+async def alerts_rotate(
+    keep: int = 5000,
+    _: bool = Depends(verify_portfolio_write),
+):
     """Trim alerts.jsonl to the last `keep` rows (default 5000).
 
     Archives discarded rows to alerts.jsonl.<UTC-date>.bak only if >0 trimmed.

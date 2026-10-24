@@ -175,6 +175,9 @@ class MarketDataService:
             change_5d = _pct_from_offset(5)
             change_20d = _pct_from_offset(20)
 
+            from src.core.quote_provenance import SOURCE_DAILY_BAR, index_to_utc_iso
+
+            bar_ts = index_to_utc_iso(df.index[-1])
             return {
                 "ticker":     ticker,
                 "price":      round(close, 4),
@@ -183,6 +186,12 @@ class MarketDataService:
                 "change_5d":  change_5d,
                 "change_20d": change_20d,
                 "volume":     int(last.get(vol_col, 0)),
+                "quote_price": round(close, 4),
+                "price_timestamp": bar_ts,
+                "quote_timestamp": bar_ts,
+                "price_source": SOURCE_DAILY_BAR,
+                "quote_source": SOURCE_DAILY_BAR,
+                "research_as_of": bar_ts,
             }
         except Exception as exc:
             logger.warning(f"[MarketData] get_quote({ticker}) parse error: {exc}")

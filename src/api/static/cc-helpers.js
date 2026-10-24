@@ -2445,6 +2445,10 @@ function cc() {
 		playbookFocusTicker: "",
 		pf: {
 			loading: false,
+			authRequired: false,
+			authError: "",
+			sessionKey: "",
+			sessionBusy: false,
 			source: "manual",
 			positions: [],
 			alerts: [],
@@ -3083,6 +3087,7 @@ function cc() {
 							init.headers && typeof init.headers === "object" && !Array.isArray(init.headers)
 								? { ...init.headers }
 								: {}
+						init.credentials = init.credentials || "include"
 						init.headers = { "X-API-Key": window._apiKey || "", ...headers }
 					}
 					const extSignal = init.signal
@@ -3174,7 +3179,9 @@ function cc() {
 						detail = j.detail || j.error || detail
 					} catch (_e) {}
 					const state =
-						this.normalizeFetchError(String(detail)) || (r.status === 503 ? "stale" : "failed_fetch")
+						r.status === 401
+							? "auth_required"
+							: this.normalizeFetchError(String(detail)) || (r.status === 503 ? "stale" : "failed_fetch")
 					const msg = this.surfaceFetchStateMessage(
 						state,
 						this.normalizeFetchError(String(detail)) ? null : detail,
@@ -3184,6 +3191,7 @@ function cc() {
 						error: msg,
 						failed_fetch: state === "failed_fetch",
 						stale: state === "stale",
+						auth_required: state === "auth_required",
 					}
 					return { ok: false, status: r.status, error: msg, fetch_state: state }
 				}
@@ -3672,7 +3680,10 @@ function cc() {
 			try {
 				const r = await fetch("/api/portfolio/position", {
 					method: "PUT",
-					headers: { "Content-Type": "application/json" },
+					headers: {
+						"Content-Type": "application/json",
+						"X-API-Key": window._apiKey || "",
+					},
 					body: JSON.stringify({ ticker: t, stop_price: stop }),
 				})
 				if (r.ok) {
@@ -4157,6 +4168,12 @@ function cc() {
 					title: "資料載入中 · Loading",
 					explanation: "即時資料仍在載入；唔好把快取內容當成 deploy authority。",
 					next_action: "等抓取完成，或者 refresh 分頁。",
+				},
+				auth_required: {
+					badge: "AUTH REQUIRED",
+					title: "Portfolio unavailable",
+					explanation: "Portfolio unavailable — authentication required.",
+					next_action: "Reload after the server injects a valid API key (trusted operator only).",
 				},
 				failed_fetch: {
 					badge: "FETCH FAILED",
@@ -10417,10 +10434,51 @@ function cc() {
 				this.sig.no_trade_reason = "⚠ Failed to connect to the scanner. Check if the server is running."
 			}
 		},
+		async establishOperatorSession() {
+			this.pf.sessionBusy = true
+			try {
+				const key = (this.pf.sessionKey || "").trim()
+				if (!key) {
+					this.pf.authError = "Portfolio unavailable — authentication required."
+					return
+				}
+				const r = await fetch("/api/operator/session", {
+					method: "POST",
+					credentials: "include",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ api_key: key }),
+				})
+				if (!r.ok) {
+					this.pf.authRequired = true
+					this.pf.authError = "Portfolio unavailable — authentication required."
+					return
+				}
+				this.pf.sessionKey = ""
+				this.pf.authRequired = false
+				this.pf.authError = ""
+				await this.fetchPortfolio()
+			} catch (e) {
+				console.warn("operator session", e)
+				this.pf.authRequired = true
+			} finally {
+				this.pf.sessionBusy = false
+			}
+		},
 		async fetchPortfolio() {
 			this.pf.loading = true
+			this.pf.authRequired = false
+			this.pf.authError = ""
 			try {
-				const r = await fetch("/api/portfolio/monitor")
+				const r = await this.ccFetch("/api/portfolio/monitor", { retries: 1, backoff: 400 })
+				if (!r) throw new Error("failed_fetch")
+				if (r.status === 401) {
+					this.pf.authRequired = true
+					this.pf.authError = "Portfolio unavailable — authentication required."
+					this.pf.positions = []
+					this.pf.summary = null
+					this.pf.alerts = []
+					return
+				}
 				if (!r.ok) throw 0
 				const d = await r.json()
 				this.pf.positions = this.mergeLocalPortfolioHoldings(d.positions || [])
@@ -10431,8 +10489,8 @@ function cc() {
 				// Manual entries are kept as overlay (e.g. for stop/target metadata) but counts/equity reflect IBKR
 				try {
 					if (this.cc_status && this.cc_status.ibkr_connected) {
-						const r2 = await fetch("/api/ibkr/positions")
-						if (r2.ok) {
+						const r2 = await this.ccFetch("/api/ibkr/positions", { retries: 1 })
+						if (r2 && r2.ok) {
 							const d2 = await r2.json()
 							const brokerPositions = (d2.positions || []).map((p) => {
 								const sym = (p.symbol || p.ticker || "").toUpperCase()
@@ -10510,6 +10568,7 @@ function cc() {
 				} catch (_) {}
 			} catch (e) {
 				console.warn("Portfolio fetch error:", e)
+				if (this.pf.authRequired) return
 				const local = this.hydratePortfolioFromLocal()
 				if (local && local.holdings && local.holdings.length) {
 					this.pf.positions = local.holdings
@@ -10539,6 +10598,12 @@ function cc() {
 			this.pfDecisionLoading = true
 			try {
 				const r = await this.ccFetch("/api/v7/portfolio-decision", { retries: 3, backoff: 500 })
+				if (r && r.status === 401) {
+					this.pf.authRequired = true
+					this.pf.authError = "Portfolio unavailable — authentication required."
+					this.pfDecision = null
+					return
+				}
 				if (r && r.ok) this.pfDecision = await r.json()
 				try {
 					const ddPct =
@@ -10849,7 +10914,10 @@ function cc() {
 				}
 				const r = await fetch("/api/portfolio/var-historical", {
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
+					headers: {
+						"Content-Type": "application/json",
+						"X-API-Key": window._apiKey || "",
+					},
 					body: JSON.stringify(body),
 				})
 				if (!r.ok) throw new Error("HTTP " + r.status)
@@ -11066,7 +11134,10 @@ function cc() {
 		async removePosition(ticker) {
 			if (!confirm("Remove " + ticker + " from portfolio?")) return
 			try {
-				await fetch("/api/portfolio/position/" + ticker, { method: "DELETE" })
+				await fetch("/api/portfolio/position/" + encodeURIComponent(ticker), {
+					method: "DELETE",
+					headers: { "X-API-Key": window._apiKey || "" },
+				})
 				await this.fetchPortfolio()
 			} catch (e) {
 				console.warn(e)
@@ -11082,7 +11153,10 @@ function cc() {
 			try {
 				const r = await fetch("/api/portfolio/position", {
 					method: "POST",
-					headers: { "Content-Type": "application/json" },
+					headers: {
+						"Content-Type": "application/json",
+						"X-API-Key": window._apiKey || "",
+					},
 					body: JSON.stringify({
 						ticker: this.dos.ticker,
 						shares: parseFloat(shares),
@@ -12100,8 +12174,8 @@ function cc() {
 		},
 		async ibkrFetchPortfolioCompare() {
 			try {
-				const r = await fetch("/api/portfolio/monitor")
-				if (!r.ok) return
+				const r = await this.ccFetch("/api/portfolio/monitor", { retries: 1 })
+				if (!r || !r.ok) return
 				const d = await r.json()
 				const manual = (d.positions || []).length
 				const broker = (this.ibkr.positions || []).length

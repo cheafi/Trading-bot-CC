@@ -20,6 +20,10 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from src.core.models import TradeRecommendation
+from src.core.quote_provenance import (
+    provenance_from_recommendation,
+    quote_age_seconds,
+)
 from src.engines.data_quality_engine import DataQualityEngine
 
 # Align quote TTL with DataQualityEngine documented cache tiers (see module docstring).
@@ -78,6 +82,10 @@ class TradeDecision(BaseModel):
     requires_approval: bool = True
     quote_timestamp: Optional[str] = None
     quote_source: Optional[str] = None
+    research_as_of: Optional[str] = None
+    quote_price: Optional[float] = None
+    quote_age_seconds: Optional[float] = None
+    data_quality_reason: str = ""
     suppression_reason: str = ""
     strategy_id: str = ""
     block_reason: str = ""
@@ -170,17 +178,6 @@ def _valid_positive_finite(value: Any) -> bool:
     return math.isfinite(num) and num > 0
 
 
-def _normalize_quote_source(source: Optional[str]) -> Optional[str]:
-    if source is None:
-        return None
-    cleaned = str(source).strip()
-    if not cleaned:
-        return None
-    if cleaned.lower() in {"unknown", "none", "n/a", "na", "null", "undefined"}:
-        return None
-    return cleaned
-
-
 def _original_dict(rec: TradeRecommendation) -> Dict[str, Any]:
     meta = getattr(rec, "metadata", {}) or {}
     orig = meta.get("_original_dict") if isinstance(meta, dict) else {}
@@ -189,32 +186,15 @@ def _original_dict(rec: TradeRecommendation) -> Dict[str, Any]:
 
 def _quote_provenance(rec: TradeRecommendation) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """Return (timestamp_iso, source, trust_freshness label)."""
+    prov = provenance_from_recommendation(rec)
     meta = getattr(rec, "metadata", {}) or {}
     orig = _original_dict(rec)
     trust = dict(rec.trust or {})
     if not trust and isinstance(orig.get("trust"), dict):
         trust = dict(orig["trust"])
-
-    ts = (
-        orig.get("price_timestamp")
-        or orig.get("quote_timestamp")
-        or meta.get("price_timestamp")
-        or meta.get("quote_timestamp")
-    )
-    source = (
-        orig.get("price_source")
-        or orig.get("quote_source")
-        or meta.get("price_source")
-        or meta.get("quote_source")
-        or trust.get("source")
-    )
-    mode = str(trust.get("mode") or "").upper()
     freshness = trust.get("freshness") or orig.get("data_freshness")
-    if ts is not None:
-        ts = str(ts).strip() or None
-    source = _normalize_quote_source(source)
-    if not source and mode in ("LIVE", "DELAYED"):
-        source = f"trust_mode:{mode.lower()}"
+    ts = prov.quote_timestamp
+    source = prov.quote_source
     return ts, source, str(freshness).upper() if freshness else None
 
 
@@ -302,6 +282,9 @@ def _evidence_freshness(
     """
     now = now or datetime.now(timezone.utc)
     ts_str, source, trust_fresh = _quote_provenance(rec)
+    prov = provenance_from_recommendation(rec)
+    if prov.quote_price is not None and not _valid_positive_finite(prov.quote_price):
+        return DataFreshness.UNVERIFIED, ts_str, source, "non_finite_quote_price"
 
     if _explicit_stale_flags(rec, trust_fresh):
         return DataFreshness.STALE, ts_str, source, "explicit_stale_flag"
@@ -512,8 +495,16 @@ def trade_decision_from_recommendation(
     regime_label = str(regime_norm.get("regime") or "UNKNOWN")
     elig = assess_trade_eligibility(rec, regime_norm, now=now)
 
-    ts_str, source, _ = _quote_provenance(rec)
-    has_provenance = bool(ts_str and source)
+    prov = provenance_from_recommendation(rec)
+    has_provenance = bool(prov.quote_timestamp and prov.quote_source)
+    age = quote_age_seconds(prov.quote_timestamp, now=now)
+    if elig.block_reason:
+        quality_reason = elig.block_reason
+    elif elig.freshness == DataFreshness.VERIFIED and elig.action == "BUY":
+        quality_reason = "execution_quote_within_freshness_ttl"
+    else:
+        _, _, _, fresh_detail = _evidence_freshness(rec, now=now)
+        quality_reason = fresh_detail or elig.freshness.value
 
     return TradeDecision(
         recommendation_id=rec.recommendation_id or uuid4().hex[:16],
@@ -546,8 +537,12 @@ def trade_decision_from_recommendation(
         portfolio_fit=rec.portfolio_fit or None,
         data_freshness=elig.freshness,
         requires_approval=True,
-        quote_timestamp=elig.quote_timestamp,
-        quote_source=elig.quote_source,
+        quote_timestamp=elig.quote_timestamp or prov.quote_timestamp,
+        quote_source=elig.quote_source or prov.quote_source,
+        research_as_of=prov.research_as_of,
+        quote_price=prov.quote_price,
+        quote_age_seconds=age,
+        data_quality_reason=quality_reason,
         suppression_reason=rec.suppression_reason or "",
         strategy_id=rec.strategy_id or "",
         block_reason=elig.block_reason,

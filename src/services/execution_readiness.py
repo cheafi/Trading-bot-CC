@@ -46,6 +46,7 @@ def build_execution_readiness(
         last_order_ok = getattr(svc, "_last_order_ok", None)
         last_order_fail = getattr(svc, "_last_order_fail", None)
         next_order_id = st.get("next_order_id")
+        broker_account_id = st.get("account_id")
         if not isinstance(last_heartbeat, (int, float)):
             last_heartbeat = None
     except Exception:
@@ -59,6 +60,7 @@ def build_execution_readiness(
         last_order_ok = None
         last_order_fail = None
         next_order_id = None
+        broker_account_id = None
 
     account_ok = health.get("account_status") == "ok"
     monitoring_only = health.get("handoff_status") == "monitoring_only"
@@ -121,6 +123,7 @@ def build_execution_readiness(
     }
 
     return {
+        "broker_account_id": broker_account_id,
         "broker_connected": ibkr_connected,
         "ibkr_connected": ibkr_connected,
         "socket_connected": socket_connected,
