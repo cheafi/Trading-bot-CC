@@ -19,9 +19,9 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,11 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
 
     # ── Quick Decision Card ──
     action = _conviction_tier(score)
-    if not regime.get("should_trade", True):
+    # Synthetic (fallback) or missing regime data is unverified and fails closed.
+    regime_verified = (
+        not regime.get("synthetic") and regime.get("should_trade") is not None
+    )
+    if not regime_verified or not regime.get("should_trade"):
         action = "NO_TRADE" if action == "TRADE" else action
         gate = "BLOCKED"
     else:
@@ -130,8 +134,9 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
     # ── Confidence Breakdown ──
     rsi = indicators.get("rsi")
     rs = indicators.get("rs")
-    volume_ok = indicators.get("volume_ratio", 1.0) >= 1.2
-    above_ma = indicators.get("above_ma50", True)
+    volume_ratio = indicators.get("volume_ratio")
+    volume_ok = isinstance(volume_ratio, (int, float)) and volume_ratio >= 1.2
+    above_ma = indicators.get("above_ma50") is True
 
     thesis_score = min(score * 5, 100) if score else 0
     timing_score = (
@@ -176,6 +181,7 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
             "note": note,
             "catalyst": catalyst,
             "regime_gate": gate,
+            "regime_verified": regime_verified,
         },
         # Confidence breakdown
         "confidence": {
@@ -202,10 +208,11 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
         # Regime context
         "regime": {
             "trend": regime.get("trend", "UNKNOWN"),
-            "vix": regime.get("vix", regime.get("vix_level", 18.0)),
-            "vix_regime": regime.get("vix_regime", "NORMAL"),
-            "risk_score": regime.get("risk_score", 50),
-            "should_trade": regime.get("should_trade", True),
+            "vix": None if regime.get("synthetic") else regime.get("vix", regime.get("vix_level")),
+            "vix_regime": regime.get("vix_regime"),
+            "risk_score": regime.get("risk_score"),
+            "should_trade": regime.get("should_trade") if regime_verified else False,
+            "verified": regime_verified,
         },
         # Risk levels
         "risk": {
@@ -269,7 +276,7 @@ def _compute_trade_advice(
     indicators = dossier.get("indicators", {})
 
     conviction = decision.get("conviction_tier", "WAIT")
-    gate = decision.get("regime_gate", "ALLOWED")
+    gate = decision.get("regime_gate", "BLOCKED")
     rsi = indicators.get("rsi")
     rs_spy = indicators.get("rs_vs_spy")
     overall_conf = confidence.get("overall", 50)
@@ -340,13 +347,11 @@ def _compute_trade_advice(
     if rs_spy and rs_spy < 0:
         warnings.append(f"Underperforming SPY (RS {rs_spy:.1f}) — watch closely")
 
-    # ── Target prices ──
-    sell_target = (
-        target
-        if target
-        else (buy_price * 1.15 if pnl_pct < 15 else current_price * 1.05)
-    )
-    stop_price = stop if stop else buy_price * 0.93
+    # ── Target prices: only levels that exist upstream; never a %-of-price guess ──
+    sell_target = target or None
+    stop_price = stop or None
+    if sell_target is None or stop_price is None:
+        warnings.append("No computed stop/target for this position — see /plan")
 
     return {
         "ticker": ticker,
@@ -361,6 +366,7 @@ def _compute_trade_advice(
         "suggestion": {
             "target_price": round(sell_target, 2) if sell_target else None,
             "stop_price": round(stop_price, 2) if stop_price else None,
+            "stop_note": "Suggested stop — not submitted to broker.",
             "conviction": conviction,
             "regime_gate": gate,
             "confidence": overall_conf,
@@ -406,6 +412,109 @@ async def trade_advice(ticker: str, buy_price: float):
 
     advice = _compute_trade_advice(ticker, buy_price, current_price, dossier)
     return advice
+
+
+# ── Deterministic trade plan (levels + evidence) ─────────────────────────
+
+PLAN_MAX_BAR_AGE_DAYS = 5  # covers weekends and a holiday; older bars are stale
+
+
+def _hist_to_bars(hist) -> List[Dict[str, Any]]:
+    cols = {c.lower(): c for c in hist.columns}
+    bars = []
+    for idx_dt, row in hist.iterrows():
+        bars.append(
+            {
+                "time": int(idx_dt.timestamp()) if hasattr(idx_dt, "timestamp") else None,
+                "high": row[cols["high"]],
+                "low": row[cols["low"]],
+                "close": row[cols["close"]],
+            }
+        )
+    return bars
+
+
+def build_plan_response(
+    ticker: str,
+    bars: List[Dict[str, Any]],
+    *,
+    strategy_id: str | None,
+    regime: Dict[str, Any],
+    evidence: Dict[str, Any],
+    now_ts: float,
+    direction: str = "long",
+    entry: float | None = None,
+    stop: float | None = None,
+    targets: List[float] | None = None,
+) -> Dict[str, Any]:
+    from src.engines.trade_levels import classify_setup_action, compute_trade_plan
+
+    plan = compute_trade_plan(
+        bars, direction=direction, entry=entry, stop=stop, targets=targets
+    )
+    as_of = plan.get("as_of")
+    if plan["status"] == "OK" and (
+        not isinstance(as_of, (int, float))
+        or now_ts - as_of > PLAN_MAX_BAR_AGE_DAYS * 86400
+    ):
+        plan["status"] = "STALE_DATA"
+        plan["reason_codes"] = [f"LAST_BAR_OLDER_THAN_{PLAN_MAX_BAR_AGE_DAYS}D"]
+
+    regime_verified = (
+        not regime.get("synthetic") and regime.get("should_trade") is not None
+    )
+    regime_allowed = bool(regime.get("should_trade")) if regime_verified else None
+    decision = classify_setup_action(
+        plan, evidence_grade=evidence.get("grade"), regime_allowed=regime_allowed
+    )
+    return {
+        "ticker": ticker,
+        "strategy_id": strategy_id,
+        "action": decision["action"],
+        "action_reasons": decision["reasons"],
+        "plan": plan,
+        "evidence": evidence,
+        "regime": {"verified": regime_verified, "allowed": regime_allowed},
+        "execution_note": "Plan only — no order is created. Live trading disabled.",
+    }
+
+
+@router.get("/{ticker}/plan")
+async def trade_plan(
+    ticker: str,
+    request: Request,
+    direction: str = Query("long", pattern="^(long|short)$"),
+    entry: Optional[float] = Query(None),
+    stop: Optional[float] = Query(None),
+    target: Optional[List[float]] = Query(None),
+):
+    """Deterministic entry/stop/targets + S/R + evidence-gated action.
+
+    Overrides recompute risk only. Nothing here can place an order.
+    """
+    from src.api.deps import validate_ticker
+    from src.services.regime_service import RegimeService
+    from src.services.strategy_health_service import evidence_for_strategy
+
+    ticker = validate_ticker(ticker)
+    mds = request.app.state.market_data
+    hist = await mds.get_history(ticker, period="1y", interval="1d")
+    bars = [] if hist is None or hist.empty else _hist_to_bars(hist)
+
+    signal, _ = _find_signal_in_brief(ticker, _load_brief_data())
+    strategy_id = signal.get("strategy") or signal.get("strategy_id")
+    return build_plan_response(
+        ticker,
+        bars,
+        strategy_id=strategy_id,
+        regime=RegimeService.get(),
+        evidence=evidence_for_strategy(strategy_id),
+        now_ts=time.time(),
+        direction=direction,
+        entry=entry,
+        stop=stop,
+        targets=target,
+    )
 
 
 # ── Peer Comparison (Sprint 116) ──────────────────────────────────────────

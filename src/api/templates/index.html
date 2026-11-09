@@ -3941,6 +3941,34 @@
 
             <!-- TECHNICALS -->
             <div x-show="dos.subTab==='technicals'">
+              <div class="card card-p mb-2" id="dos-plan-card">
+                <div class="flex items-center gap-2 text-[10px] mb-1">
+                  <span class="font-bold" style="color:var(--t3)">Plan</span>
+                  <span class="pill mono text-[8px]" :class="dosPlanActionClass()" x-text="dos.plan?.action||'—'" :title="(dos.plan?.action_reasons||[]).join(', ')"></span>
+                  <span class="mono text-[8px]" style="color:var(--t3)" x-text="dos.plan?.evidence?.headline||''" :title="(dos.plan?.evidence?.reason_codes||[]).join(', ')"></span>
+                  <span x-show="dos.plan&&!dos.plan.regime?.verified" class="mono text-[8px] text-amber-300">REGIME UNVERIFIED</span>
+                  <span x-show="dos.planLoading" class="spin"></span>
+                </div>
+                <template x-if="dos.plan&&dos.plan.plan?.status==='OK'">
+                  <div class="grid grid-cols-5 gap-2 text-[9px] mono">
+                    <div :title="dos.plan.plan.entry.method"><div style="color:var(--t3)">Entry</div><div x-text="ccPx(dos.plan.plan.entry.price)"></div></div>
+                    <div :title="dos.plan.plan.stop.method"><div style="color:var(--t3)">Stop</div><div class="text-red-400" x-text="ccPx(dos.plan.plan.stop.price)"></div></div>
+                    <div :title="dos.plan.plan.targets[0]?.method"><div style="color:var(--t3)">T1</div><div class="text-green-400" x-text="ccPx(dos.plan.plan.targets[0]?.price)"></div></div>
+                    <div><div style="color:var(--t3)">R:R</div><div x-text="dos.plan.plan.reward_risk??'—'"></div></div>
+                    <div><div style="color:var(--t3)">Risk/sh</div><div x-text="ccPx(dos.plan.plan.risk_per_share)"></div></div>
+                  </div>
+                </template>
+                <div x-show="dos.plan&&dos.plan.plan?.status!=='OK'" class="text-[9px]" style="color:var(--t3)" x-text="'No levels — '+(dos.plan?.plan?.status||'')+' '+(dos.plan?.plan?.reason_codes||[]).join(', ')"></div>
+                <div x-show="!dos.plan&&!dos.planLoading" class="text-[9px]" style="color:var(--t3)" x-text="'Plan unavailable'+(dos.planError?' — '+dos.planError:'')+'.'"></div>
+                <div class="flex items-center gap-1 mt-2 text-[9px]">
+                  <input class="rounded px-2 py-1 text-[10px] mono w-16" placeholder="Entry" x-model="dos.planOv.entry" @keydown.enter="renderDossierChart()">
+                  <input class="rounded px-2 py-1 text-[10px] mono w-16" placeholder="Stop" x-model="dos.planOv.stop" @keydown.enter="renderDossierChart()">
+                  <input class="rounded px-2 py-1 text-[10px] mono w-24" placeholder="Targets 1,2" x-model="dos.planOv.target" @keydown.enter="renderDossierChart()">
+                  <button class="btn-s text-[8px]" @click="renderDossierChart()">Recalc</button>
+                  <button class="btn-s text-[8px]" @click="dos.planOv={ticker:dos.ticker,entry:'',stop:'',target:''};renderDossierChart()">Reset</button>
+                </div>
+                <div class="text-[8px] mt-1" style="color:var(--t3)" x-text="dos.plan?(dos.plan.plan.stop_note+' '+dos.plan.execution_note):''"></div>
+              </div>
               <div class="card card-p mb-2">
                 <div class="flex gap-2 mb-2">
                   <button class="btn-s text-[8px]" :class="dos.showSignals?'':'opacity-50'" @click="dos.showSignals=!dos.showSignals;renderDossierChart()">📍 Signals</button>

@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from src.engines.strategy_evidence import TradeRecord, grade_strategy_evidence
+
 logger = logging.getLogger(__name__)
 
 LEDGER_PATH = os.path.join("data", "closed_trades.jsonl")
@@ -38,7 +40,18 @@ class StrategyRow:
     sum_r: float = 0.0
     sum_r_sq: float = 0.0
     returns: list[float] = field(default_factory=list)
+    out_of_sample: list[bool] = field(default_factory=list)
     last_exit: str = ""
+
+    def evidence(self) -> dict[str, Any]:
+        oos = self.out_of_sample + [False] * (len(self.returns) - len(self.out_of_sample))
+        return grade_strategy_evidence(
+            [
+                TradeRecord(r_multiple=r, strategy_id=self.strategy_id, out_of_sample=o)
+                for r, o in zip(self.returns, oos)
+            ],
+            strategy_id=self.strategy_id,
+        ).to_dict()
 
     def to_summary(self, window_days: int) -> dict[str, Any]:
         if self.n_trades == 0:
@@ -46,6 +59,7 @@ class StrategyRow:
                 "strategy_id": self.strategy_id,
                 "n_trades": 0,
                 "status": "NO_DATA",
+                "evidence": self.evidence(),
             }
         mean_r = self.sum_r / self.n_trades
         var = max(
@@ -76,13 +90,15 @@ class StrategyRow:
 
         wins_sum = sum(r for r in self.returns if r > 0)
         losses_sum = abs(sum(r for r in self.returns if r < 0))
+        # A record with no losing trades has an UNDEFINED profit factor.
+        # The previous code produced inf and then displayed it as 99.99,
+        # which reads as a near-flawless strategy when in fact nothing has
+        # been tested against downside. None is surfaced as "--".
         profit_factor = (
             (wins_sum / losses_sum)
             if losses_sum > 1e-9
-            else (float("inf") if wins_sum > 0 else 0.0)
+            else (None if wins_sum > 0 else 0.0)
         )
-        if math.isinf(profit_factor):
-            profit_factor = 99.99  # display cap
 
         # Cumulative-R equity curve + max drawdown in R units
         cum = 0.0
@@ -126,12 +142,15 @@ class StrategyRow:
             "sortino_annualized": (
                 round(sortino_ann, 3) if sortino_ann is not None else None
             ),
-            "profit_factor": round(profit_factor, 2),
+            "profit_factor": (
+                round(profit_factor, 2) if profit_factor is not None else None
+            ),
             "max_drawdown_r": round(max_dd, 3),  # negative; R units
             "calmar": round(calmar, 3),
             "equity_curve_r": equity_curve,  # cumulative R per trade — for sparkline
             "last_exit": self.last_exit,
             "status": status,
+            "evidence": self.evidence(),
             "window_days": window_days,
         }
 
@@ -225,6 +244,9 @@ def load_per_strategy(
             row.sum_r += r
             row.sum_r_sq += r * r
             row.returns.append(r)
+            # Only an explicit flag counts; realised trades are not assumed
+            # to be out-of-sample relative to how the strategy was tuned.
+            row.out_of_sample.append(t.get("out_of_sample") is True)
             iso = exit_dt.isoformat() if exit_dt else ""
             if iso > row.last_exit:
                 row.last_exit = iso
@@ -253,3 +275,15 @@ def load_per_strategy(
             "Status: TRUSTED ≥30 trades · TENTATIVE 10–29 · INSUFFICIENT_SAMPLE <10."
         ),
     }
+
+
+def evidence_for_strategy(
+    strategy_id: str | None, ledger_path: str = LEDGER_PATH
+) -> dict[str, Any]:
+    """All-time evidence grade for one strategy; NO_BACKTEST when unknown."""
+    sid = str(strategy_id or "").strip()
+    if sid:
+        for row in load_per_strategy(window_days=0, ledger_path=ledger_path)["strategies"]:
+            if row.get("strategy_id") == sid:
+                return row["evidence"]
+    return StrategyRow(strategy_id=sid).evidence()
