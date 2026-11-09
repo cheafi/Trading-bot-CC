@@ -1004,22 +1004,39 @@ class PositionManager:
         avg_win = total_wins / len(wins) if wins else 0.0
         avg_loss = total_losses / len(losses) if losses else 0.0
 
+        # A strategy with no losing trades has an UNDEFINED profit factor,
+        # not an infinite one. Reporting inf presents an untested record as
+        # a flawless one -- the same false-confidence class as the
+        # market_cap=inf universe-gate defect. None is surfaced as "--".
+        from src.engines.strategy_evidence import (  # noqa: PLC0415
+            profit_factor as _profit_factor,
+        )
+
+        pf = _profit_factor(total_wins, total_losses)
+
         return {
-            'total_trades': len(self.closed_positions),
-            'winning_trades': len(wins),
-            'losing_trades': len(losses),
-            'win_rate': len(wins) / len(self.closed_positions) * 100,
-            'avg_win': avg_win,
-            'avg_loss': avg_loss,
-            'avg_win_pct': sum(p.realized_pnl_pct for p in wins) / len(wins) if wins else 0,
-            'avg_loss_pct': sum(p.realized_pnl_pct for p in losses) / len(losses) if losses else 0,
-            'profit_factor': total_wins / total_losses if total_losses > 0 else float('inf'),
-            'total_pnl': sum(p.realized_pnl for p in self.closed_positions),
-            'total_pnl_pct': (self.current_equity - self.params.account_size) / self.params.account_size * 100,
-            'largest_win': max(p.realized_pnl for p in wins) if wins else 0,
-            'largest_loss': min(p.realized_pnl for p in losses) if losses else 0,
-            'avg_hold_days': sum(p.days_held for p in self.closed_positions) / len(self.closed_positions),
-            'max_drawdown_pct': self._get_current_drawdown(),
+            "total_trades": len(self.closed_positions),
+            "winning_trades": len(wins),
+            "losing_trades": len(losses),
+            "win_rate": len(wins) / len(self.closed_positions) * 100,
+            "avg_win": avg_win,
+            "avg_loss": avg_loss,
+            "avg_win_pct": (
+                sum(p.realized_pnl_pct for p in wins) / len(wins) if wins else 0
+            ),
+            "avg_loss_pct": (
+                sum(p.realized_pnl_pct for p in losses) / len(losses) if losses else 0
+            ),
+            "profit_factor": pf,
+            "total_pnl": sum(p.realized_pnl for p in self.closed_positions),
+            "total_pnl_pct": (self.current_equity - self.params.account_size)
+            / self.params.account_size
+            * 100,
+            "largest_win": max(p.realized_pnl for p in wins) if wins else 0,
+            "largest_loss": min(p.realized_pnl for p in losses) if losses else 0,
+            "avg_hold_days": sum(p.days_held for p in self.closed_positions)
+            / len(self.closed_positions),
+            "max_drawdown_pct": self._get_current_drawdown(),
         }
 
     def get_open_positions_summary(self) -> List[Dict[str, Any]]:

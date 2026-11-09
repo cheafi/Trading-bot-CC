@@ -2420,6 +2420,10 @@ function cc() {
 			partialNotice: "",
 			fetchDetail: "",
 			failedModule: "",
+			plan: null,
+			planLoading: false,
+			planError: "",
+			planOv: { ticker: "", entry: "", stop: "", target: "" },
 			staleAt: null,
 			subTab: "decision",
 			showSignals: true,
@@ -11581,6 +11585,7 @@ function cc() {
 			const el = document.getElementById("dossier-chart")
 			if (!el || typeof LightweightCharts === "undefined") return
 			el.innerHTML = ""
+			const planPromise = this.fetchDossierPlan()
 			try {
 				const sig = this.dos.showSignals ? "&signals=true" : ""
 				const r = await fetch(
@@ -11642,9 +11647,26 @@ function cc() {
 						})),
 					)
 				}
-				// S/R lines from structure
+				// Plan levels from the deterministic engine; structure lines only as fallback
+				const plan = await planPromise
+				const pp = plan && plan.plan
 				const st = this.dos.data._p9 && this.dos.data._p9.structure
-				if (st) {
+				if (pp && pp.status === "OK") {
+					const line = (price, color, title, style) =>
+						cs.createPriceLine({
+							price,
+							color,
+							lineWidth: 1,
+							lineStyle: style,
+							axisLabelVisible: true,
+							title,
+						})
+					;(pp.support || []).forEach((lv) => line(lv.price, "#00d4aa", "S×" + lv.touches, 2))
+					;(pp.resistance || []).forEach((lv) => line(lv.price, "#ff5c5c", "R×" + lv.touches, 2))
+					line(pp.entry.price, "#58a6ff", "ENTRY", 0)
+					line(pp.stop.price, "#ff5c5c", "STOP", 0)
+					;(pp.targets || []).forEach((t, i) => line(t.price, "#00d4aa", "T" + (i + 1), 0))
+				} else if (st) {
 					if (st.nearest_support) {
 						cs.createPriceLine({
 							price: st.nearest_support,
@@ -11676,6 +11698,51 @@ function cc() {
 			}
 			// Also render benchmark chart
 			this.renderBenchChart()
+		},
+		async fetchDossierPlan() {
+			const t = this.dos.ticker
+			if (!t) return null
+			if (this.dos.planOv.ticker !== t) this.dos.planOv = { ticker: t, entry: "", stop: "", target: "" }
+			const q = new URLSearchParams()
+			const ov = this.dos.planOv
+			const vals = { entry: [ov.entry], stop: [ov.stop], target: String(ov.target || "").split(",") }
+			for (const [k, list] of Object.entries(vals)) {
+				for (const raw of list) {
+					const v = String(raw ?? "").trim()
+					if (v !== "" && Number.isFinite(Number(v)) && Number(v) > 0) q.append(k, v)
+				}
+			}
+			this.dos.planLoading = true
+			try {
+				const qs = q.toString()
+				const r = await this.ccFetch("/api/dossier/" + encodeURIComponent(t) + "/plan" + (qs ? "?" + qs : ""), {
+					retries: 1,
+				})
+				this.dos.plan = r && r.ok ? await r.json() : null
+				this.dos.planError = this.dos.plan
+					? ""
+					: !r
+						? "network error"
+						: r.status === 429
+							? "rate limited, retry shortly"
+							: "HTTP " + r.status
+			} catch (e) {
+				this.dos.plan = null
+				this.dos.planError = "network error"
+			} finally {
+				this.dos.planLoading = false
+			}
+			return this.dos.plan
+		},
+		ccPx(v) {
+			const n = Number(v)
+			return v === null || v === undefined || !Number.isFinite(n) ? "—" : n.toFixed(2)
+		},
+		dosPlanActionClass() {
+			const a = this.dos.plan && this.dos.plan.action
+			if (a === "BUY SETUP" || a === "SHORT SETUP") return "pg"
+			if (a === "NO TRADE") return "pr"
+			return "pa"
 		},
 		async renderBenchChart() {
 			if (!this.dos.ticker) return

@@ -236,7 +236,10 @@ class PerformanceArtifactWriter:
             f"| Calmar | {s.get('calmar', 'N/A')} |",
             f"| Max Drawdown | {s.get('max_drawdown', 'N/A')}% |",
             f"| Win Rate | {s.get('win_rate', 'N/A')} |",
-            f"| Profit Factor | {s.get('profit_factor', 'N/A')} |",
+            # profit_factor is None when the record contains no losing
+            # trades. That is undefined, not perfect -- render it as N/A
+            # rather than leaking "None" or an inf into the report.
+            f"| Profit Factor | {s.get('profit_factor') or 'N/A'} |",
             f"| VaR 95% | {s.get('var_95', 'N/A')}% |",
             f"| CVaR 95% | {s.get('cvar_95', 'N/A')}% |",
             "",
