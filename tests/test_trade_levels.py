@@ -9,6 +9,7 @@ import pytest
 from src.engines.strategy_evidence import EvidenceGrade
 from src.engines.trade_levels import (
     MIN_BARS,
+    assess_signal_quality,
     STOP_NOTE,
     atr,
     classify_setup_action,
@@ -161,7 +162,10 @@ class TestClassifyAction:
 
     def test_buy_setup_requires_validated_evidence(self, good_plan):
         out = classify_setup_action(
-            good_plan, evidence_grade=EvidenceGrade.VALIDATED, regime_allowed=True
+            good_plan,
+            evidence_grade=EvidenceGrade.VALIDATED,
+            regime_allowed=True,
+            signal_status="QUALIFIED",
         )
         assert out["action"] == "BUY SETUP"
         assert out["reasons"] == ["REQUIRES_OPERATOR_APPROVAL"]
@@ -171,7 +175,9 @@ class TestClassifyAction:
         ["PRELIMINARY", "INSUFFICIENT_SAMPLE", "NO_BACKTEST", "FAILED_VALIDATION", None, "bogus"],
     )
     def test_weaker_evidence_caps_at_watch(self, good_plan, grade):
-        out = classify_setup_action(good_plan, evidence_grade=grade, regime_allowed=True)
+        out = classify_setup_action(
+            good_plan, evidence_grade=grade, regime_allowed=True, signal_status="QUALIFIED"
+        )
         assert out["action"] == "WATCH"
 
     def test_regime_blocked_is_no_trade(self, good_plan):
@@ -198,3 +204,63 @@ class TestClassifyAction:
         plan = compute_trade_plan(_bars_from_closes([100.0] * 5))
         out = classify_setup_action(plan, evidence_grade="VALIDATED", regime_allowed=True)
         assert out["action"] == "NO TRADE"
+
+
+class TestSignalQuality:
+    """A computable plan is not a signal."""
+
+    @pytest.fixture
+    def good_plan(self):
+        return compute_trade_plan(
+            _bars_from_closes(_oscillating()), entry=100.0, stop=95.0, targets=[115.0]
+        )
+
+    @pytest.mark.parametrize("status", [None, "NONE", "STALE"])
+    def test_no_or_stale_signal_waits_even_with_validated_evidence(self, good_plan, status):
+        out = classify_setup_action(
+            good_plan, evidence_grade="VALIDATED", regime_allowed=True, signal_status=status
+        )
+        assert out["action"] == "WAIT"
+        assert f"SIGNAL_{status or 'NONE'}" in out["reasons"]
+
+    def test_developing_signal_is_watch(self, good_plan):
+        out = classify_setup_action(
+            good_plan, evidence_grade="VALIDATED", regime_allowed=True, signal_status="DEVELOPING"
+        )
+        assert out["action"] == "WATCH"
+
+    def test_aapl_like_low_rr_is_wait_despite_everything_else(self):
+        # Entry 342.37 / stop 336.51 / T1 347.32 -> R:R 0.84
+        bars = _bars_from_closes(_oscillating(base=340.0, amp=8.0))
+        plan = compute_trade_plan(bars, entry=342.37, stop=336.51, targets=[347.32])
+        assert plan["reward_risk"] == pytest.approx(0.84, abs=0.01)
+        out = classify_setup_action(
+            plan, evidence_grade="VALIDATED", regime_allowed=True, signal_status="QUALIFIED"
+        )
+        assert out["action"] == "WAIT"
+        assert "RR_BELOW_2" in out["reasons"]
+
+    def test_assess_actionable_fresh_is_qualified(self):
+        from datetime import date
+
+        out = assess_signal_quality(
+            section="actionable", brief_date=date(2026, 11, 6), today=date(2026, 11, 9)
+        )
+        # Fri -> Mon is one completed session.
+        assert out["status"] == "QUALIFIED" and out["age_sessions"] == 1
+
+    def test_assess_old_brief_is_stale(self):
+        from datetime import date
+
+        out = assess_signal_quality(
+            section="actionable", brief_date=date(2026, 10, 16), today=date(2026, 11, 9)
+        )
+        assert out["status"] == "STALE"
+
+    def test_assess_watch_is_developing_and_missing_is_none(self):
+        from datetime import date
+
+        d = date(2026, 11, 9)
+        assert assess_signal_quality(section="watch", brief_date=d, today=d)["status"] == "DEVELOPING"
+        assert assess_signal_quality(section="unknown", brief_date=d, today=d)["status"] == "NONE"
+        assert assess_signal_quality(section="actionable", brief_date=None, today=d)["status"] == "STALE"

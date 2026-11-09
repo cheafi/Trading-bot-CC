@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -441,6 +442,7 @@ def build_plan_response(
     strategy_id: str | None,
     regime: Dict[str, Any],
     evidence: Dict[str, Any],
+    signal: Dict[str, Any],
     now_ts: float,
     direction: str = "long",
     entry: float | None = None,
@@ -465,7 +467,10 @@ def build_plan_response(
     )
     regime_allowed = bool(regime.get("should_trade")) if regime_verified else None
     decision = classify_setup_action(
-        plan, evidence_grade=evidence.get("grade"), regime_allowed=regime_allowed
+        plan,
+        evidence_grade=evidence.get("grade"),
+        regime_allowed=regime_allowed,
+        signal_status=signal.get("status"),
     )
     return {
         "ticker": ticker,
@@ -473,6 +478,7 @@ def build_plan_response(
         "action": decision["action"],
         "action_reasons": decision["reasons"],
         "plan": plan,
+        "signal": signal,
         "evidence": evidence,
         "regime": {"verified": regime_verified, "allowed": regime_allowed},
         "execution_note": "Plan only — no order is created. Live trading disabled.",
@@ -501,14 +507,29 @@ async def trade_plan(
     hist = await mds.get_history(ticker, period="1y", interval="1d")
     bars = [] if hist is None or hist.empty else _hist_to_bars(hist)
 
-    signal, _ = _find_signal_in_brief(ticker, _load_brief_data())
-    strategy_id = signal.get("strategy") or signal.get("strategy_id")
+    from src.core.trading_calendar import to_exchange_date
+    from src.engines.trade_levels import assess_signal_quality
+
+    brief = _load_brief_data()
+    item, section = _find_signal_in_brief(ticker, brief)
+    strategy_id = item.get("strategy") or item.get("strategy_id")
+    try:
+        brief_date = date.fromisoformat(str(brief.get("date") or "")[:10])
+    except ValueError:
+        brief_date = None
+    signal = assess_signal_quality(
+        section=section,
+        brief_date=brief_date,
+        today=to_exchange_date(datetime.now(timezone.utc)),
+        strategy_id=strategy_id,
+    )
     return build_plan_response(
         ticker,
         bars,
         strategy_id=strategy_id,
         regime=RegimeService.get(),
         evidence=evidence_for_strategy(strategy_id),
+        signal=signal,
         now_ts=time.time(),
         direction=direction,
         entry=entry,

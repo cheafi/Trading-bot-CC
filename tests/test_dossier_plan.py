@@ -39,6 +39,7 @@ class TestBuildPlanResponse:
             strategy_id="momentum",
             regime=VERIFIED_REGIME,
             evidence=_evidence("VALIDATED"),
+            signal={"status": "QUALIFIED"},
             now_ts=time.time(),
             entry=100.0,
             stop=95.0,
@@ -52,6 +53,11 @@ class TestBuildPlanResponse:
         out = self._call()
         assert out["action"] == "BUY SETUP"
         assert "no order" in out["execution_note"].lower()
+
+    def test_plan_without_signal_is_not_buy(self):
+        out = self._call(signal={"status": "NONE"})
+        assert out["action"] == "WAIT"
+        assert out["signal"]["status"] == "NONE"
 
     def test_insufficient_evidence_caps_at_watch(self):
         out = self._call(evidence=_evidence("INSUFFICIENT_SAMPLE"))
@@ -118,6 +124,7 @@ class TestPlanHttp:
         assert body["plan"]["status"] == "OK"
         assert body["plan"]["support"] and body["plan"]["resistance"]
         assert body["evidence"]["grade"] == "NO_BACKTEST"
+        assert body["signal"]["status"] == "NONE"
         assert body["action"] in ("WATCH", "WAIT")
 
     def test_overrides_recalculate(self, client):

@@ -3943,11 +3943,15 @@
             <div x-show="dos.subTab==='technicals'">
               <div class="card card-p mb-2" id="dos-plan-card">
                 <div class="flex items-center gap-2 text-[10px] mb-1">
-                  <span class="font-bold" style="color:var(--t3)">Plan</span>
+                  <span class="font-bold" style="color:var(--t3)">Action</span>
                   <span class="pill mono text-[8px]" :class="dosPlanActionClass()" x-text="dos.plan?.action||'—'" :title="(dos.plan?.action_reasons||[]).join(', ')"></span>
-                  <span class="mono text-[8px]" style="color:var(--t3)" x-text="dos.plan?.evidence?.headline||''" :title="(dos.plan?.evidence?.reason_codes||[]).join(', ')"></span>
-                  <span x-show="dos.plan&&!dos.plan.regime?.verified" class="mono text-[8px] text-amber-300">REGIME UNVERIFIED</span>
                   <span x-show="dos.planLoading" class="spin"></span>
+                </div>
+                <div x-show="dos.plan" class="flex flex-wrap gap-3 text-[8px] mono mb-1" style="color:var(--t3)">
+                  <span>Levels <span class="text-white" x-text="dos.plan?.plan?.status||'—'"></span></span>
+                  <span :title="dos.plan?.signal?.brief_date?('brief '+dos.plan.signal.brief_date):''">Signal <span :class="dos.plan?.signal?.status==='QUALIFIED'?'text-green-400':'text-amber-300'" x-text="dos.plan?.signal?.status||'NONE'"></span></span>
+                  <span :title="(dos.plan?.evidence?.reason_codes||[]).join(', ')">Evidence <span :class="dos.plan?.evidence?.actionable?'text-green-400':'text-amber-300'" x-text="dos.plan?.evidence?.headline||'NO BACKTEST'"></span></span>
+                  <span>Regime <span :class="dos.plan?.regime?.verified?'text-white':'text-amber-300'" x-text="dos.plan?.regime?.verified?(dos.plan.regime.allowed?'ALLOWED':'BLOCKED'):'UNVERIFIED'"></span></span>
                 </div>
                 <template x-if="dos.plan&&dos.plan.plan?.status==='OK'">
                   <div class="grid grid-cols-5 gap-2 text-[9px] mono">

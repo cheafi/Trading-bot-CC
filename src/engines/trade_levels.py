@@ -24,14 +24,17 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Sequence
 
 from src.core.price_validation import validate_price, validate_stop_placement
+from src.core.trading_calendar import trading_days_between
 from src.engines.strategy_evidence import EvidenceGrade
 
 __all__ = [
     "MIN_BARS",
     "PriceLevel",
+    "assess_signal_quality",
     "atr",
     "classify_setup_action",
     "compute_trade_plan",
@@ -329,17 +332,56 @@ def compute_trade_plan(
     return base
 
 
+SIGNAL_MAX_AGE_SESSIONS = 1
+
+
+def assess_signal_quality(
+    *,
+    section: str | None,
+    brief_date: date | None,
+    today: date,
+    strategy_id: str | None = None,
+) -> dict[str, Any]:
+    """Whether a strategy actually flagged this setup, separately from levels.
+
+    A computable plan is not a signal. Only an ``actionable`` entry from a
+    brief no older than ``SIGNAL_MAX_AGE_SESSIONS`` sessions qualifies.
+    """
+    out: dict[str, Any] = {
+        "status": "NONE",
+        "section": section if section in ("actionable", "watch", "review") else None,
+        "strategy_id": strategy_id or None,
+        "brief_date": brief_date.isoformat() if brief_date else None,
+        "age_sessions": None,
+    }
+    if out["section"] is None:
+        return out
+    if brief_date is None:
+        out["status"] = "STALE"
+        return out
+    age = trading_days_between(brief_date, today)
+    out["age_sessions"] = age
+    if age > SIGNAL_MAX_AGE_SESSIONS:
+        out["status"] = "STALE"
+    elif out["section"] == "actionable":
+        out["status"] = "QUALIFIED"
+    else:
+        out["status"] = "DEVELOPING"
+    return out
+
+
 def classify_setup_action(
     plan: dict[str, Any],
     *,
     evidence_grade: EvidenceGrade | str | None,
     regime_allowed: bool | None,
+    signal_status: str | None = None,
 ) -> dict[str, Any]:
-    """Map a plan + evidence + regime to BUY SETUP / WAIT / WATCH / NO TRADE.
+    """Map plan + regime + signal + evidence to BUY SETUP / WAIT / WATCH / NO TRADE.
 
-    ``BUY SETUP`` is a proposal for review, never an order. Only a VALIDATED
-    evidence grade can produce it; AI or score inputs are deliberately not
-    accepted here.
+    ``BUY SETUP`` is a proposal for review, never an order. It needs a valid
+    plan, a verified regime, R:R >= 2, a QUALIFIED strategy signal and
+    VALIDATED evidence. AI or score inputs are deliberately not accepted.
     """
     try:
         grade = EvidenceGrade(evidence_grade) if evidence_grade else EvidenceGrade.NO_BACKTEST
@@ -357,8 +399,13 @@ def classify_setup_action(
         reasons.append("REGIME_UNVERIFIED")
     if rr is None or not math.isfinite(rr) or rr < MIN_RR_FOR_SETUP:
         reasons.append(f"RR_BELOW_{MIN_RR_FOR_SETUP:g}")
+    signal = signal_status or "NONE"
+    if signal in ("NONE", "STALE"):
+        reasons.append(f"SIGNAL_{signal}")
     if reasons:
         return {"action": "WAIT", "reasons": reasons}
+    if signal != "QUALIFIED":
+        return {"action": "WATCH", "reasons": [f"SIGNAL_{signal}"]}
     if not grade.is_actionable:
         return {"action": "WATCH", "reasons": [f"EVIDENCE_{grade.value}"]}
     label = "BUY SETUP" if plan.get("direction") != "short" else "SHORT SETUP"
