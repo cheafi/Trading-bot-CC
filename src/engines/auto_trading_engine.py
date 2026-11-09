@@ -10,6 +10,7 @@ Runs 24/7 without human intervention. Handles:
 - Learning loop: records outcomes for ML retraining
 """
 
+from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import time
@@ -562,7 +563,7 @@ class AutoTradingEngine:
                         "volatility_regime", ""
                     ),
                     "composite_regime": self._regime_state.get("regime", ""),
-                    "should_trade": self._regime_state.get("should_trade", True),
+                    "should_trade": regime_allows_trading(self._regime_state),
                     "entropy": self._regime_state.get("entropy", 0),
                     "vix_level": self._regime_state.get("vix", 0),
                     "pct_above_sma50": self._regime_state.get("pct_above_sma50", 0),
@@ -575,7 +576,7 @@ class AutoTradingEngine:
         except (OSError, ConnectionError, RuntimeError) as e:
             logger.debug("Regime DB persist skipped: %s", e)
 
-        if not self._regime_state.get("should_trade", True):
+        if not regime_allows_trading(self._regime_state):
             await self._no_trade_cycle()
             return
 

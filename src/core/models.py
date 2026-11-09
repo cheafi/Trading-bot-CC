@@ -3,6 +3,7 @@ TradingAI Bot - Data Models
 Pydantic models for all data structures.
 """
 
+from src.core.regime_gate import regime_allows_trading
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -843,7 +844,7 @@ class RegimeScoreboard(BaseModel):
             strategies_on = ["Swing", "Mean Reversion"]
 
         no_trade = []
-        if not d.get("should_trade", True):
+        if not regime_allows_trading(d):
             reason = d.get("no_trade_reason", "")
             no_trade = [reason] if reason else ["Regime uncertainty"]
 

@@ -7,6 +7,7 @@ Uses existing dossier technicals and regime; stubs advanced chart biases
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 from typing import Any, Dict, Optional
 
 from src.utils.numeric_parse import coerce_float
@@ -56,7 +57,7 @@ def assess_macro_trend(
         bias_strength = 0.45
 
     regime_label = str(reg.get("label") or reg.get("trend") or reg.get("regime_label") or "")
-    should_trade = reg.get("should_trade", True)
+    should_trade = regime_allows_trading(reg)
     if not should_trade or "hostile" in regime_label.lower():
         trend_bias = "bearish" if trend_bias != "bullish" else "neutral"
         bias_strength = min(bias_strength, 0.5)
@@ -101,7 +102,7 @@ def assess_market_macro(regime: Optional[Dict[str, Any]] = None) -> Dict[str, An
     tradeability = str(reg.get("tradeability") or ("OPEN" if reg.get("should_trade") else "WAIT"))
     vix = reg.get("vix")
     breadth = reg.get("breadth")
-    should = bool(reg.get("should_trade", True))
+    should = bool(regime_allows_trading(reg))
 
     if "bull" in label.lower() or should:
         bias = "bullish" if should else "neutral"

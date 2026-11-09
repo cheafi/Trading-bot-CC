@@ -175,6 +175,36 @@ class TestDossierFailClosed:
         assert advice["suggestion"]["target_price"] is None
         assert advice["suggestion"]["regime_gate"] == "BLOCKED"
 
+    def test_missing_indicators_give_no_heuristic_score(self, monkeypatch):
+        from src.services.regime_service import RegimeService
+
+        monkeypatch.setattr(RegimeService, "get", classmethod(lambda cls: SYNTHETIC_REGIME))
+        monkeypatch.setattr(
+            dossier,
+            "_load_brief_data",
+            lambda: {"actionable": [{"ticker": "ZZZ", "score": 9}]},
+        )
+        conf = dossier._build_dossier("ZZZ")["confidence"]
+        assert conf["timing"] is None
+        assert conf["overall"] is None
+        assert conf["calibrated"] is False
+
+    def test_unknown_score_never_triggers_buy_more(self):
+        advice = dossier._compute_trade_advice(
+            "ZZZ",
+            buy_price=100.0,
+            current_price=101.0,
+            dossier={
+                "decision": {"conviction_tier": "TRADE", "regime_gate": "ALLOWED"},
+                "risk": {},
+                "regime": {},
+                "confidence": {"overall": None},
+                "indicators": {},
+            },
+        )
+        assert advice["action"] != "BUY MORE"
+        assert not any("%" in w and "score" in w.lower() for w in advice["warnings"])
+
 
 class TestStrategyHealthEvidence:
     def _ledger(self, tmp_path, rows):

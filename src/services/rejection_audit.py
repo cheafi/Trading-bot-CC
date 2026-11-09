@@ -7,6 +7,7 @@ generic decision-mapper copy ("Weak setup — monitor only...").
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.engines.sector_classifier import LeaderStatus, SectorBucket
@@ -252,7 +253,7 @@ def _score_blockers(
         scores["contradiction"] += 65
 
     tradeability = str(regime.get("tradeability") or "").upper()
-    should_trade = regime.get("should_trade", True)
+    should_trade = regime_allows_trading(regime)
     if not should_trade or tradeability in ("NO_TRADE", "WAIT"):
         scores["board_quality"] += 70
     if any(

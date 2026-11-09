@@ -35,6 +35,7 @@ Commands (50+):
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import os
@@ -6557,7 +6558,7 @@ class DiscordInteractiveBot:
 
                 regime = state.get("regime", "unknown")
                 entropy = state.get("entropy", 0)
-                should_trade = state.get("should_trade", True)
+                should_trade = regime_allows_trading(state)
                 probs = state.get("probabilities", {})
 
                 e = discord.Embed(
@@ -6641,7 +6642,7 @@ class DiscordInteractiveBot:
                 risk_r = regime.get("risk_regime", "unknown")
                 trend_r = regime.get("trend_regime", "unknown")
                 vol_r = regime.get("volatility_regime", "unknown")
-                should_trade = regime.get("should_trade", True)
+                should_trade = regime_allows_trading(regime)
                 conf = regime.get("confidence", 0)
                 e.add_field(
                     name="Market Regime",
@@ -6868,7 +6869,7 @@ class DiscordInteractiveBot:
                             value=resume_text,
                             inline=False,
                         )
-                elif readiness and not readiness.get("should_trade", True):
+                elif readiness and not regime_allows_trading(readiness):
                     # Fallback to readiness snapshot
                     e.add_field(
                         name="Regime",

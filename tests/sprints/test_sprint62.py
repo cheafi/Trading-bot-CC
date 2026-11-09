@@ -327,9 +327,34 @@ class TestBugFixes(unittest.TestCase):
         conf = ConfidenceBreakdown()
         conf.final = 0.25
         conf.label = "LOW"
-        decision = mapper.decide(fit, conf, sector, {})
+        decision = mapper.decide(fit, conf, sector, {"should_trade": True})
         self.assertEqual(decision.action, Action.NO_TRADE)
         self.assertIn("too low", decision.rationale)
+
+    def test_missing_regime_blocks_trade(self):
+        """An empty regime payload must not grant permission to trade."""
+        from src.engines.confidence_engine import ConfidenceBreakdown
+        from src.engines.decision_mapper import Action, DecisionMapper
+        from src.engines.fit_scorer import FitScores
+        from src.engines.sector_classifier import LeaderStatus, SectorBucket, SectorContext
+
+        fit = FitScores.__new__(FitScores)
+        fit.total = fit.setup = fit.final_score = 9.0
+        fit.sector = fit.timing = fit.risk = fit.execution = 9.0
+        fit.components = {}
+        fit.grade = "A"
+        fit.evidence_conflicts = []
+        conf = ConfidenceBreakdown()
+        conf.final = 0.9
+        conf.label = "HIGH"
+        sector = SectorContext(
+            ticker="TEST",
+            sector_bucket=SectorBucket.HIGH_GROWTH,
+            leader_status=LeaderStatus.LEADER,
+        )
+        decision = DecisionMapper().decide(fit, conf, sector, {})
+        self.assertEqual(decision.action, Action.NO_TRADE)
+        self.assertIn("regime", decision.rationale.lower())
 
 
 class TestVCPRegimeCheck(unittest.TestCase):

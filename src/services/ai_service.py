@@ -6,6 +6,7 @@ All calls cached 5 min.
 """
 
 from __future__ import annotations
+from src.core.regime_gate import regime_allows_trading
 import hashlib, json, logging, os, time
 from contextlib import suppress
 from typing import Any, Dict, List, Optional
@@ -91,7 +92,7 @@ def build_stub_narrative(
     """Deterministic narrative when no LLM is configured or all providers fail."""
     trend = regime.get("trend") or regime.get("label") or "unknown"
     tradeability = regime.get("tradeability") or (
-        "open" if regime.get("should_trade", True) else "wait"
+        "open" if regime_allows_trading(regime) else "wait"
     )
     vix = regime.get("vix")
     breadth = regime.get("breadth")

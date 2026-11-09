@@ -139,14 +139,24 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
     volume_ok = isinstance(volume_ratio, (int, float)) and volume_ratio >= 1.2
     above_ma = indicators.get("above_ma50") is True
 
+    # Uncalibrated heuristic scores (0–100), not probabilities. A component
+    # whose inputs are missing is None, and then so is the overall score.
     thesis_score = min(score * 5, 100) if score else 0
-    timing_score = (
-        70
-        if (rsi and 45 <= rsi <= 70)
-        else 50 if (rsi and rsi < 45) else 30 if (rsi and rsi > 75) else 50
+    if isinstance(rsi, (int, float)):
+        timing_score = (
+            70 if 45 <= rsi <= 70 else 50 if rsi < 45 else 30 if rsi > 75 else 50
+        )
+    else:
+        timing_score = None
+    if indicators.get("above_ma50") is None or volume_ratio is None:
+        execution_score = None
+    else:
+        execution_score = 80 if (volume_ok and above_ma) else 50 if above_ma else 30
+    data_score = 40 if not regime_verified else 85
+    components = (thesis_score, timing_score, execution_score, data_score)
+    overall_score = (
+        None if any(c is None for c in components) else round(sum(components) / 4)
     )
-    execution_score = 80 if (volume_ok and above_ma) else 50 if above_ma else 30
-    data_score = 40 if regime.get("synthetic") else 85
 
     # ── Benchmark Context ──
     sector_etf = _SECTOR_ETF.get(ticker, "SPY")
@@ -190,9 +200,10 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
             "timing": timing_score,
             "execution": execution_score,
             "data": data_score,
-            "overall": round(
-                (thesis_score + timing_score + execution_score + data_score) / 4
-            ),
+            "overall": overall_score,
+            "calibrated": False,
+            "scale": "heuristic_0_100",
+            "note": "Uncalibrated heuristic score — not a probability of success",
         },
         # Indicators
         "indicators": {
@@ -280,7 +291,8 @@ def _compute_trade_advice(
     gate = decision.get("regime_gate", "BLOCKED")
     rsi = indicators.get("rsi")
     rs_spy = indicators.get("rs_vs_spy")
-    overall_conf = confidence.get("overall", 50)
+    overall_conf = confidence.get("overall")
+    conf_known = isinstance(overall_conf, (int, float))
 
     stop = risk.get("stop")
     target = risk.get("target")
@@ -321,12 +333,18 @@ def _compute_trade_advice(
 
     # BUY MORE conditions
     elif conviction in ("TRADE", "TRADE_CANDIDATE", "LEADER") and gate == "ALLOWED":
-        if pnl_pct > 0 and pnl_pct < 5 and overall_conf >= 65:
+        if pnl_pct > 0 and pnl_pct < 5 and conf_known and overall_conf >= 65:
             action = "BUY MORE"
             reasons.append(
-                f"Conviction {conviction}, early profit, confidence {overall_conf}% — add to winner"
+                f"Conviction {conviction}, early profit, heuristic score {overall_conf}/100 — add to winner"
             )
-        elif pnl_pct < 0 and pnl_pct > -3 and overall_conf >= 70 and (rsi and rsi < 40):
+        elif (
+            pnl_pct < 0
+            and pnl_pct > -3
+            and conf_known
+            and overall_conf >= 70
+            and (rsi and rsi < 40)
+        ):
             action = "BUY MORE"
             reasons.append(
                 f"Pullback {pnl_pct:.1f}% into support, RSI {rsi:.0f} oversold — scale in"
@@ -341,9 +359,11 @@ def _compute_trade_advice(
     # ── Warnings ──
     if regime.get("synthetic"):
         warnings.append("⚠ SYNTHETIC regime data — lower confidence")
-    if overall_conf < 50:
+    if not conf_known:
+        warnings.append("Heuristic score unavailable — indicator inputs missing")
+    elif overall_conf < 50:
         warnings.append(
-            f"Low overall confidence ({overall_conf}%) — size conservatively"
+            f"Low heuristic score ({overall_conf}/100, uncalibrated) — size conservatively"
         )
     if rs_spy and rs_spy < 0:
         warnings.append(f"Underperforming SPY (RS {rs_spy:.1f}) — watch closely")

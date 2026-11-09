@@ -3982,10 +3982,10 @@
               </div>
               <template x-if="dos.data.technicals">
                 <div class="grid grid-cols-4 gap-2 text-[9px]">
-                  <div class="card card-p"><div style="color:var(--t3)">RSI</div><div class="mono font-bold" x-text="dos.data.technicals.rsi"></div></div>
-                  <div class="card card-p"><div style="color:var(--t3)">ATR</div><div class="mono font-bold" x-text="dos.data.technicals.atr"></div></div>
-                  <div class="card card-p"><div style="color:var(--t3)">Vol ratio</div><div class="mono font-bold" x-text="dos.data.technicals.volume_ratio"></div></div>
-                  <div class="card card-p"><div style="color:var(--t3)">MACD</div><div class="mono font-bold" x-text="dos.data.technicals.macd_signal"></div></div>
+                  <div class="card card-p"><div style="color:var(--t3)">RSI</div><div class="mono font-bold" x-text="dos.data.technicals.rsi ?? 'N/A'"></div></div>
+                  <div class="card card-p"><div style="color:var(--t3)">ATR</div><div class="mono font-bold" x-text="dos.data.technicals.atr ?? 'N/A'"></div></div>
+                  <div class="card card-p"><div style="color:var(--t3)">Vol ratio</div><div class="mono font-bold" x-text="dos.data.technicals.volume_ratio ?? 'N/A'"></div></div>
+                  <div class="card card-p"><div style="color:var(--t3)">MACD</div><div class="mono font-bold" x-text="dos.data.technicals.macd_signal ?? 'N/A'"></div></div>
                 </div>
               </template>
               <div class="card card-p mt-2">

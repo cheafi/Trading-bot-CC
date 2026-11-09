@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import json
 import logging
 from typing import Any, Dict, Optional
@@ -73,11 +74,11 @@ async def portfolio_equity(
 async def cross_asset_confirmation(request: Request):
     """Cross-asset alignment for Today."""
     regime = {}
-    should_trade = True
+    should_trade = False
     today = getattr(request.app.state, "today_v7_cache", None) or {}
     if today:
         regime = today.get("market_regime") or {}
-        should_trade = bool(regime.get("should_trade", True))
+        should_trade = bool(regime_allows_trading(regime))
     return sanitize_for_json(
         await build_cross_asset_confirmation(
             request, regime=regime, should_trade=should_trade

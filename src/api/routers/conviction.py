@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import logging
 from typing import Any, Dict, List
 
@@ -160,7 +161,7 @@ async def stock_conviction(ticker: str, request: Request) -> Dict[str, Any]:
                 or regime_payload.get("trend")
                 or "UNKNOWN"
             )
-            regime_ok = bool(regime_payload.get("should_trade", True))
+            regime_ok = bool(regime_allows_trading(regime_payload))
     except Exception:
         logger.debug("conviction regime fetch failed", exc_info=True)
 

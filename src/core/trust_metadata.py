@@ -29,6 +29,7 @@ Usage::
 """
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -295,7 +296,7 @@ class NoTradeCard:
         """Build no-trade card from regime state."""
         reason = regime_state.get("no_trade_reason", "")
         if not reason:
-            if not regime_state.get("should_trade", True):
+            if not regime_allows_trading(regime_state):
                 reason = "Regime unfavourable"
             else:
                 reason = "No qualifying setups"

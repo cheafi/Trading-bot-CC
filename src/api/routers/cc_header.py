@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -196,7 +197,7 @@ async def cc_header(
     today = _cached_today_payload()
     decision_authority = (today or {}).get("decision_authority")
     tradeability = "WAIT"
-    should_trade = True
+    should_trade = False
     if today:
         regime = today.get("market_regime") or {}
         tradeability = str(
@@ -204,7 +205,7 @@ async def cc_header(
             or (today.get("decision_model") or {}).get("honest_tradeability")
             or "WAIT"
         )
-        should_trade = bool(regime.get("should_trade", True))
+        should_trade = bool(regime_allows_trading(regime))
 
     if not decision_authority:
         from src.services.decision_truth_model import build_decision_authority
