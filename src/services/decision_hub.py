@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -196,7 +197,7 @@ async def build_decision_hub(request) -> Dict[str, Any]:
     best_action = today.get("best_action") or {}
     regime = today.get("market_regime") or {}
     tradeability = regime.get("tradeability") or "WAIT"
-    should_trade = bool(regime.get("should_trade", True))
+    should_trade = bool(regime_allows_trading(regime))
 
     scan_cache = getattr(request.app.state, "scan_cache", {}) or {}
     scanned = list(scan_cache.get("recs", []))[:30]

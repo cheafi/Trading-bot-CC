@@ -7,6 +7,7 @@ withdrawn when plumbing or regime fails first.
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 from typing import Any, Dict, List, Optional
 
 # Granular crisis states (book: calm → fragile → stress → cascade → rescue → stabilization)
@@ -172,7 +173,7 @@ def build_crisis_bundle(
         vix=mr.get("vix"),
         breadth=mr.get("breadth"),
         macro_regime=dm.get("macro_regime"),
-        should_trade=bool(mr.get("should_trade", True)),
+        should_trade=bool(regime_allows_trading(mr)),
         entropy=mr.get("entropy"),
     )
 
@@ -233,7 +234,7 @@ def tags_for_playbook_row(
         tradeability=tb,
         vix=row.get("vix") or market_vix,
         macro_regime=row.get("macro_regime"),
-        should_trade=bool(row.get("should_trade", True)),
+        should_trade=bool(regime_allows_trading(row)),
     )
     from src.services.dislocation_opportunity import dislocation_for_row
 
@@ -262,9 +263,9 @@ def build_crisis_context(
     """Dossier block — regime-aware summary and liquidity exposure."""
     dossier = dossier or {}
     unified = unified or {}
-    should_trade = getattr(regime, "should_trade", True)
+    should_trade = regime_allows_trading(regime)
     if isinstance(regime, dict):
-        should_trade = bool(regime.get("should_trade", True))
+        should_trade = bool(regime_allows_trading(regime))
     vix = getattr(regime, "vix", None) if not isinstance(regime, dict) else regime.get("vix")
     chg = dossier.get("change_pct")
 

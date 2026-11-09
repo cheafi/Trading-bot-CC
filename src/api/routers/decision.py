@@ -8,6 +8,7 @@ Transforms raw signals into decision-ready endpoints:
   /api/v7/signal-card/{ticker} — Decision-grade signal card
 """
 
+from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import time
@@ -371,7 +372,7 @@ async def today_summary(request: Request):
     # 1. Market Regime
     regime_state = await _fetch_regime(request)
     regime_label = getattr(regime_state, "regime", "NEUTRAL")
-    should_trade = getattr(regime_state, "should_trade", True)
+    should_trade = regime_allows_trading(regime_state)
     confidence = getattr(regime_state, "confidence", 0.5)
     vix_val = getattr(regime_state, "vix", 18.0)
     breadth = getattr(regime_state, "breadth_pct", 0.50)
@@ -1616,7 +1617,7 @@ async def ranked_opportunities(
     Each row answers: What? Why? Why now? Why not? What to do? When to bail?
     """
     regime_state = await _fetch_regime(request)
-    should_trade = getattr(regime_state, "should_trade", True)
+    should_trade = regime_allows_trading(regime_state)
 
     import asyncio as _asyncio
 
@@ -1898,7 +1899,7 @@ async def signal_card(ticker: str, request: Request):
     ticker = ticker.upper().strip()
     mds = request.app.state.market_data
     regime_state = await _fetch_regime(request)
-    should_trade = getattr(regime_state, "should_trade", True)
+    should_trade = regime_allows_trading(regime_state)
 
     try:
         hist = await mds.get_history(ticker, period="1y", interval="1d")
@@ -2088,7 +2089,7 @@ async def regime_summary(request: Request):
     )
     vix = getattr(regime_state, "vix", 18.0)
     breadth = getattr(regime_state, "breadth_pct", 0.5)
-    should_trade = getattr(regime_state, "should_trade", True)
+    should_trade = regime_allows_trading(regime_state)
     confidence = getattr(regime_state, "confidence", 0.5)
 
     # Cross-asset stress

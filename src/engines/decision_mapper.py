@@ -9,6 +9,7 @@ Also produces a one-line rationale for each decision.
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict
@@ -105,7 +106,7 @@ class DecisionMapper:
             confidence_label=confidence.label,
         )
 
-        should_trade = regime.get("should_trade", True)
+        should_trade = regime_allows_trading(regime)
         score = fit.final_score
         conf = confidence.final
 

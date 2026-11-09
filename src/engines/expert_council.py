@@ -18,6 +18,7 @@ Usage:
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -232,7 +233,7 @@ class FundamentalExpert(NamedExpert):
 
         elif bucket == SectorBucket.CYCLICAL:
             # Cyclical: macro-dependent + check leverage (D/E)
-            should_trade = regime.get("should_trade", True)
+            should_trade = regime_allows_trading(regime)
             high_leverage = de is not None and de > 150
             if should_trade and rr >= 2.0 and not high_leverage:
                 return ExpertVote(
@@ -278,7 +279,7 @@ class MacroExpert(NamedExpert):
     def vote(self, signal, sector, regime):
         vix = regime.get("vix", 18)
         breadth = regime.get("breadth", 0.5)
-        should_trade = regime.get("should_trade", True)
+        should_trade = regime_allows_trading(regime)
         vol_label = regime.get("volatility", "NORMAL")
         bucket = sector.sector_bucket
 
@@ -451,7 +452,7 @@ class DevilsAdvocateExpert(NamedExpert):
                 )
 
         # Score doesn't match regime
-        if score >= 7.0 and not regime.get("should_trade", True):
+        if score >= 7.0 and not regime_allows_trading(regime):
             contradictions.append(
                 "Strong setup in unfavorable regime — could be a trap"
             )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -63,7 +64,7 @@ async def _minimal_dossier(request, ticker: str) -> Dict[str, Any]:
         "why_buy": [],
         "why_stop": [],
         "trade_plan": {},
-        "regime": {"should_trade": True},
+        "regime": {"should_trade": False, "verified": False},
         "trust": {
             "mode": "RESEARCH",
             "source": "market_data_service",
@@ -116,7 +117,7 @@ def _build_unified_decision(
     from src.utils.numeric_parse import coerce_float, normalize_trade_plan, parse_numeric
 
     regime = dossier.get("regime") or {}
-    trade_ok = regime.get("should_trade", True)
+    trade_ok = regime_allows_trading(regime)
     conf = (dossier.get("confidence") or {}).get("final")
     if conf is None:
         conf = (dossier.get("signal") or {}).get("confidence", {}).get("final")
@@ -986,7 +987,7 @@ def _build_institutional_action_box(
     change = None
     flow_top = (flow_intel or {}).get("top") or {}
     flow_action = flow_top.get("pm_action")
-    regime_ok = getattr(regime, "should_trade", True)
+    regime_ok = regime_allows_trading(regime)
     pf_score = int(portfolio_fit.get("score") or 50)
 
     state = "WATCH_CONFIRM"
@@ -1055,7 +1056,7 @@ def _pm_answer_layer(
     setup = "swing"
     if tech.get("rsi") and float(tech["rsi"]) < 35:
         setup = "mean_reversion"
-    elif tech.get("above_sma200") and tech.get("volume_ratio", 1) > 1.2:
+    elif tech.get("above_sma200") and (tech.get("volume_ratio") or 0) > 1.2:
         setup = "momentum_breakout"
 
     confirms: List[str] = []
@@ -1388,7 +1389,7 @@ def _monitor_panel(ticker: str, dossier: Dict[str, Any], positions: List[Dict[st
     checklist = [
         {"item": "Thesis intact", "ok": len(dossier.get("why_buy") or []) > 0},
         {"item": "Above stop", "ok": True},
-        {"item": "Regime allows hold", "ok": dossier.get("regime", {}).get("should_trade", True)},
+        {"item": "Regime allows hold", "ok": regime_allows_trading(dossier.get("regime", {}))},
     ]
     return {
         "position": pos,
@@ -1795,7 +1796,7 @@ async def _build_intel_payload(
     today = getattr(request.app.state, "today_v7_cache", None) or {}
     decision_authority = today.get("decision_authority") or {}
     tradeability = str((today.get("market_regime") or {}).get("tradeability") or "WAIT")
-    should_trade = bool((today.get("market_regime") or {}).get("should_trade", True))
+    should_trade = bool(regime_allows_trading((today.get("market_regime") or {})))
     trust = today.get("trust") if isinstance(today.get("trust"), dict) else None
     from src.services.cc_state import build_cc_state
 

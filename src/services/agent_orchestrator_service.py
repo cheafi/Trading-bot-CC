@@ -12,6 +12,7 @@ risk limits so output remains auditable and reproducible.
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import logging
 import math
 from dataclasses import dataclass
@@ -266,7 +267,7 @@ class AgentOrchestratorService:
 
         # Regime gate (hard): should_trade + VIX crisis guard
         vix_now = float(regime.get("vix", 0.0) or 0.0)
-        regime_ok = bool(regime.get("should_trade", True)) and vix_now < float(
+        regime_ok = bool(regime_allows_trading(regime)) and vix_now < float(
             VIX.crisis
         )
         regime_gate = "PASS" if regime_ok else "BLOCK"

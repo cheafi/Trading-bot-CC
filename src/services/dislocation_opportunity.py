@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 from typing import Any, Dict, Optional
 
 from src.utils.numeric_parse import coerce_float
@@ -51,5 +52,5 @@ def dislocation_for_row(row: Dict[str, Any], *, market_vix: Optional[float] = No
         vix=row.get("vix") or market_vix,
         change_pct=row.get("change_pct") or row.get("pct_change"),
         breadth=row.get("breadth"),
-        should_trade=bool(row.get("should_trade", True)),
+        should_trade=bool(regime_allows_trading(row)),
     )

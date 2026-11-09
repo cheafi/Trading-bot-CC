@@ -10,6 +10,7 @@ Features:
 - Health checks with component status
 """
 
+from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import math
@@ -2683,7 +2684,7 @@ async def get_ai_advisor():
 
     regime_label = regime.regime.replace("_", " ").title()
     vol_label = regime.volatility_regime.replace("_", " ").title()
-    should_trade = getattr(regime, "should_trade", True)
+    should_trade = regime_allows_trading(regime)
 
     chain = [
         f"Regime: {regime_label} (vol: {vol_label})",

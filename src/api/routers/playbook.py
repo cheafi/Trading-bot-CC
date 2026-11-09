@@ -14,6 +14,7 @@ Endpoints:
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import statistics
@@ -83,7 +84,7 @@ async def _real_regime() -> Dict[str, Any]:
 
         state_dict = await asyncio.to_thread(RegimeService.get)
         return {
-            "should_trade": state_dict.get("should_trade", True),
+            "should_trade": regime_allows_trading(state_dict),
             "trend": state_dict.get("trend", "sideways"),
             "vix": state_dict.get("vix", 18.0),
             "macro_trend": state_dict.get("macro_trend", "neutral"),
@@ -93,7 +94,9 @@ async def _real_regime() -> Dict[str, Any]:
     except Exception as e:
         logger.warning("Regime fallback: %s", e)
         return {
-            "should_trade": True,
+            "should_trade": False,
+            "synthetic": True,
+            "verified": False,
             "trend": "NEUTRAL",
             "vix": 18.5,
             "macro_trend": "neutral",
@@ -820,7 +823,7 @@ async def _compute_ranked_live(
         "signal_universe": signal_meta,
         "unlock_deploy": build_unlock_deploy(
             tradeability="WAIT",
-            should_trade=bool(regime.get("should_trade", True)),
+            should_trade=bool(regime_allows_trading(regime)),
             watch_qualified_count=watch_qualified,
             deployable_count=deployable,
             scan_ranked_count=scan_ranked,
@@ -1620,7 +1623,7 @@ async def no_trade_list() -> Dict[str, Any]:
         "regime": {
             "trend": trend,
             "tradeability": tradeability,
-            "should_trade": regime.get("should_trade", True),
+            "should_trade": regime_allows_trading(regime),
         },
     }
 

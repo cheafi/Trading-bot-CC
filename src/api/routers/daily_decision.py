@@ -11,6 +11,7 @@ This endpoint intentionally separates actionable trades from watchlist ideas:
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 import asyncio
 import json
 import logging
@@ -175,7 +176,7 @@ def _normalize_regime(data: Dict[str, Any]) -> Dict[str, Any]:
         "label": label,
         "confidence": confidence,
         "tradeability": data.get("tradeability")
-        or ("TRADE" if data.get("should_trade", True) else "NO_TRADE"),
+        or ("TRADE" if regime_allows_trading(data) else "NO_TRADE"),
         "vix": data.get("vix"),
         "breadth": data.get("breadth") or data.get("breadth_pct"),
         "trend": str(data.get("trend") or data.get("trend_regime") or "").upper()
@@ -205,7 +206,14 @@ def _snapshot_regime() -> Dict[str, Any]:
     except Exception as exc:
         logger.debug("daily decision snapshot regime unavailable: %s", exc)
     return _normalize_regime(
-        {"regime": "UNKNOWN", "should_trade": True, "confidence": 0.0, "vix": 18.0}
+        {
+            "regime": "UNKNOWN",
+            "should_trade": False,
+            "confidence": 0.0,
+            "vix": None,
+            "synthetic": True,
+            "verified": False,
+        }
     )
 
 
@@ -539,7 +547,7 @@ async def daily_decision_state(
             "ok": regime_ok,
             "label": regime.get("label"),
             "tradeability": tradeability,
-            "should_trade": regime.get("should_trade", True),
+            "should_trade": regime_allows_trading(regime),
             "confidence": regime.get("confidence"),
             "trend": regime.get("trend"),
             "vix": regime.get("vix"),

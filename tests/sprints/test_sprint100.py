@@ -83,17 +83,33 @@ def test_macd_hist_sign():
     assert hist.dropna().iloc[-1] > 0
 
 
-def test_confluence_bypass_on_empty_data():
+def test_confluence_fails_closed_on_empty_data(monkeypatch):
     import asyncio
     from src.engines.mtf_confluence import MTFConfluenceGate
 
     gate = MTFConfluenceGate()
-    result = asyncio.get_event_loop().run_until_complete(
+
+    async def _none(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(gate, "_fetch_daily", _none)
+    monkeypatch.setattr(gate, "_fetch_weekly", _none)
+    result = asyncio.run(
         gate.check("FAKE_TICKER_XYZ", daily_data=None, market_data_service=None)
     )
-    # Should fail-open (approved=True) when data unavailable
-    assert result.approved is True
-    assert "bypass" in " ".join(result.notes).lower()
+    # Missing data cannot confirm alignment: gate must fail closed.
+    assert result.approved is False
+    assert result.data_sufficient is False
+    assert result.confluence_score == 0.0
+    assert not any(
+        [
+            result.weekly_trend_aligned,
+            result.momentum_aligned,
+            result.macd_aligned,
+            result.regime_aligned,
+        ]
+    )
+    assert "failed closed" in " ".join(result.notes).lower()
 
 
 # ── MultiLayerRanker MTF wiring ───────────────────────────────────────────────

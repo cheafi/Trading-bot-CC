@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.core.regime_gate import regime_allows_trading
 from datetime import datetime, timezone
 
 import numpy as np
@@ -249,7 +250,7 @@ async def _run_time_travel(
 
     # Use calibrated decision_tier from confidence engine
     tier = confidence.get("decision_tier", "WATCH")
-    should_trade = confidence.get("should_trade", True)
+    should_trade = regime_allows_trading(confidence)
 
     if not should_trade:
         final_action = "NO TRADE — ABSTAIN"

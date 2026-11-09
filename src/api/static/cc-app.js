@@ -910,6 +910,7 @@ function cc() {
 						error: msg,
 						failed_fetch: state === "failed_fetch",
 						stale: state === "stale",
+						auth_required: state === "auth_required",
 					}
 					return { ok: false, status: r.status, error: msg, fetch_state: state }
 				}

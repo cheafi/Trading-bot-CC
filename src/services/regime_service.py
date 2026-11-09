@@ -25,6 +25,7 @@ class RegimeService:
     _cache: Dict[str, Any] = {}
     _cache_time: float = 0
     CACHE_TTL = 4 * 3600  # 4 hours
+    SYNTHETIC_RETRY_S = 300
     _refresh_lock: asyncio.Lock = asyncio.Lock()  # prevents duplicate concurrent fetches
 
     @classmethod
@@ -40,7 +41,12 @@ class RegimeService:
         try:
             result = cls._fetch_and_compute()
             cls._cache = result
-            cls._cache_time = now
+            # Retry real data soon instead of serving synthetic for 4 hours.
+            cls._cache_time = (
+                now - cls.CACHE_TTL + cls.SYNTHETIC_RETRY_S
+                if result.get("synthetic")
+                else now
+            )
             return result
         except Exception as e:
             logger.error("RegimeService fetch failed: %s", e)
@@ -88,11 +94,14 @@ class RegimeService:
         )
 
         regime = result.to_dict()
-        # Add pipeline-compatible fields
-        regime["should_trade"] = result.risk_score < 75
+        synthetic = getattr(cls, "_is_synthetic", False)
+        # Add pipeline-compatible fields. A regime computed from synthetic
+        # closes describes no real market and can never permit trading.
+        regime["should_trade"] = (result.risk_score < 75) and not synthetic
         regime["vix"] = result.vix_level
         regime["source"] = "regime_service"
-        regime["synthetic"] = getattr(cls, "_is_synthetic", False)
+        regime["synthetic"] = synthetic
+        regime["verified"] = not synthetic
         return regime
 
     @classmethod
@@ -157,10 +166,13 @@ class RegimeService:
             "breadth": "neutral",
             "confidence": 0.3,
             "signals": ["no data available"],
-            "should_trade": True,
+            # Placeholder numbers keep numeric consumers safe; they are
+            # flagged synthetic/unverified and must never permit trading.
+            "should_trade": False,
             "vix": 18.0,
             "source": "default",
             "synthetic": True,
+            "verified": False,
         }
 
 
