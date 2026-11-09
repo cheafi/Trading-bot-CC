@@ -113,6 +113,11 @@ addopts = """
   --ignore=tests/sprints/test_sprint58.py
 """
 
+# Markers used by conftest.pytest_collection_modifyitems.
+markers = [
+    "network: test reaches a live external provider; deselect with -m 'not network'",
+]
+
 # asyncio_mode = "auto" — uncomment if pytest-asyncio is installed
 # Avoids per-test event-loop setup overhead for async tests.
 
