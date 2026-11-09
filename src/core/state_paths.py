@@ -44,6 +44,13 @@ def order_reconciliation_snapshot_path() -> Path:
     return path
 
 
+def execution_idempotency_path() -> Path:
+    """Gateway idempotency keys → order outcomes (survives restart)."""
+    path = runtime_state_dir() / "execution_idempotency.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def deployment_manifest_path() -> Path:
     path = runtime_state_dir() / "deployment_manifest.json"
     path.parent.mkdir(parents=True, exist_ok=True)
