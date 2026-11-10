@@ -1,0 +1,12 @@
+{
+  "date": "2026-11-10",
+  "generated_at": "2026-11-10T17:31:59.853015+00:00Z",
+  "universe_count": 50,
+  "actionable": [],
+  "watch": [],
+  "review": [],
+  "metadata": {
+    "generator": "gen_brief_quick.py",
+    "spy_close": null
+  }
+}
