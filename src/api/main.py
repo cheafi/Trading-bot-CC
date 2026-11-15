@@ -6289,6 +6289,14 @@ try:
 except Exception:
     logger.exception("[Router] Failed to load strategy_health router")
 
+# Walk-forward OOS evidence artifacts (read-only)
+try:
+    from src.api.routers.evidence import router as evidence_router
+
+    app.include_router(evidence_router)
+except Exception:
+    logger.exception("[Router] Failed to load evidence router")
+
 # Historical-simulation VaR (real 1y returns, no normality assumption)
 try:
     from src.api.routers.portfolio_var import router as portfolio_var_router

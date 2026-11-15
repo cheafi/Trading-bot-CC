@@ -141,3 +141,6 @@ models/feature_ic.json
 .mypy_cache/
 htmlcov/
 .coverage
+
+# Walk-forward evidence artifacts (computed locally)
+data/evidence/

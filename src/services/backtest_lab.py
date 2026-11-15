@@ -125,7 +125,13 @@ async def _walk_forward_summary(
             else "unstable" if rows
             else "insufficient_data"
         ),
-        "note": "Windows run in parallel — compare consistency not single fit",
+        "method": "nested_lookback_windows",
+        "is_walk_forward": False,
+        "note": (
+            "Not walk-forward: nested in-sample lookbacks with best-of strategy "
+            "selection, before costs. Not evidence of an edge — see "
+            "/api/evidence/walk-forward for out-of-sample results."
+        ),
     }
 
 
