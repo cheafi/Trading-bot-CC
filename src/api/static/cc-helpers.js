@@ -9101,8 +9101,10 @@ function cc() {
 			}
 		},
 		dosEquity() {
+			// total_value is the sum of open positions, not account equity.
 			const s = this.pf && this.pf.summary
-			return (s && (s.account_equity || s.equity || s.total_value)) || 100000
+			const eq = Number(s && (s.account_equity || s.equity))
+			return Number.isFinite(eq) && eq > 0 ? eq : null
 		},
 		stratSpark(curve) {
 			// Render cumulative R curve to a 40×14 SVG path.
@@ -9633,9 +9635,9 @@ function cc() {
 				const mid = (Number(ez[0]) + Number(ez[1])) / 2
 				risk = Math.abs(mid - Number(stop))
 			}
-			if (!risk && d.technicals?.atr) risk = 1.5 * d.technicals.atr
-			if (!risk) return 0
-			return Math.max(0, Math.floor((this.dosEquity() * 0.01) / risk))
+			const equity = this.dosEquity()
+			if (!risk || equity === null) return 0
+			return Math.max(0, Math.floor((equity * 0.01) / risk))
 		},
 		dosSetTab(t) {
 			this.dos.subTab = t

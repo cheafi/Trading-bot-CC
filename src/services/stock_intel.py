@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -799,42 +800,53 @@ def _compute_size_shares(
     dossier: Dict[str, Any],
     unified: Dict[str, Any],
     *,
-    equity: float = 100_000.0,
+    equity: Optional[float] = None,
     risk_pct: float = 0.01,
 ) -> Dict[str, Any]:
-    """1% risk sizing from entry-zone midpoint vs stop (ATR fallback)."""
+    """1% risk sizing from entry-zone midpoint vs stop.
+
+    Needs a real stop and a known account equity; neither is ever assumed.
+    """
     from src.utils.numeric_parse import coerce_float
 
     ez = unified.get("entry_zone")
     stop = unified.get("stop")
-    atr = coerce_float((dossier.get("technicals") or {}).get("atr"), 0.0)
 
     risk_per_share: Optional[float] = None
     mid: Optional[float] = None
     if ez and len(ez) >= 2:
         mid = (coerce_float(ez[0], 0.0) + coerce_float(ez[1], 0.0)) / 2
         if mid > 0 and stop is not None:
-            risk_per_share = abs(mid - coerce_float(stop, 0.0))
-    if (not risk_per_share or risk_per_share <= 0) and atr > 0:
-        risk_per_share = 1.5 * atr
+            risk_per_share = abs(mid - coerce_float(stop, 0.0)) or None
 
+    equity_known = equity is not None and equity > 0
     shares = 0
-    if risk_per_share and risk_per_share > 0:
+    if risk_per_share and equity_known:
         shares = max(0, int((equity * risk_pct) / risk_per_share))
 
-    stop_str = f"${coerce_float(stop, 0):.2f}" if stop is not None else "structure stop"
-    explanation = (
-        f"Size @1% risk: {shares} shares — Based on entry zone midpoint, stop at {stop_str}, "
-        "and current paper risk budget."
-        if shares
-        else "Size unavailable — need entry zone, stop, and ATR."
-    )
+    if not risk_per_share:
+        explanation = "Size unavailable — need entry zone and stop."
+    elif not equity_known:
+        explanation = (
+            f"Risk ${risk_per_share:.2f}/share "
+            f"(~{int(1000 / risk_per_share)} shares per $1,000 risked) — "
+            "account equity unknown; sync a broker account to size."
+        )
+    elif shares:
+        explanation = (
+            f"Size @1% risk: {shares} shares — Based on entry zone midpoint, "
+            f"stop at ${coerce_float(stop, 0):.2f}, and synced account equity."
+        )
+    else:
+        explanation = "Size unavailable — 1% of equity is less than one share of risk."
 
     return {
         "shares": shares,
         "risk_per_share": round(risk_per_share, 2) if risk_per_share else None,
+        "shares_per_1k_risk": int(1000 / risk_per_share) if risk_per_share else None,
         "size_explanation": explanation,
         "size_basis": "entry_zone_midpoint_stop_1pct_risk",
+        "equity_source": "broker_account" if equity_known else None,
         "entry_midpoint": round(mid, 2) if mid else None,
         "sizing_blocked": False,
     }
@@ -1505,10 +1517,14 @@ async def _build_intel_payload(
     )
 
     positions: List[Dict[str, Any]] = []
+    account_equity: Optional[float] = None
     try:
         from src.api.routers.portfolio import _user_portfolio
 
         positions = _user_portfolio.get("holdings") or []
+        pv = (_user_portfolio.get("account") or {}).get("portfolio_value")
+        if isinstance(pv, (int, float)) and math.isfinite(pv) and pv > 0:
+            account_equity = float(pv)
     except Exception:
         pass
 
@@ -1558,10 +1574,7 @@ async def _build_intel_payload(
     )
 
     timing = _timing_assessment(dossier, unified)
-    equity = sum(float(p.get("market_value") or 0) for p in positions) or 100_000.0
-    if equity < 10_000:
-        equity = 100_000.0
-    size_info = _compute_size_shares(dossier, unified, equity=equity)
+    size_info = _compute_size_shares(dossier, unified, equity=account_equity)
     decision_stack = _build_decision_stack(
         unified,
         action_box,

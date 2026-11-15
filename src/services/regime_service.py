@@ -208,5 +208,5 @@ async def get_regime(request):  # type: ignore[type-arg]
         logger.warning("[RegimeService] error: %s", exc)
         if cache is not None:
             return cache
-        from src.engines.regime_router import RegimeState  # noqa: PLC0415
-        return RegimeState()
+        from src.engines.regime_router import unavailable_regime  # noqa: PLC0415
+        return unavailable_regime()

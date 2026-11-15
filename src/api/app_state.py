@@ -135,6 +135,6 @@ async def get_regime(app) -> Any:
         logger.warning("[AppState] regime classify error: %s", exc)
         if app.state.regime_cache:
             return app.state.regime_cache
-        from src.engines.regime_router import RegimeState
+        from src.engines.regime_router import unavailable_regime
 
-        return RegimeState()
+        return unavailable_regime()
