@@ -11668,6 +11668,24 @@ function cc() {
 					line(pp.entry.price, "#58a6ff", "ENTRY", 0)
 					line(pp.stop.price, "#ff5c5c", "STOP", 0)
 					;(pp.targets || []).forEach((t, i) => line(t.price, "#00d4aa", "T" + (i + 1), 0))
+					// Autoscale follows candles only; widen it so plan levels stay on-chart.
+					const levels = [pp.entry.price, pp.stop.price, ...(pp.targets || []).map((t) => t.price)]
+						.map(Number)
+						.filter(Number.isFinite)
+					if (levels.length)
+						cs.applyOptions({
+							autoscaleInfoProvider: (orig) => {
+								const r = orig()
+								if (!r || !r.priceRange) return r
+								return {
+									...r,
+									priceRange: {
+										minValue: Math.min(r.priceRange.minValue, ...levels),
+										maxValue: Math.max(r.priceRange.maxValue, ...levels),
+									},
+								}
+							},
+						})
 				} else if (st) {
 					if (st.nearest_support) {
 						cs.createPriceLine({
