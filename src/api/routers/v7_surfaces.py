@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -13,6 +14,8 @@ from src.api.deps import sanitize_for_json, validate_ticker
 from src.utils.numeric_parse import parse_ratio
 from src.api.live_analytics import compute_4layer_confidence as _compute_4layer_confidence
 from src.api.live_state import fetch_regime_state
+from src.api.routers.live_quotes import live_quote
+from src.core.risk_limits import SIGNAL_THRESHOLDS
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["v7-surface"])
@@ -112,267 +115,7 @@ async def regime_screener_data(request: Request):
             key=lambda x: x.get("score", 0),
             reverse=True,
         )[:20]
-    else:
-        # ── 3. Fallback: score a representative universe via live quotes ──
-        universe = [
-            "NVDA",
-            "AAPL",
-            "MSFT",
-            "GOOGL",
-            "AMZN",
-            "META",
-            "TSLA",
-            "AMD",
-            "AVGO",
-            "CRM",
-            "NFLX",
-            "COST",
-            "LLY",
-            "JPM",
-            "V",
-            "UNH",
-            "MU",
-            "PLTR",
-        ]
-
-        regime_label = sb.regime_label
-
-        async def _score_ticker(sym: str):
-            try:
-                q_resp = await live_quote(sym)
-                q = q_resp.get("quote", {})
-                price = q.get("price", 0)
-                if price <= 0:
-                    return None
-
-                rsi = q.get("rsi", 50)
-                vol_ratio = q.get("volume_ratio", 1.0)
-                above_sma20 = q.get("above_sma20", False)
-                above_sma50 = q.get("above_sma50", False)
-                change_pct = q.get("change_pct", 0)
-
-                score = 0.5
-                if regime_label == "RISK_ON":
-                    if above_sma20 and above_sma50:
-                        score += 0.15
-                    if (
-                        SIGNAL_THRESHOLDS.rsi_momentum_low
-                        < rsi
-                        < SIGNAL_THRESHOLDS.rsi_overbought
-                    ):
-                        score += 0.1
-                    if vol_ratio > SIGNAL_THRESHOLDS.volume_surge_threshold:
-                        score += 0.1
-                elif regime_label == "RISK_OFF":
-                    if rsi < SIGNAL_THRESHOLDS.rsi_near_oversold:
-                        score += 0.15
-                    if change_pct < -2:
-                        score += 0.1
-                else:
-                    if above_sma20:
-                        score += 0.1
-                    if 40 < rsi < 60:
-                        score += 0.1
-
-                score = min(0.99, max(0.1, score))
-
-                # Use MDS for ATR if available
-                mds = request.app.state.market_data
-                atr_est = price * 0.025
-                try:
-                    hist = await mds.get_history(
-                        sym,
-                        period="1mo",
-                        interval="1d",
-                    )
-                    if hist is not None and len(hist) >= 14:
-                        h_col = "High" if "High" in hist.columns else "high"
-                        l_col = "Low" if "Low" in hist.columns else "low"
-                        c_col = "Close" if "Close" in hist.columns else "close"
-                        import numpy as np
-
-                        tr = np.maximum(
-                            hist[h_col].values[-14:] - hist[l_col].values[-14:],
-                            np.abs(
-                                hist[h_col].values[-14:] - hist[c_col].values[-15:-1]
-                            ),
-                        )
-                        atr_est = float(np.mean(tr))
-                except Exception:
-                    pass
-
-                direction = "LONG" if score > 0.5 else "SHORT"
-                stop = (
-                    round(
-                        price - atr_est * 2,
-                        2,
-                    )
-                    if direction == "LONG"
-                    else round(
-                        price + atr_est * 2,
-                        2,
-                    )
-                )
-                tp1 = (
-                    round(
-                        price + atr_est * 3,
-                        2,
-                    )
-                    if direction == "LONG"
-                    else round(
-                        price - atr_est * 3,
-                        2,
-                    )
-                )
-                risk = abs(price - stop)
-                reward = abs(tp1 - price)
-                rr = round(reward / risk, 1) if risk > 0 else 0
-
-                reasons = []
-                if above_sma20:
-                    reasons.append("Above SMA20")
-                if above_sma50:
-                    reasons.append("Above SMA50")
-                if vol_ratio > SIGNAL_THRESHOLDS.volume_surge_threshold:
-                    reasons.append(f"Volume {vol_ratio:.1f}x avg")
-                if rsi < SIGNAL_THRESHOLDS.rsi_near_oversold:
-                    reasons.append(f"RSI oversold {rsi:.0f}")
-                elif rsi > SIGNAL_THRESHOLDS.rsi_near_overbought:
-                    reasons.append(f"RSI strong {rsi:.0f}")
-
-                    # ── RSI sanity gates (Sprint 49) ──
-                    extension_warning = ""
-                    if rsi > 80:
-                        score = max(score - 0.25, 0.15)
-                        extension_warning = f"RSI {rsi:.0f} EXTENDED"
-                        direction = "FLAT"
-                    elif rsi > 70:
-                        score = max(score - 0.10, 0.20)
-                        extension_warning = f"RSI {rsi:.0f} overbought"
-
-                    # ── Setup quality grade ──
-                    if score >= 0.75 and rr >= 2.0:
-                        setup_grade = "A"
-                    elif score >= 0.60 and rr >= 1.5:
-                        setup_grade = "B"
-                    elif score >= 0.45:
-                        setup_grade = "C"
-                    else:
-                        setup_grade = "D"
-
-                    # ── Evidence FOR / AGAINST ──
-                    evidence_for = list(reasons)
-                    evidence_against = []
-                    if rsi > 70:
-                        evidence_against.append(f"RSI overbought ({rsi:.0f})")
-                    if rsi > 80:
-                        evidence_against.append("Extremely extended")
-                    if vol_ratio < 0.7:
-                        evidence_against.append(f"Low volume ({vol_ratio:.1f}x)")
-                    if rr < 1.5:
-                        evidence_against.append(f"R:R {rr:.1f} below min")
-                    if not above_sma20:
-                        evidence_against.append("Below SMA20")
-
-                    invalidation = (
-                        f"Close below ${stop:.2f}"
-                        if direction == "LONG"
-                        else f"Close above ${stop:.2f}"
-                    )
-
-                    return {
-                        "ticker": sym,
-                        "engine": "screener_fallback",
-                        "score": round(score, 2),
-                        "direction": direction,
-                        "entry": round(price, 2),
-                        "stop": stop,
-                        "tp1": tp1,
-                        "tp2": round(tp1 + atr_est * 2, 2),
-                        "rr": rr,
-                        "confidence": int(score * 100),
-                        "ev": round(score * rr * 0.3, 2),
-                        "why": ". ".join(reasons) if reasons else "Regime-aligned",
-                        "risks": [extension_warning] if extension_warning else [],
-                        "change_pct": round(change_pct, 2),
-                        "rsi": round(rsi, 1),
-                        "volume_ratio": round(vol_ratio, 2),
-                        "sector": "",
-                        "source": "live_quote_fallback",
-                        "setup_grade": setup_grade,
-                        "evidence_for": evidence_for,
-                        "evidence_against": evidence_against,
-                        "invalidation": invalidation,
-                        "is_fallback": True,
-                    }
-            except Exception:
-                return None
-
-        sem = asyncio.Semaphore(8)
-
-        async def _limited(sym):
-            async with sem:
-                return await _score_ticker(sym)
-
-        results = await asyncio.gather(
-            *[_limited(s) for s in universe],
-        )
-        raw_candidates = sorted(
-            [r for r in results if r is not None and r["score"] > 0.4],
-            key=lambda x: x["score"],
-            reverse=True,
-        )[:20]
-
-        # ── Expert Committee enrichment (Sprint 49) ──
-        from src.engines.expert_committee import ExpertCommittee as _ECfb
-
-        _ec_fb = _ECfb()
-        for c in raw_candidates:
-            try:
-                _rsi = c.get("rsi", 50)
-                _vr = c.get("volume_ratio", 1.0)
-                _trending = c.get("direction") == "LONG" and _rsi > 40
-                _entry = c.get("entry", 0)
-                _stop = c.get("stop", 0)
-                _atr_p = abs(_entry - _stop) / _entry / 2 if _entry > 0 else 0.02
-                _rlbl = regime_label or "SIDEWAYS"
-                votes = _ec_fb.collect_votes(
-                    regime=_rlbl,
-                    rsi=_rsi,
-                    vol_ratio=_vr,
-                    trending=_trending,
-                    rr_ratio=c.get("rr", 1.5),
-                    atr_pct=_atr_p,
-                    vix=sb.risk_on_score / 3.5,
-                )
-                vd = _ec_fb.deliberate(
-                    votes,
-                    regime=_rlbl,
-                ).to_dict()
-                c["committee"] = {
-                    "direction": vd.get("direction"),
-                    "conviction": round(
-                        vd.get("composite_conviction", 0),
-                        1,
-                    ),
-                    "agreement": round(
-                        vd.get("agreement_ratio", 0),
-                        2,
-                    ),
-                    "dominant_risk": vd.get("dominant_risk"),
-                    "summary": vd.get("verdict_summary"),
-                    "dissent_count": len(vd.get("dissenting_views", [])),
-                }
-            except Exception:
-                c["committee"] = None
-
-        candidates = sorted(
-            raw_candidates,
-            key=lambda x: x.get("score", 0),
-            reverse=True,
-        )
-
-    data_source = "engine_cache" if real_recs else "live_quote_fallback"
+    data_source = "engine_cache" if real_recs else "none"
 
     return {
         "regime": {
@@ -392,7 +135,7 @@ async def regime_screener_data(request: Request):
             "top_drivers": sb.top_drivers,
         },
         "candidates": candidates,
-        "universe_size": len(real_recs) if real_recs else 18,
+        "universe_size": len(real_recs),
         "candidate_count": len(candidates),
         "actionable_count": len(
             [
@@ -403,14 +146,19 @@ async def regime_screener_data(request: Request):
             ]
         ),
         "selectivity": {
-            "total_scanned": len(real_recs) if real_recs else 18,
+            "total_scanned": len(real_recs),
             "passed_filters": len(candidates),
             "extended_count": len([c for c in candidates if c.get("rsi", 0) > 80]),
         },
         "warnings": [
             w
             for w in [
-                ("Running on fallback scoring" if not real_recs else None),
+                (
+                    "No engine recommendations — no candidates shown "
+                    "(unvalidated heuristic fallback removed)"
+                    if not real_recs
+                    else None
+                ),
             ]
             if w is not None
         ],
@@ -425,6 +173,7 @@ async def regime_screener_data(request: Request):
 
 @router.get("/api/v7/portfolio-brief", tags=["v7-surface"])
 async def portfolio_brief_data(
+    request: Request,
     date_str: Optional[str] = Query(None, alias="date"),
     holdings: Optional[str] = Query(
         None,
@@ -441,7 +190,13 @@ async def portfolio_brief_data(
     Falls back to static watchlist when not provided.
     Integrates catalyst narrative via CatalystSummarizer.
     """
-    target_date = date_str or date.today().isoformat()
+    # The date names files under data/, so only a strict ISO date is accepted.
+    try:
+        target_date = (
+            date.fromisoformat(date_str) if date_str else date.today()
+        ).isoformat()
+    except ValueError:
+        raise HTTPException(400, "date must be YYYY-MM-DD")
 
     # Try to load from artifact file first
     artifact_path = Path("data") / f"brief-{target_date}.json"
@@ -467,11 +222,13 @@ async def portfolio_brief_data(
 
     for sym in watchlist:
         try:
-            q_resp = await live_quote(sym)
+            q_resp = await live_quote(sym, request)
             q = q_resp.get("quote", {})
             price = q.get("price", 0)
             change_pct = q.get("change_pct", 0)
-            rsi = q.get("rsi", 50)
+            rsi = q.get("rsi")
+            if not isinstance(rsi, (int, float)):
+                rsi = None
             above_ma20 = q.get("above_sma20", False)
             above_ma50 = q.get("above_sma50", False)
 
@@ -479,7 +236,7 @@ async def portfolio_brief_data(
                 "ticker": sym,
                 "change_pct": round(change_pct, 1),
                 "indicators": {
-                    "rsi": round(rsi, 0),
+                    "rsi": None if rsi is None else round(rsi, 0),
                     "above_ma20": above_ma20,
                     "above_ma50": above_ma50,
                 },
@@ -488,8 +245,8 @@ async def portfolio_brief_data(
             # Determine if this has a "signal"
             has_signal = (
                 abs(change_pct) > 2
-                or rsi < SIGNAL_THRESHOLDS.rsi_oversold
-                or rsi > SIGNAL_THRESHOLDS.rsi_overbought
+                or (rsi is not None and rsi < SIGNAL_THRESHOLDS.rsi_oversold)
+                or (rsi is not None and rsi > SIGNAL_THRESHOLDS.rsi_overbought)
             )
             if has_signal:
                 if change_pct > 2:
@@ -498,12 +255,12 @@ async def portfolio_brief_data(
                 elif change_pct < -2:
                     entry["note"] = "Sharp decline — watch support levels"
                     entry["signal_type"] = "pullback_warning"
-                elif rsi < SIGNAL_THRESHOLDS.rsi_oversold:
+                elif rsi is not None and rsi < SIGNAL_THRESHOLDS.rsi_oversold:
                     entry["note"] = (
                         f"RSI {rsi:.0f} oversold — check reversal conditions"
                     )
                     entry["signal_type"] = "oversold"
-                elif rsi > SIGNAL_THRESHOLDS.rsi_overbought:
+                elif rsi is not None and rsi > SIGNAL_THRESHOLDS.rsi_overbought:
                     entry["note"] = f"RSI {rsi:.0f} overbought — pullback risk"
                     entry["signal_type"] = "overbought"
                 else:
@@ -512,12 +269,12 @@ async def portfolio_brief_data(
                 holdings_with_signals.append(entry)
             elif (
                 abs(change_pct) > 0.5
-                or rsi < SIGNAL_THRESHOLDS.rsi_near_oversold
-                or rsi > SIGNAL_THRESHOLDS.rsi_near_overbought
+                or (rsi is not None and rsi < SIGNAL_THRESHOLDS.rsi_near_oversold)
+                or (rsi is not None and rsi > SIGNAL_THRESHOLDS.rsi_near_overbought)
             ):
-                if rsi < SIGNAL_THRESHOLDS.rsi_near_oversold:
+                if rsi is not None and rsi < SIGNAL_THRESHOLDS.rsi_near_oversold:
                     entry["note"] = f"RSI {rsi:.0f} low — worth watching"
-                elif rsi > SIGNAL_THRESHOLDS.rsi_near_overbought:
+                elif rsi is not None and rsi > SIGNAL_THRESHOLDS.rsi_near_overbought:
                     entry["note"] = f"RSI {rsi:.0f} elevated — momentum continues"
                 else:
                     entry["note"] = f"Move {change_pct:+.1f}%"
@@ -780,14 +537,14 @@ async def why_moved(request: Request, ticker: str):
     """v7 Why Moved — explain why a ticker moved today."""
     ticker = ticker.upper()
     try:
-        q_resp = await live_quote(ticker)
+        q_resp = await live_quote(ticker, request)
         q = q_resp.get("quote", {})
     except Exception:
         raise HTTPException(404, f"No data for {ticker}")
 
     change_pct = q.get("change_pct", 0)
-    rsi = q.get("rsi", 50)
-    vol_ratio = q.get("volume_ratio", 1.0)
+    rsi = q.get("rsi")
+    vol_ratio = q.get("volume_ratio")
 
     reasons = []
     if abs(change_pct) > 2:
@@ -797,21 +554,21 @@ async def why_moved(request: Request, ticker: str):
                 "text": f"價格變動 {change_pct:+.1f}%，{'突破' if change_pct > 0 else '跌破'}重要技術位",
             }
         )
-    if vol_ratio > SIGNAL_THRESHOLDS.volume_strong_surge:
+    if vol_ratio is not None and vol_ratio > SIGNAL_THRESHOLDS.volume_strong_surge:
         reasons.append(
             {
                 "source": "volume",
                 "text": f"成交量 {vol_ratio:.1f}x 平均 — 有異常資金流入",
             }
         )
-    if rsi > SIGNAL_THRESHOLDS.rsi_overbought:
+    if rsi is not None and rsi > SIGNAL_THRESHOLDS.rsi_overbought:
         reasons.append(
             {
                 "source": "technical",
                 "text": f"RSI {rsi:.0f} 超買區域",
             }
         )
-    elif rsi < SIGNAL_THRESHOLDS.rsi_oversold:
+    elif rsi is not None and rsi < SIGNAL_THRESHOLDS.rsi_oversold:
         reasons.append(
             {
                 "source": "technical",
@@ -844,6 +601,7 @@ async def why_moved(request: Request, ticker: str):
 
 @router.get("/api/v7/compare-overlay", tags=["v7-surface"])
 async def compare_overlay_data(
+    request: Request,
     tickers: str = Query(..., description="Comma-separated tickers"),
     period: str = Query("6M", description="1M, 3M, 6M, 1Y, 2Y"),
     mode: str = Query(
@@ -969,6 +727,7 @@ async def compare_overlay_data(
 
 @router.get("/api/v7/performance-lab", tags=["v7-surface"])
 async def performance_lab_data(
+    request: Request,
     source: str = Query(
         "live",
         description="live / paper / backtest / synthetic",
@@ -1335,6 +1094,7 @@ async def performance_lab_data(
 
 @router.get("/api/v7/strategy-portfolio-lab", tags=["v7-surface"])
 async def strategy_portfolio_lab_data(
+    request: Request,
     strategies: str = Query(
         "swing,momentum,mean_reversion",
         description="Comma-separated strategy names",
@@ -1489,6 +1249,7 @@ async def strategy_portfolio_lab_data(
 
 @router.get("/api/v7/options-screen", tags=["v7-surface"])
 async def options_screen_data(
+    request: Request,
     ticker: str = Query(..., description="Stock ticker"),
     strategy: str = Query(
         "auto", description="long_call / long_put / debit_spread / credit_spread / auto"
@@ -1512,7 +1273,7 @@ async def options_screen_data(
 
     # Get spot price from live_quote endpoint
     try:
-        q_resp = await live_quote(ticker)
+        q_resp = await live_quote(ticker, request)
         q = q_resp.get("quote", {})
         spot = q.get("price", 0)
         if spot <= 0:
@@ -1522,7 +1283,9 @@ async def options_screen_data(
     except Exception:
         raise HTTPException(404, f"Cannot fetch {ticker}")
 
-    rsi = q.get("rsi", 50)
+    rsi = q.get("rsi")
+    if not isinstance(rsi, (int, float)):
+        raise HTTPException(503, f"RSI unavailable for {ticker} — options screen needs price history")
 
     # Resolve regime from singleton
     regime_label = "NEUTRAL"

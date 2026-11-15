@@ -78,6 +78,8 @@ try:
 except ImportError:
     _P9_ENGINES = False
 
+from src.engines.conformal_predictor import reliability_bucket, reliability_note
+
 # v6 optional imports (graceful fallback)
 try:
     from src.notifications.report_generator import (
