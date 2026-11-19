@@ -544,10 +544,12 @@ class AIService:
             )
             or "No positions"
         )
+        vix = regime.get("vix")
+        vix_txt = f"{vix:.0f}" if isinstance(vix, (int, float)) else "n/a"
         prompt = (
             f"Portfolio brief:\n{holdings}\n"
             f"Regime: {regime.get('label','?')} {regime.get('trend','?')} "
-            f"VIX {regime.get('vix',18):.0f}\n"
+            f"VIX {vix_txt}\n"
             f"2 paragraphs: EXPOSURE (risk, sectors), ACTION (trim/hold/add for this regime)"
         )
         return await self._call_llm(

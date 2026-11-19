@@ -93,3 +93,59 @@ def test_stale_cache_on_refresh_failure_never_permits_trading(monkeypatch):
     assert regime["vix"] == 14.0
     assert regime_allows_trading(regime) is False
     assert cached["should_trade"] is True  # cache itself not mutated
+
+
+def _real_closes(n_spy=60, vix=True):
+    rising = [100.0 + i * 0.1 for i in range(n_spy)]
+    closes = {"SPY": rising, "QQQ": rising, "IWM": rising, "HYG": rising}
+    if vix:
+        closes["^VIX"] = [13.0] * 60
+    return closes
+
+
+def _compute_with(monkeypatch, closes):
+    def fetch(cls):
+        cls._is_synthetic = False
+        return closes
+
+    monkeypatch.setattr(RegimeService, "_fetch_closes", classmethod(fetch))
+    return RegimeService._fetch_and_compute()
+
+
+def test_complete_real_inputs_can_permit_trading(monkeypatch):
+    regime = _compute_with(monkeypatch, _real_closes())
+    assert regime["verified"] is True and "missing_inputs" not in regime
+    assert regime["should_trade"] is (regime["risk_score"] < 75)
+
+
+@pytest.mark.parametrize(
+    "closes,missing",
+    [
+        (_real_closes(vix=False), ["^VIX"]),
+        (_real_closes(n_spy=10), ["SPY"]),
+    ],
+)
+def test_partial_inputs_never_permit_trading(monkeypatch, closes, missing):
+    regime = _compute_with(monkeypatch, closes)
+    assert regime["missing_inputs"] == missing
+    assert regime["verified"] is False
+    assert regime["should_trade"] is False
+    assert regime_allows_trading(regime) is False
+    if "^VIX" in missing:
+        assert regime["vix"] is None
+
+
+def test_portfolio_brief_prompt_does_not_invent_vix(monkeypatch):
+    import asyncio
+
+    from src.services.ai_service import AIService
+
+    prompts = []
+
+    async def capture(self, system, user_prompt, *a, **k):
+        prompts.append(user_prompt)
+        return ""
+
+    monkeypatch.setattr(AIService, "_call_llm", capture)
+    asyncio.run(AIService.__new__(AIService).generate_brief([], {"vix": None}))
+    assert "VIX n/a" in prompts[0]
