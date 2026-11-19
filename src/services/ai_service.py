@@ -459,8 +459,9 @@ class AIService:
         prompt = (
             f"Morning briefing.\n"
             f"REGIME: {regime.get('trend','?')} {regime.get('volatility','?')} vol "
-            f"VIX {regime.get('vix',18)} Breadth {regime.get('breadth',50)}% "
-            f"Trade: {regime.get('should_trade',True)}\n"
+            f"VIX {regime.get('vix') if regime.get('vix') is not None else 'n/a'} "
+            f"Breadth {regime.get('breadth',50)}% "
+            f"Trade: {regime_allows_trading(regime)}\n"
             f"FUNNEL: {funnel.get('universe',0)} scanned "
             f"{funnel.get('actionable_above_7',0)} actionable "
             f"{funnel.get('high_conviction_above_8',0)} high-conviction\n"
@@ -523,7 +524,7 @@ class AIService:
             f"T1 ${trade_plan.get('target_1r',0):.2f} "
             f"Stop ${trade_plan.get('stop',0):.2f}\n"
             f"Regime: {regime.get('label','?')} "
-            f"trade={regime.get('should_trade',True)}\n"
+            f"trade={regime_allows_trading(regime)}\n"
             f"3 paragraphs: STRUCTURE, SETUP, PLAN with conviction level."
         )
         return await self._call_llm(

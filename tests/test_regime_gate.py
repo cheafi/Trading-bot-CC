@@ -149,3 +149,31 @@ def test_portfolio_brief_prompt_does_not_invent_vix(monkeypatch):
     monkeypatch.setattr(AIService, "_call_llm", capture)
     asyncio.run(AIService.__new__(AIService).generate_brief([], {"vix": None}))
     assert "VIX n/a" in prompts[0]
+
+
+def test_playbook_does_not_default_to_trade():
+    from src.notifications.daily_playbook import DailyPlaybookBuilder
+
+    card = DailyPlaybookBuilder().build(regime_state={"regime": "x"})
+    assert card.should_trade is False
+
+
+def test_llm_prompts_do_not_default_to_trade_or_invent_vix(monkeypatch):
+    import asyncio
+
+    from src.services.ai_service import AIService
+
+    prompts = []
+
+    async def capture(self, system, user_prompt, *a, **k):
+        prompts.append(user_prompt)
+        return ""
+
+    monkeypatch.setattr(AIService, "_call_llm", capture)
+    svc = AIService.__new__(AIService)
+    regime = {"label": "x", "vix": None}  # no should_trade, no VIX
+    asyncio.run(svc.generate_narrative(regime, [], {}, {}))
+    asyncio.run(svc.generate_brief([], regime))
+    joined = "\n".join(prompts)
+    assert "Trade: True" not in joined and "Trade: False" in joined
+    assert "VIX n/a" in joined and "VIX 18" not in joined
