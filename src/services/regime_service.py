@@ -51,7 +51,13 @@ class RegimeService:
         except Exception as e:
             logger.error("RegimeService fetch failed: %s", e)
             if cls._cache:
-                return cls._cache
+                # Past its TTL the cache is stale: show it, never trade on it.
+                return {
+                    **cls._cache,
+                    "should_trade": False,
+                    "verified": False,
+                    "stale": True,
+                }
             return cls._default_regime()
 
     @classmethod

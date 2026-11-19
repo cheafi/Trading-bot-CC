@@ -77,3 +77,19 @@ def test_synthetic_result_is_not_cached_for_four_hours(monkeypatch):
 
     remaining = RegimeService.CACHE_TTL - (time.time() - RegimeService._cache_time)
     assert remaining <= RegimeService.SYNTHETIC_RETRY_S + 1
+
+
+def test_stale_cache_on_refresh_failure_never_permits_trading(monkeypatch):
+    cached = {"should_trade": True, "synthetic": False, "verified": True, "vix": 14.0}
+    monkeypatch.setattr(RegimeService, "_cache", cached)
+    monkeypatch.setattr(RegimeService, "_cache_time", 0)  # expired
+
+    def boom(cls):
+        raise RuntimeError("feed down")
+
+    monkeypatch.setattr(RegimeService, "_fetch_and_compute", classmethod(boom))
+    regime = RegimeService.get()
+    assert regime["stale"] is True
+    assert regime["vix"] == 14.0
+    assert regime_allows_trading(regime) is False
+    assert cached["should_trade"] is True  # cache itself not mutated
