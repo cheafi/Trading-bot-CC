@@ -11,9 +11,12 @@ provider should be marked ``@pytest.mark.network`` and are skipped otherwise.
 
 from __future__ import annotations
 
+import importlib
 import ipaddress
 import os
+import shutil
 import socket
+from pathlib import Path
 
 import pytest
 
@@ -78,6 +81,42 @@ def pytest_configure(config):
 def pytest_unconfigure(config):
     socket.socket.connect = _real_connect
     socket.socket.connect_ex = _real_connect_ex
+
+
+# Tracked research data the suite must never rewrite: (module, attribute, file).
+_TRACKED_DATA_WRITERS = (
+    ("src.engines.learning_loop", "_TRADES_FILE", "closed_trades.jsonl"),
+    ("src.api.routers.ledger", "LEDGER_PATH", "closed_trades.jsonl"),
+    ("src.api.routers.position_alerts", "ALERTS_LOG", "alerts.jsonl"),
+    ("src.engines.decision_tracker", "_DB_PATH", "decision_tracker.db"),
+)
+_REPO_DATA = Path(__file__).resolve().parents[1] / "data"
+
+
+@pytest.fixture(scope="session")
+def _tracked_data_copy(tmp_path_factory):
+    root = tmp_path_factory.mktemp("tracked_data")
+    for name in {f for _, _, f in _TRACKED_DATA_WRITERS}:
+        src = _REPO_DATA / name
+        if src.exists():
+            shutil.copy2(src, root / name)
+    return root
+
+
+@pytest.fixture(autouse=True)
+def _isolate_tracked_data(_tracked_data_copy, monkeypatch):
+    """Point writers of tracked data/ files at a session copy, so tests still
+    read the real rows but never append to or rewrite the user's files."""
+    for module, attr, name in _TRACKED_DATA_WRITERS:
+        try:
+            mod = importlib.import_module(module)
+        except Exception:
+            continue
+        current = getattr(mod, attr, None)
+        if current is None:
+            continue
+        target = _tracked_data_copy / name
+        monkeypatch.setattr(mod, attr, target if isinstance(current, Path) else str(target))
 
 
 def pytest_collection_modifyitems(config, items):

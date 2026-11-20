@@ -58,3 +58,14 @@ def test_loopback_still_allowed():
     finally:
         cli.close()
         srv.close()
+
+
+def test_tracked_data_writers_point_outside_the_repo():
+    from pathlib import Path
+
+    import src.engines.decision_tracker as dt
+    import src.engines.learning_loop as ll
+
+    repo_data = (Path(__file__).resolve().parents[1] / "data").resolve()
+    for p in (ll._TRADES_FILE, dt._DB_PATH):
+        assert repo_data not in Path(p).resolve().parents
