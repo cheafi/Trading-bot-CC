@@ -188,6 +188,38 @@ def test_parameter_selection_runs_per_fold():
         )
 
 
+def test_param_switch_between_folds_never_overlaps_a_ticker(monkeypatch):
+    ts = pd.Timestamp
+    idx = pd.date_range("2023-01-02", "2025-06-30", freq="B")
+    df = pd.DataFrame(
+        {"Open": 1.0, "High": 1.0, "Low": 1.0, "Close": 1.0, "Volume": 1.0},
+        index=idx,
+    )
+
+    def tr(entry, exit_, px_exit, key):
+        return wf.SimTrade("A", ts(entry), ts(exit_), 100.0, px_exit, 1.0, "x", key)
+
+    a, b = {"p": "a"}, {"p": "b"}
+    trades = {
+        # A wins in-sample only in Q1 2023 → chosen for fold 1, not fold 2.
+        "p=a": [tr(f"2023-0{m}-0{d}", f"2023-0{m}-0{d + 1}", 103.0, "p=a")
+                for m in (1, 2, 3) for d in (3, 5)][:5]
+        + [tr("2024-03-25", "2024-04-20", 103.0, "p=a")],
+        "p=b": [tr(f"2023-0{m}-10", f"2023-0{m}-12", 101.0, "p=b")
+                for m in (5, 6, 7, 8, 9)]
+        + [tr("2024-04-10", "2024-04-15", 101.0, "p=b")],
+    }
+    monkeypatch.setattr(
+        wf, "simulate_trades", lambda df, sig, p, ticker="": trades[f"p={p['p']}"]
+    )
+    rule = Rule("t", "t", lambda df, b_, p: pd.Series(False, index=df.index), (a, b))
+    rep = walk_forward_report({"A": df}, rule, costs=CostModel(0, 0, 0))
+    assert [f["params"] for f in rep["folds"][:2]] == ["p=a", "p=b"]
+    # B's 2024-04-10 entry falls inside A's still-open trade → skipped.
+    assert rep["trades"] == 1
+    assert rep["fold_consistency"]["overlapping_trades_skipped"] == 1
+
+
 def test_thirty_oos_trades_is_not_validated():
     data = {"AAA": _random_walk(n=700, seed=3, drift=0.003)}
     rep = walk_forward_report(data, _every_n_rule(9), point_in_time_universe=True)
