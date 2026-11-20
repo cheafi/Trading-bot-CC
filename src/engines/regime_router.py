@@ -15,7 +15,7 @@ P3: Added EMA smoothing + minimum hold time to prevent regime whipsaw.
 import logging
 import math
 import time as _time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -89,6 +89,15 @@ def unavailable_regime() -> RegimeState:
         size_scalar=0.0,
         synthetic=True,
         timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def stale_regime(state: Any) -> Any:
+    """Copy of an expired cached regime: still displayable, never tradeable."""
+    if isinstance(state, dict):
+        return {**state, "should_trade": False, "stale": True}
+    return replace(
+        state, should_trade=False, no_trade_reason="REGIME_STALE", size_scalar=0.0
     )
 
 

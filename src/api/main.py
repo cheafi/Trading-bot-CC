@@ -751,10 +751,10 @@ async def _get_regime():
         return state
     except Exception as exc:
         logger.warning(f"[Regime] classify error: {exc}")
-        if app.state.regime_cache:
-            return app.state.regime_cache
-        from src.engines.regime_router import unavailable_regime
+        from src.engines.regime_router import stale_regime, unavailable_regime
 
+        if app.state.regime_cache:
+            return stale_regime(app.state.regime_cache)
         return unavailable_regime()
 
 

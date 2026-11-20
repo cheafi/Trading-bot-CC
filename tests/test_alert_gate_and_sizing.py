@@ -152,3 +152,27 @@ def test_every_scheduled_discord_scan_push_is_gated():
         if names & set(scanners) and "filter_validated" not in names:
             ungated.append(fn.name)
     assert ungated == []
+
+
+def test_expired_regime_cache_on_classify_error_never_permits_trading():
+    import asyncio
+    from types import SimpleNamespace
+
+    from src.core.regime_gate import regime_allows_trading
+    from src.engines.regime_router import RegimeState, stale_regime
+    from src.services import regime_service
+
+    cached = RegimeState(regime="RISK_ON", should_trade=True, size_scalar=1.0)
+
+    class BrokenMDS:
+        async def get_market_state(self):
+            raise RuntimeError("feed down")
+
+    state = SimpleNamespace(
+        regime_cache=cached, regime_cache_ts=-1e9, market_data=BrokenMDS()
+    )
+    out = asyncio.run(regime_service.get_regime(SimpleNamespace(app=SimpleNamespace(state=state))))
+    assert out.regime == "RISK_ON" and out.no_trade_reason == "REGIME_STALE"
+    assert regime_allows_trading(out) is False and out.size_scalar == 0.0
+    assert cached.should_trade is True  # cache not mutated
+    assert regime_allows_trading(stale_regime({"should_trade": True})) is False

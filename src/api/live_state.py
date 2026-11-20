@@ -138,8 +138,8 @@ async def fetch_regime_state(request: Request):
         return state
     except Exception as exc:
         logger.warning("[Regime] classify error: %s", exc)
-        if request.app.state.regime_cache:
-            return request.app.state.regime_cache
-        from src.engines.regime_router import unavailable_regime
+        from src.engines.regime_router import stale_regime, unavailable_regime
 
+        if request.app.state.regime_cache:
+            return stale_regime(request.app.state.regime_cache)
         return unavailable_regime()
