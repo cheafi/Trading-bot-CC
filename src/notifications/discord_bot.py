@@ -2328,6 +2328,13 @@ class DiscordInteractiveBot:
             swing = _sync_swing_scan(tickers, hist_map)
             breakout = _sync_breakout_scan(tickers, hist_map)
             momentum = _sync_momentum_scan(tickers, hist_map)
+            for sigs, sid in (
+                (swing, "discord_swing_pullback"),
+                (breakout, "discord_breakout"),
+                (momentum, "discord_momentum"),
+            ):
+                for s in sigs:
+                    s.setdefault("strategy_id", sid)
             combined = swing + breakout + momentum
             combined.sort(key=lambda x: x.get("score", 0), reverse=True)
             return combined
@@ -2835,6 +2842,9 @@ class DiscordInteractiveBot:
                     top_signal_objs = None
                     try:
                         scan_results = await _async_signal_scan(_WATCH_US[:15])
+                        scan_results, withheld = filter_validated(scan_results)
+                        if withheld:
+                            await _audit(f"☀️ Morning brief: {withheld_note(withheld)}")
                         if scan_results:
                             scan_results.sort(key=lambda x: x["score"], reverse=True)
                             # Convert scan dicts to minimal Signal-like objects for display
@@ -3790,6 +3800,9 @@ class DiscordInteractiveBot:
 
                 # Filter high-conviction only
                 hot_signals = [s for s in scan_results if s.get("score", 0) >= 75]
+                hot_signals, withheld = filter_validated(hot_signals)
+                if withheld:
+                    logger.info("opportunity scanner: %s", withheld_note(withheld))
                 if not hot_signals:
                     return
 

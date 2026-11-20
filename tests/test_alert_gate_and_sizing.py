@@ -129,3 +129,26 @@ def test_size_requires_known_equity_and_real_stop():
 
     no_stop = _compute_size_shares(dossier, {"entry_zone": [300, 310]}, equity=50_000)
     assert no_stop["shares"] == 0 and no_stop["risk_per_share"] is None
+
+
+def test_every_scheduled_discord_scan_push_is_gated():
+    """Any @tasks.loop that runs a signal scanner must pass it through the gate."""
+    import ast
+    import pathlib
+
+    src = pathlib.Path("src/notifications/discord_bot.py").read_text()
+    loops = [
+        n
+        for n in ast.walk(ast.parse(src))
+        if isinstance(n, ast.AsyncFunctionDef)
+        and any("loop" in ast.unparse(d) for d in n.decorator_list)
+    ]
+    assert loops
+    scanners = ("_async_signal_scan", "_sync_swing_scan", "_sync_breakout_scan",
+                "_sync_momentum_scan", "_sync_signal_scan")
+    ungated = []
+    for fn in loops:
+        names = {x.id for x in ast.walk(fn) if isinstance(x, ast.Name)}
+        if names & set(scanners) and "filter_validated" not in names:
+            ungated.append(fn.name)
+    assert ungated == []
