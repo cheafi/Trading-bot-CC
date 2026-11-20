@@ -94,7 +94,8 @@ def test_confluence_fails_closed_on_empty_data(monkeypatch):
 
     monkeypatch.setattr(gate, "_fetch_daily", _none)
     monkeypatch.setattr(gate, "_fetch_weekly", _none)
-    result = asyncio.run(
+    # Not asyncio.run(): it unsets the loop that later sprint tests still reuse.
+    result = asyncio.get_event_loop().run_until_complete(
         gate.check("FAKE_TICKER_XYZ", daily_data=None, market_data_service=None)
     )
     # Missing data cannot confirm alignment: gate must fail closed.
