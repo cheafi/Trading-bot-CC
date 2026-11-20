@@ -178,3 +178,41 @@ def test_llm_prompts_do_not_default_to_trade_or_invent_vix(monkeypatch):
     joined = "\n".join(prompts)
     assert "Trade: True" not in joined and "Trade: False" in joined
     assert "VIX n/a" in joined and "VIX 18" not in joined
+
+
+class TestDailyDecisionRegime:
+    def test_empty_regime_is_not_tradeable(self):
+        from src.api.routers import daily_decision as dd
+
+        assert dd._regime_tradeable({}) is False
+        assert dd._regime_tradeable({"should_trade": True, "vix": 15.0}) is True
+
+    def test_last_good_snapshot_never_permits_trading(self, tmp_path, monkeypatch):
+        import json
+        from pathlib import Path
+
+        from src.api.routers import daily_decision as dd
+
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "market_overview_last_good.json").write_text(
+            json.dumps({"regime": {"label": "RISK_ON", "should_trade": True, "vix": 14}})
+        )
+        monkeypatch.setattr(Path, "cwd", classmethod(lambda cls: tmp_path))
+        monkeypatch.setattr(dd, "_SNAPSHOT_REGIME_CACHE", {})
+        regime = dd._snapshot_regime()
+        assert regime["label"] == "RISK_ON" and regime["stale"] is True
+        assert regime["tradeability"] == "NO_TRADE"
+        assert dd._regime_tradeable(regime) is False
+
+    def test_expired_service_cache_is_stale(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from src.api.routers import daily_decision as dd
+
+        live = {"should_trade": True, "synthetic": False, "verified": True}
+        monkeypatch.setattr(RegimeService, "_cache", live)
+        monkeypatch.setattr(RegimeService, "_cache_time", 0)
+        req = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+        regime = dd._request_cached_regime(req)
+        assert regime["stale"] is True
+        assert dd._regime_tradeable(regime) is False
