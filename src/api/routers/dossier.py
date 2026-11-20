@@ -281,10 +281,14 @@ def _compute_trade_advice(
     buy_price: float,
     current_price: float,
     dossier: Dict[str, Any],
+    evidence_grade: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Given a user's buy price, the current price, and the full dossier context,
     produce a concrete trade suggestion: BUY MORE / HOLD / TRIM / SELL / EXIT.
+
+    BUY MORE requires VALIDATED out-of-sample evidence for the setup's
+    strategy; an unverified regime blocks adds but is not itself an exit signal.
     """
     pnl_pct = ((current_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0
     pnl_dollar = current_price - buy_price
@@ -298,6 +302,7 @@ def _compute_trade_advice(
 
     conviction = decision.get("conviction_tier", "WAIT")
     gate = decision.get("regime_gate", "BLOCKED")
+    regime_verified = decision.get("regime_verified") is True
     rsi = indicators.get("rsi")
     rs_spy = indicators.get("rs_vs_spy")
     overall_conf = confidence.get("overall")
@@ -319,7 +324,7 @@ def _compute_trade_advice(
     warnings = []
 
     # EXIT conditions (highest priority)
-    if gate == "BLOCKED":
+    if gate == "BLOCKED" and regime_verified:
         action = "EXIT"
         reasons.append("Regime gate BLOCKED — no new longs, consider exiting")
     elif stop and current_price <= stop:
@@ -361,11 +366,19 @@ def _compute_trade_advice(
         else:
             action = "HOLD"
             reasons.append(f"Conviction {conviction}, gate clear — maintain position")
+        if action == "BUY MORE" and evidence_grade != "VALIDATED":
+            action = "HOLD"
+            reasons.append(
+                f"Adding needs VALIDATED out-of-sample evidence "
+                f"(strategy evidence: {evidence_grade or 'UNAVAILABLE'}) — hold"
+            )
     else:
         action = "HOLD"
         reasons.append(f"Conviction {conviction} — no immediate action needed")
 
     # ── Warnings ──
+    if gate == "BLOCKED" and not regime_verified:
+        warnings.append("Regime data unverified — no adds; manage with your own stop")
     if regime.get("synthetic"):
         warnings.append("⚠ SYNTHETIC regime data — lower confidence")
     if not conf_known:
@@ -440,7 +453,20 @@ async def trade_advice(ticker: str, buy_price: float):
         dossier = _build_dossier(ticker)
         _DOSSIER_CACHE[ticker] = (time.time(), dossier)
 
-    advice = _compute_trade_advice(ticker, buy_price, current_price, dossier)
+    from src.services.strategy_health_service import evidence_for_strategy
+
+    item, _ = _find_signal_in_brief(ticker, _load_brief_data())
+    try:
+        grade = evidence_for_strategy(
+            item.get("strategy") or item.get("strategy_id")
+        ).get("grade")
+    except Exception:
+        logger.warning("evidence lookup failed for %s", ticker, exc_info=True)
+        grade = None
+
+    advice = _compute_trade_advice(
+        ticker, buy_price, current_price, dossier, evidence_grade=grade
+    )
     return advice
 
 
