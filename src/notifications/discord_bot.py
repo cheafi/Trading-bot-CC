@@ -48,6 +48,7 @@ import aiohttp
 from src.core.config import get_settings
 from src.core.regime_gate import regime_allows_trading
 from src.notifications._embeds import SignalEmbed
+from src.notifications.alert_gate import filter_validated, withheld_note
 
 # Configurable API base URL — override with API_BASE_URL env var when using the
 # _cc_instant.py proxy which runs uvicorn on :8001 instead of :8000.
@@ -558,9 +559,12 @@ class DiscordInteractiveBot:
     # ── Push helpers ──────────────────────────────────────────────────
 
     async def push_signal(self, signal: Any) -> bool:
+        if not filter_validated([signal])[0]:
+            return False
         return await self.send_webhook(embeds=[self.format_signal_embed(signal)])
 
     async def push_signals_batch(self, signals: List[Any]) -> int:
+        signals, _ = filter_validated(signals)
         if not signals:
             return 0
         embeds = [self.format_signal_embed(s) for s in signals[:10]]
@@ -2324,6 +2328,13 @@ class DiscordInteractiveBot:
             swing = _sync_swing_scan(tickers, hist_map)
             breakout = _sync_breakout_scan(tickers, hist_map)
             momentum = _sync_momentum_scan(tickers, hist_map)
+            for sigs, sid in (
+                (swing, "discord_swing_pullback"),
+                (breakout, "discord_breakout"),
+                (momentum, "discord_momentum"),
+            ):
+                for s in sigs:
+                    s.setdefault("strategy_id", sid)
             combined = swing + breakout + momentum
             combined.sort(key=lambda x: x.get("score", 0), reverse=True)
             return combined
@@ -2510,6 +2521,9 @@ class DiscordInteractiveBot:
             try:
                 hist_map = await _prefetch(_WATCH_US, "6mo")
                 signals = await asyncio.to_thread(_sync_swing_scan, _WATCH_US, hist_map)
+                signals, withheld = filter_validated(signals, "discord_swing_pullback")
+                if withheld:
+                    await _audit(f"🔄 Swing scan: {withheld_note(withheld)}")
                 if not signals:
                     return
                 ml_hist = await _prefetch([s["ticker"] for s in signals], "3mo")
@@ -2548,6 +2562,9 @@ class DiscordInteractiveBot:
             try:
                 hist_map = await _prefetch(_WATCH_US, "6mo")
                 signals = await asyncio.to_thread(_sync_breakout_scan, _WATCH_US, hist_map)
+                signals, withheld = filter_validated(signals, "discord_breakout")
+                if withheld:
+                    await _audit(f"🚀 Breakout scan: {withheld_note(withheld)}")
                 if not signals:
                     return
                 ml_hist = await _prefetch([s["ticker"] for s in signals], "3mo")
@@ -2587,6 +2604,9 @@ class DiscordInteractiveBot:
             try:
                 hist_map = await _prefetch(_WATCH_US, "3mo")
                 signals = await asyncio.to_thread(_sync_momentum_scan, _WATCH_US, hist_map)
+                signals, withheld = filter_validated(signals, "discord_momentum")
+                if withheld:
+                    await _audit(f"⚡ Momentum scan: {withheld_note(withheld)}")
                 if not signals:
                     return
                 signals.sort(key=lambda x: x["score"], reverse=True)
@@ -2628,19 +2648,25 @@ class DiscordInteractiveBot:
             try:
                 hist_map = await _prefetch(_WATCH_US, "6mo")
                 all_sigs = []
-                for scan_fn, label in [
-                    (_sync_swing_scan, "SWING"),
-                    (_sync_breakout_scan, "BREAKOUT"),
-                    (_sync_momentum_scan, "MOMENTUM"),
+                withheld: Dict[str, int] = {}
+                for scan_fn, label, strategy_id in [
+                    (_sync_swing_scan, "SWING", "discord_swing_pullback"),
+                    (_sync_breakout_scan, "BREAKOUT", "discord_breakout"),
+                    (_sync_momentum_scan, "MOMENTUM", "discord_momentum"),
                 ]:
                     try:
                         sigs = await asyncio.to_thread(scan_fn, _WATCH_US, hist_map)
+                        sigs, held = filter_validated(sigs, strategy_id)
+                        for g, n in held.items():
+                            withheld[g] = withheld.get(g, 0) + n
                         for s in (sigs or []):
                             s["_strategy"] = label
                         all_sigs.extend(sigs or [])
                     except Exception:
                         pass
 
+                if withheld:
+                    await _audit(f"🤖 AI signal scan: {withheld_note(withheld)}")
                 if not all_sigs:
                     return
 
@@ -2816,6 +2842,9 @@ class DiscordInteractiveBot:
                     top_signal_objs = None
                     try:
                         scan_results = await _async_signal_scan(_WATCH_US[:15])
+                        scan_results, withheld = filter_validated(scan_results)
+                        if withheld:
+                            await _audit(f"☀️ Morning brief: {withheld_note(withheld)}")
                         if scan_results:
                             scan_results.sort(key=lambda x: x["score"], reverse=True)
                             # Convert scan dicts to minimal Signal-like objects for display
@@ -3771,6 +3800,9 @@ class DiscordInteractiveBot:
 
                 # Filter high-conviction only
                 hot_signals = [s for s in scan_results if s.get("score", 0) >= 75]
+                hot_signals, withheld = filter_validated(hot_signals)
+                if withheld:
+                    logger.info("opportunity scanner: %s", withheld_note(withheld))
                 if not hot_signals:
                     return
 

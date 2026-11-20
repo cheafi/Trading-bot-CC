@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
+from src.notifications.alert_gate import filter_validated
 from src.notifications.discord import DiscordNotifier
 from src.notifications.whatsapp import WhatsAppNotifier
 
@@ -46,6 +47,8 @@ class MultiChannelNotifier:
             "discord": False,
             "whatsapp": False,
         }
+        if not filter_validated([signal])[0]:
+            return results
 
         if self.discord.is_configured:
             results["discord"] = await self.discord.send_signal(signal)
@@ -59,6 +62,9 @@ class MultiChannelNotifier:
             "discord": 0,
             "whatsapp": 0,
         }
+        signals, _ = filter_validated(signals)
+        if not signals:
+            return sent
 
         if self.discord.is_configured:
             sent["discord"] = await self.discord.send_signals_batch(signals)

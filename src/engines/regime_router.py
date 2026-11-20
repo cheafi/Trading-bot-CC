@@ -15,7 +15,7 @@ P3: Added EMA smoothing + minimum hold time to prevent regime whipsaw.
 import logging
 import math
 import time as _time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -57,6 +57,8 @@ class RegimeState:
     credit_spread_z: float = 0.0
     realized_vol_20d: float = 0.15
     timestamp: str = ""
+    # True when no classification ran; the raw inputs above are placeholders.
+    synthetic: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dict for backward compatibility."""
@@ -75,6 +77,28 @@ class RegimeState:
     def __contains__(self, key: str) -> bool:
         """Support 'key' in state."""
         return hasattr(self, key)
+
+
+def unavailable_regime() -> RegimeState:
+    """Fail-closed placeholder when the regime could not be classified."""
+    return RegimeState(
+        regime="UNKNOWN",
+        should_trade=False,
+        no_trade_reason="REGIME_UNAVAILABLE",
+        confidence=0.0,
+        size_scalar=0.0,
+        synthetic=True,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def stale_regime(state: Any) -> Any:
+    """Copy of an expired cached regime: still displayable, never tradeable."""
+    if isinstance(state, dict):
+        return {**state, "should_trade": False, "stale": True}
+    return replace(
+        state, should_trade=False, no_trade_reason="REGIME_STALE", size_scalar=0.0
+    )
 
 
 class RegimeRouter:

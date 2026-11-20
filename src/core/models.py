@@ -1404,7 +1404,7 @@ class RegimeState(BaseModel):
     neutral_range: float = 0.0
     risk_off_downtrend: float = 0.0
     entropy: float = 1.0
-    should_trade: bool = True
+    should_trade: bool = False
     confidence: float = 0.0
     vix: float = 0.0
     vix_term_slope: float = 0.0
