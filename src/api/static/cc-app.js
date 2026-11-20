@@ -10515,22 +10515,29 @@ function cc() {
 				alert("IBKR not connected. Open the IBKR pill to connect first.")
 				return
 			}
-			const equity =
-				(this.pf && this.pf.summary && (this.pf.summary.total_value || this.pf.summary.account_equity)) ||
-				100000
+			// Size only from real account equity and a real stop; otherwise the PM types the quantity.
+			const s = (this.pf && this.pf.summary) || {}
+			const equity = Number(s.total_value || s.account_equity) || 0
 			const entry = Number(r.entry_price) || 0
 			const stop = Number(r.stop_price) || 0
 			let qty = 0
-			if (entry > 0 && stop > 0 && entry > stop) {
+			if (equity > 0 && entry > 0 && stop > 0 && entry > stop) {
 				// 1R = 1% of equity (matches the size pill in Playbook)
 				const riskDollars = equity * 0.01
 				const perShareRisk = entry - stop
-				qty = Math.max(1, Math.floor(riskDollars / perShareRisk))
+				qty = Math.floor(riskDollars / perShareRisk)
 			}
 			this.ibkr.orderForm.symbol = (r.ticker || "").toUpperCase()
 			this.ibkr.orderForm.action = "BUY"
 			this.ibkr.orderForm.secType = "STK"
-			this.ibkr.orderForm.qty = qty || 1
+			this.ibkr.orderForm.qty = qty > 0 ? qty : ""
+			if (!(qty > 0)) {
+				alert(
+					equity > 0
+						? "Cannot size from entry/stop (missing, invalid, or 1R is under one share) — enter quantity manually."
+						: "Account equity unavailable — enter quantity manually.",
+				)
+			}
 			this.ibkr.orderForm.orderType = entry > 0 ? "LMT" : "MKT"
 			if (entry > 0) this.ibkr.orderForm.limitPrice = entry
 			// Stash bracket details for the IBKR view to surface (optional bracket builder UI to come)
