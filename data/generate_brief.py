@@ -227,6 +227,8 @@ def _classify_ticker(
         "near_52w_high": near_high,
         "conviction": conviction,
         "section": section,
+        # Must match src.engines.walk_forward.RULES so the plan finds its evidence.
+        "strategy_id": "brief_rs_leader_v1" if conviction == "TRADE" else None,
         **levels,
         "generated_at": datetime.now(timezone.utc).isoformat() + "Z",
     }

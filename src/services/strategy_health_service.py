@@ -280,10 +280,24 @@ def load_per_strategy(
 def evidence_for_strategy(
     strategy_id: str | None, ledger_path: str = LEDGER_PATH
 ) -> dict[str, Any]:
-    """All-time evidence grade for one strategy; NO_BACKTEST when unknown."""
+    """Evidence grade for one strategy; NO_BACKTEST when unknown.
+
+    A fresh walk-forward artifact is preferred over the realized-trade ledger,
+    except that a ledger FAILED_VALIDATION always wins: live failure overrides
+    a backtest.
+    """
+    from src.services import walk_forward_service
+
     sid = str(strategy_id or "").strip()
+    ledger = None
     if sid:
         for row in load_per_strategy(window_days=0, ledger_path=ledger_path)["strategies"]:
             if row.get("strategy_id") == sid:
-                return row["evidence"]
-    return StrategyRow(strategy_id=sid).evidence()
+                ledger = {**row["evidence"], "source": "realized_trades"}
+                break
+    wf = walk_forward_service.load(sid) if sid else None
+    if wf is not None and not (ledger and ledger.get("grade") == "FAILED_VALIDATION"):
+        return {**wf["evidence"], "source": "walk_forward", "as_of": wf.get("as_of")}
+    if ledger is not None:
+        return ledger
+    return {**StrategyRow(strategy_id=sid).evidence(), "source": "none"}
