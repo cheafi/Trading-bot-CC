@@ -7,8 +7,9 @@ Used by Ops health panel; does not replace honest board gates.
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 from typing import Any, Dict, List, Literal, Optional
+
+from src.core.regime_gate import regime_allows_trading
 
 MachineId = Literal[
     "data_integrity",

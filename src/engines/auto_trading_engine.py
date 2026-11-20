@@ -10,7 +10,6 @@ Runs 24/7 without human intervention. Handles:
 - Learning loop: records outcomes for ML retraining
 """
 
-from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import time
@@ -30,6 +29,7 @@ from src.core.errors import (
 )
 from src.core.logging_config import get_correlation_id, set_correlation_id
 from src.core.models import Direction, Signal, SignalStatus, TradeRecommendation
+from src.core.regime_gate import regime_allows_trading
 from src.core.trade_repo import TradeOutcomeRepository
 from src.core.trust_metadata import (
     NoTradeCard,

@@ -17,12 +17,13 @@ Each row returns:
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import logging
 import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
+
+from src.core.regime_gate import regime_allows_trading
 
 logger = logging.getLogger(__name__)
 

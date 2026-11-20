@@ -3,7 +3,6 @@ TradingAI Bot - Scheduler Service
 Manages scheduled jobs for data ingestion, signal generation, and reporting.
 """
 
-from src.core.regime_gate import regime_allows_trading
 import asyncio
 from datetime import datetime, time
 from typing import Any, Dict, Optional
@@ -14,6 +13,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 import pytz
 
 from src.core.config import get_settings
+from src.core.regime_gate import regime_allows_trading
 from src.ingestors import MarketDataIngestor, NewsIngestor, SocialIngestor
 from src.engines import FeatureEngine, SignalEngine
 from src.engines.gpt_validator import GPTSignalValidator, GPTSummarizer

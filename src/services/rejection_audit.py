@@ -7,9 +7,9 @@ generic decision-mapper copy ("Weak setup — monitor only...").
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.core.regime_gate import regime_allows_trading
 from src.engines.sector_classifier import LeaderStatus, SectorBucket
 
 _BLOCKER_CATEGORIES = (

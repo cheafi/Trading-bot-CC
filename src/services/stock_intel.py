@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import math
@@ -10,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from src.api.deps import sanitize_for_json
+from src.core.regime_gate import regime_allows_trading
 
 logger = logging.getLogger(__name__)
 

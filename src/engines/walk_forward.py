@@ -360,6 +360,10 @@ def walk_forward_report(
     oos: List[SimTrade] = []
     is_rs_by_fold: List[float] = []
     fold_rows = []
+    # One position per ticker across folds: when the chosen params change, a
+    # trade from the previous fold may still be open.
+    busy_until: Dict[str, pd.Timestamp] = {}
+    overlaps_skipped = 0
     for f in folds:
         best_key, best_exp, selection = None, -math.inf, "in_sample_expectancy"
         for key, trades in all_trades.items():
@@ -373,11 +377,21 @@ def walk_forward_report(
             best_key = _params_key(rule.param_grid[0])
             best_exp = None
             selection = "default_params_insufficient_in_sample"
-        test = [
-            tr
-            for tr in all_trades[best_key]
-            if f.test_start <= tr.entry_date < f.test_end
-        ]
+        test = []
+        for tr in sorted(
+            (
+                tr
+                for tr in all_trades[best_key]
+                if f.test_start <= tr.entry_date < f.test_end
+            ),
+            key=lambda tr: tr.entry_date,
+        ):
+            held = busy_until.get(tr.ticker)
+            if held is not None and tr.entry_date <= held:
+                overlaps_skipped += 1
+                continue
+            busy_until[tr.ticker] = tr.exit_date
+            test.append(tr)
         oos.extend(test)
         if best_exp is not None:
             is_rs_by_fold.append(best_exp)
@@ -456,6 +470,7 @@ def walk_forward_report(
             "folds": len(fold_rows),
             "folds_with_trades": len(folds_with_trades),
             "positive_folds": len(positive),
+            "overlapping_trades_skipped": overlaps_skipped,
         },
         "cost_sensitivity": {
             f"{m}x": _stats([tr.r_multiple(c * m) for tr in oos])["expectancy_r"]

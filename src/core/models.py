@@ -3,13 +3,14 @@ TradingAI Bot - Data Models
 Pydantic models for all data structures.
 """
 
-from src.core.regime_gate import regime_allows_trading
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from src.core.regime_gate import regime_allows_trading
 
 
 def _utcnow() -> datetime:

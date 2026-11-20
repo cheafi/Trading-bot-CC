@@ -8,7 +8,6 @@ Transforms raw signals into decision-ready endpoints:
   /api/v7/signal-card/{ticker} — Decision-grade signal card
 """
 
-from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import time
@@ -18,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.api.deps import sanitize_for_json
+from src.core.regime_gate import regime_allows_trading
 from src.services.regime_service import get_regime as _fetch_regime
 from src.utils.numeric_parse import parse_ratio
 

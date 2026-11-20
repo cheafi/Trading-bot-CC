@@ -14,7 +14,6 @@ Endpoints:
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import statistics
@@ -23,6 +22,7 @@ from typing import Any, Callable, Dict, List
 
 from fastapi import APIRouter, Query, Request
 
+from src.core.regime_gate import regime_allows_trading
 from src.core.stock_universe import RS_UNIVERSE, rs_sector_for
 from src.scanners.intl_universe import (
     AU_TICKERS,

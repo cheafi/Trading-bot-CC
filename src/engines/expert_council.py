@@ -18,12 +18,12 @@ Usage:
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
+from src.core.regime_gate import regime_allows_trading
 from src.engines.expert_committee import CommitteeVerdict, ExpertCommittee, ExpertVote
 from src.engines.sector_classifier import SectorBucket, SectorContext
 from src.engines.sector_pipeline import PipelineResult, SectorPipeline

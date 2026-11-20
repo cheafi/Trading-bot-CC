@@ -18,6 +18,8 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
+MIN_SPY_BARS = 20  # MacroRegimeEngine's documented minimum
+
 
 class RegimeService:
     """Singleton regime provider with caching."""
@@ -51,7 +53,13 @@ class RegimeService:
         except Exception as e:
             logger.error("RegimeService fetch failed: %s", e)
             if cls._cache:
-                return cls._cache
+                # Past its TTL the cache is stale: show it, never trade on it.
+                return {
+                    **cls._cache,
+                    "should_trade": False,
+                    "verified": False,
+                    "stale": True,
+                }
             return cls._default_regime()
 
     @classmethod
@@ -95,13 +103,23 @@ class RegimeService:
 
         regime = result.to_dict()
         synthetic = getattr(cls, "_is_synthetic", False)
-        # Add pipeline-compatible fields. A regime computed from synthetic
-        # closes describes no real market and can never permit trading.
-        regime["should_trade"] = (result.risk_score < 75) and not synthetic
-        regime["vix"] = result.vix_level
+        # SPY trend and VIX are both required; without them the engine silently
+        # scores a neutral market (VIX 0 → "NORMAL").
+        missing = [
+            t
+            for t, need in (("SPY", MIN_SPY_BARS), ("^VIX", 1))
+            if len(closes.get(t) or []) < need
+        ]
+        verified = not synthetic and not missing
+        # Add pipeline-compatible fields. A regime computed from synthetic or
+        # incomplete closes describes no real market and can never permit trading.
+        regime["should_trade"] = (result.risk_score < 75) and verified
+        regime["vix"] = result.vix_level if "^VIX" not in missing else None
         regime["source"] = "regime_service"
         regime["synthetic"] = synthetic
-        regime["verified"] = not synthetic
+        regime["verified"] = verified
+        if missing:
+            regime["missing_inputs"] = missing
         return regime
 
     @classmethod
