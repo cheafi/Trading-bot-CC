@@ -23,6 +23,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from src.core.regime_gate import regime_allows_trading
 from src.engines.sector_classifier import SectorBucket, SectorContext
 
 logger = logging.getLogger(__name__)
@@ -246,7 +247,7 @@ class FitScorer:
 
     def _score_regime(self, sig: Dict, regime: Dict) -> float:
         """Does the market regime support this trade?"""
-        should_trade = regime.get("should_trade", True)
+        should_trade = regime_allows_trading(regime)
         if not should_trade:
             return 2.0
 

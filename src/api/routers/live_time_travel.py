@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from src.api.deps import sanitize_for_json, validate_ticker
 from src.api.live_analytics import compute_4layer_confidence, run_expert_council
 from src.api.technical_indicators import compute_indicators as _compute_indicators
+from src.core.regime_gate import regime_allows_trading
 from src.core.risk_limits import SIGNAL_THRESHOLDS
 
 router = APIRouter(prefix="/api/live", tags=["live"])
@@ -249,7 +250,7 @@ async def _run_time_travel(
 
     # Use calibrated decision_tier from confidence engine
     tier = confidence.get("decision_tier", "WATCH")
-    should_trade = confidence.get("should_trade", True)
+    should_trade = regime_allows_trading(confidence)
 
     if not should_trade:
         final_action = "NO TRADE — ABSTAIN"

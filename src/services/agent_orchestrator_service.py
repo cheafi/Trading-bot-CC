@@ -17,6 +17,7 @@ import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from src.core.regime_gate import regime_allows_trading
 from src.core.risk_limits import VIX
 from src.engines.decision_persistence import get_journal
 from src.engines.expert_council import ExpertCouncil
@@ -266,7 +267,7 @@ class AgentOrchestratorService:
 
         # Regime gate (hard): should_trade + VIX crisis guard
         vix_now = float(regime.get("vix", 0.0) or 0.0)
-        regime_ok = bool(regime.get("should_trade", True)) and vix_now < float(
+        regime_ok = bool(regime_allows_trading(regime)) and vix_now < float(
             VIX.crisis
         )
         regime_gate = "PASS" if regime_ok else "BLOCK"

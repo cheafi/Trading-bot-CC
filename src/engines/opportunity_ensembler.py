@@ -35,6 +35,8 @@ import logging
 import math
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
+from src.core.regime_gate import regime_allows_trading
+
 if TYPE_CHECKING:
     from src.core.models import TradeRecommendation
 
@@ -454,7 +456,7 @@ class OpportunityEnsembler:
         regime: Dict[str, Any],
     ) -> List["TradeRecommendation"]:
         """Apply suppression gates. Sets trade_decision=False when failing."""
-        should_trade = regime.get("should_trade", True)
+        should_trade = regime_allows_trading(regime)
         no_trade_rsn = regime.get("no_trade_reason", "")
         entropy = float(regime.get("entropy", 0.0))
 

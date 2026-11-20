@@ -10,6 +10,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.core.regime_gate import regime_allows_trading
+
 
 def _utcnow() -> datetime:
     """Timezone-aware UTC now (replaces deprecated datetime.utcnow)."""
@@ -843,7 +845,7 @@ class RegimeScoreboard(BaseModel):
             strategies_on = ["Swing", "Mean Reversion"]
 
         no_trade = []
-        if not d.get("should_trade", True):
+        if not regime_allows_trading(d):
             reason = d.get("no_trade_reason", "")
             no_trade = [reason] if reason else ["Regime uncertainty"]
 

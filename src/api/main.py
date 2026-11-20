@@ -42,6 +42,7 @@ from src.core.models import (
     ScenarioPlan,
     Signal,
 )
+from src.core.regime_gate import regime_allows_trading
 from src.core.risk_limits import BACKTEST_DEFAULTS, RISK, SIGNAL_THRESHOLDS
 from src.core.telemetry import telemetry
 from src.core.version import APP_VERSION, PRODUCT_NAME
@@ -2683,7 +2684,7 @@ async def get_ai_advisor():
 
     regime_label = regime.regime.replace("_", " ").title()
     vol_label = regime.volatility_regime.replace("_", " ").title()
-    should_trade = getattr(regime, "should_trade", True)
+    should_trade = regime_allows_trading(regime)
 
     chain = [
         f"Regime: {regime_label} (vol: {vol_label})",

@@ -58,6 +58,7 @@ class ConfluenceResult:
     weekly_close: Optional[float]
     weekly_sma10: Optional[float]
     notes: list = field(default_factory=list)
+    data_sufficient: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -75,6 +76,7 @@ class ConfluenceResult:
             "weekly_close": self.weekly_close,
             "weekly_sma10": self.weekly_sma10,
             "notes": self.notes,
+            "data_sufficient": self.data_sufficient,
         }
 
 
@@ -116,11 +118,11 @@ class MTFConfluenceGate:
         weekly_df = await self._fetch_weekly(ticker, market_data_service)
 
         if daily_df is None or len(daily_df) < 20:
-            notes.append("insufficient daily data — gate bypassed")
+            notes.append("insufficient daily data")
             return self._bypass(ticker, notes)
 
         if weekly_df is None or len(weekly_df) < WEEKLY_SMA_PERIOD:
-            notes.append("insufficient weekly data — gate bypassed")
+            notes.append("insufficient weekly data")
             return self._bypass(ticker, notes)
 
         # ── Indicators ────────────────────────────────────────────────────
@@ -262,20 +264,21 @@ class MTFConfluenceGate:
             return None
 
     def _bypass(self, ticker: str, notes: list) -> ConfluenceResult:
-        """Return a pass-through result when data is unavailable."""
+        """Missing data cannot confirm alignment, so the gate fails closed."""
         return ConfluenceResult(
             ticker=ticker,
-            confluence_score=0.5,
-            approved=True,  # fail-open when data unavailable
-            weekly_trend_aligned=True,
-            momentum_aligned=True,
-            macd_aligned=True,
-            regime_aligned=True,
+            confluence_score=0.0,
+            approved=False,
+            weekly_trend_aligned=False,
+            momentum_aligned=False,
+            macd_aligned=False,
+            regime_aligned=False,
             weekly_rsi=None,
             daily_rsi=None,
             weekly_close=None,
             weekly_sma10=None,
-            notes=notes + ["gate bypassed (fail-open)"],
+            notes=notes + ["gate failed closed (insufficient data)"],
+            data_sufficient=False,
         )
 
 

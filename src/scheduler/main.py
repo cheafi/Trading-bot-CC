@@ -13,6 +13,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 import pytz
 
 from src.core.config import get_settings
+from src.core.regime_gate import regime_allows_trading
 from src.ingestors import MarketDataIngestor, NewsIngestor, SocialIngestor
 from src.engines import FeatureEngine, SignalEngine
 from src.engines.gpt_validator import GPTSignalValidator, GPTSummarizer
@@ -260,7 +261,7 @@ class TradingScheduler:
 
             # 1. Warm regime cache
             regime = await asyncio.to_thread(RegimeService.get)
-            if not regime.get("should_trade", True):
+            if not regime_allows_trading(regime):
                 logger.warning(
                     "Regime blocks trading (should_trade=False) — skipping signal generation. "
                     "regime=%s",
@@ -412,7 +413,7 @@ class TradingScheduler:
                     "type": "eod_summary",
                     "date": datetime.utcnow().strftime("%Y-%m-%d"),
                     "regime": regime.get("trend", "unknown"),
-                    "should_trade": regime.get("should_trade", True),
+                    "should_trade": regime_allows_trading(regime),
                     "vix": regime.get("vix", 0.0),
                 }
                 await self.notifier.send_daily_report(summary)

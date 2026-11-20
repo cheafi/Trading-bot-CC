@@ -12,6 +12,7 @@ from src.api.app_state import get_engine
 from src.api.deps import optional_api_key, sanitize_for_json
 from src.api.routers.brief_regenerate import _latest_brief
 from src.core.config import get_settings
+from src.core.regime_gate import regime_allows_trading
 from src.services.ibkr_service import get_ibkr_service
 from src.services.runtime_truth import engine_runtime_snapshot
 from src.services.surface_authority import header_summary_for_tab, resolve_surface_mode
@@ -196,7 +197,7 @@ async def cc_header(
     today = _cached_today_payload()
     decision_authority = (today or {}).get("decision_authority")
     tradeability = "WAIT"
-    should_trade = True
+    should_trade = False
     if today:
         regime = today.get("market_regime") or {}
         tradeability = str(
@@ -204,7 +205,7 @@ async def cc_header(
             or (today.get("decision_model") or {}).get("honest_tradeability")
             or "WAIT"
         )
-        should_trade = bool(regime.get("should_trade", True))
+        should_trade = bool(regime_allows_trading(regime))
 
     if not decision_authority:
         from src.services.decision_truth_model import build_decision_authority

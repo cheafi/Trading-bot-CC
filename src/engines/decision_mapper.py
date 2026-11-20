@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict
 
+from src.core.regime_gate import regime_allows_trading
 from src.engines.confidence_engine import ConfidenceBreakdown
 from src.engines.fit_scorer import FitScores
 from src.engines.sector_classifier import SectorBucket, SectorContext
@@ -105,7 +106,7 @@ class DecisionMapper:
             confidence_label=confidence.label,
         )
 
-        should_trade = regime.get("should_trade", True)
+        should_trade = regime_allows_trading(regime)
         score = fit.final_score
         conf = confidence.final
 

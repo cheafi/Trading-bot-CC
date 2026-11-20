@@ -56,7 +56,7 @@ def test_regime_service_default_fallback():
 
     d = RegimeService._default_regime()
     assert d["trend"] == "SIDEWAYS"
-    assert d["should_trade"] is True
+    assert d["should_trade"] is False  # no data → no permission to trade
     assert d["source"] == "default"
 
 
@@ -76,7 +76,7 @@ def test_pipeline_auto_regime():
     }
     result = pipeline.process_batch([signal])
     assert len(result) == 1
-    assert result[0].decision.action in ("TRADE", "WATCH", "WAIT", "NO_TRADE")
+    assert result[0].decision.action in ("TRADE", "WATCH", "WAIT", "NO_TRADE", "AVOID")
 
 
 def test_pipeline_empty_regime():

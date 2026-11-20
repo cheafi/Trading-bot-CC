@@ -11,6 +11,8 @@ from contextlib import suppress
 from typing import Any, Dict, List, Optional
 import aiohttp
 
+from src.core.regime_gate import regime_allows_trading
+
 logger = logging.getLogger(__name__)
 
 _OPENCLAW_KEY = os.getenv("OPENCLAW_API_KEY", "")
@@ -91,7 +93,7 @@ def build_stub_narrative(
     """Deterministic narrative when no LLM is configured or all providers fail."""
     trend = regime.get("trend") or regime.get("label") or "unknown"
     tradeability = regime.get("tradeability") or (
-        "open" if regime.get("should_trade", True) else "wait"
+        "open" if regime_allows_trading(regime) else "wait"
     )
     vix = regime.get("vix")
     breadth = regime.get("breadth")
@@ -458,8 +460,9 @@ class AIService:
         prompt = (
             f"Morning briefing.\n"
             f"REGIME: {regime.get('trend','?')} {regime.get('volatility','?')} vol "
-            f"VIX {regime.get('vix',18)} Breadth {regime.get('breadth',50)}% "
-            f"Trade: {regime.get('should_trade',True)}\n"
+            f"VIX {regime.get('vix') if regime.get('vix') is not None else 'n/a'} "
+            f"Breadth {regime.get('breadth',50)}% "
+            f"Trade: {regime_allows_trading(regime)}\n"
             f"FUNNEL: {funnel.get('universe',0)} scanned "
             f"{funnel.get('actionable_above_7',0)} actionable "
             f"{funnel.get('high_conviction_above_8',0)} high-conviction\n"
@@ -522,7 +525,7 @@ class AIService:
             f"T1 ${trade_plan.get('target_1r',0):.2f} "
             f"Stop ${trade_plan.get('stop',0):.2f}\n"
             f"Regime: {regime.get('label','?')} "
-            f"trade={regime.get('should_trade',True)}\n"
+            f"trade={regime_allows_trading(regime)}\n"
             f"3 paragraphs: STRUCTURE, SETUP, PLAN with conviction level."
         )
         return await self._call_llm(
@@ -543,10 +546,12 @@ class AIService:
             )
             or "No positions"
         )
+        vix = regime.get("vix")
+        vix_txt = f"{vix:.0f}" if isinstance(vix, (int, float)) else "n/a"
         prompt = (
             f"Portfolio brief:\n{holdings}\n"
             f"Regime: {regime.get('label','?')} {regime.get('trend','?')} "
-            f"VIX {regime.get('vix',18):.0f}\n"
+            f"VIX {vix_txt}\n"
             f"2 paragraphs: EXPOSURE (risk, sectors), ACTION (trim/hold/add for this regime)"
         )
         return await self._call_llm(

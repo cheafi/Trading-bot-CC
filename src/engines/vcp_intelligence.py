@@ -19,6 +19,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from src.core.regime_gate import regime_allows_trading
 from src.engines.sector_classifier import (
     LeaderStatus,
     SectorBucket,
@@ -477,7 +478,7 @@ class VCPIntelligence:
         c.sector_fit = _SECTOR_VCP_FIT.get(sector.sector_bucket, 5.0)
 
         # Regime fit
-        should_trade = regime.get("should_trade", True)
+        should_trade = regime_allows_trading(regime)
         trend = regime.get("trend", "").upper()
         if not should_trade:
             c.regime_fit = 2.0

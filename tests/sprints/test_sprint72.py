@@ -83,9 +83,10 @@ class TestDossierRoutes:
         from src.api.routers.dossier import symbol_dossier
         d = asyncio.run(symbol_dossier("NVDA"))
         conf = d["confidence"]
+        assert conf["calibrated"] is False
         for key in ("thesis", "timing", "execution", "data", "overall"):
             assert key in conf
-            assert 0 <= conf[key] <= 100
+            assert conf[key] is None or 0 <= conf[key] <= 100
 
     def test_dossier_cache(self):
         import asyncio

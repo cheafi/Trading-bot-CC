@@ -24,6 +24,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from src.core.regime_gate import regime_allows_trading
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/dossier", tags=["dossier"])
@@ -105,6 +107,15 @@ def _conviction_tier(score: float) -> str:
     return "WAIT"
 
 
+def _regime_verified(regime: Dict[str, Any]) -> bool:
+    return (
+        regime.get("synthetic") is not True
+        and regime.get("verified") is not False
+        and regime.get("stale") is not True
+        and isinstance(regime.get("should_trade"), bool)
+    )
+
+
 def _build_dossier(ticker: str) -> Dict[str, Any]:
     from src.services.regime_service import RegimeService
 
@@ -122,11 +133,9 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
 
     # ── Quick Decision Card ──
     action = _conviction_tier(score)
-    # Synthetic (fallback) or missing regime data is unverified and fails closed.
-    regime_verified = (
-        not regime.get("synthetic") and regime.get("should_trade") is not None
-    )
-    if not regime_verified or not regime.get("should_trade"):
+    # Synthetic, stale, unverified or missing regime data fails closed.
+    regime_verified = _regime_verified(regime)
+    if not regime_allows_trading(regime):
         action = "NO_TRADE" if action == "TRADE" else action
         gate = "BLOCKED"
     else:
@@ -139,14 +148,24 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
     volume_ok = isinstance(volume_ratio, (int, float)) and volume_ratio >= 1.2
     above_ma = indicators.get("above_ma50") is True
 
+    # Uncalibrated heuristic scores (0–100), not probabilities. A component
+    # whose inputs are missing is None, and then so is the overall score.
     thesis_score = min(score * 5, 100) if score else 0
-    timing_score = (
-        70
-        if (rsi and 45 <= rsi <= 70)
-        else 50 if (rsi and rsi < 45) else 30 if (rsi and rsi > 75) else 50
+    if isinstance(rsi, (int, float)):
+        timing_score = (
+            70 if 45 <= rsi <= 70 else 50 if rsi < 45 else 30 if rsi > 75 else 50
+        )
+    else:
+        timing_score = None
+    if indicators.get("above_ma50") is None or volume_ratio is None:
+        execution_score = None
+    else:
+        execution_score = 80 if (volume_ok and above_ma) else 50 if above_ma else 30
+    data_score = 40 if not regime_verified else 85
+    components = (thesis_score, timing_score, execution_score, data_score)
+    overall_score = (
+        None if any(c is None for c in components) else round(sum(components) / 4)
     )
-    execution_score = 80 if (volume_ok and above_ma) else 50 if above_ma else 30
-    data_score = 40 if regime.get("synthetic") else 85
 
     # ── Benchmark Context ──
     sector_etf = _SECTOR_ETF.get(ticker, "SPY")
@@ -190,9 +209,10 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
             "timing": timing_score,
             "execution": execution_score,
             "data": data_score,
-            "overall": round(
-                (thesis_score + timing_score + execution_score + data_score) / 4
-            ),
+            "overall": overall_score,
+            "calibrated": False,
+            "scale": "heuristic_0_100",
+            "note": "Uncalibrated heuristic score — not a probability of success",
         },
         # Indicators
         "indicators": {
@@ -261,10 +281,14 @@ def _compute_trade_advice(
     buy_price: float,
     current_price: float,
     dossier: Dict[str, Any],
+    evidence_grade: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Given a user's buy price, the current price, and the full dossier context,
     produce a concrete trade suggestion: BUY MORE / HOLD / TRIM / SELL / EXIT.
+
+    BUY MORE requires VALIDATED out-of-sample evidence for the setup's
+    strategy; an unverified regime blocks adds but is not itself an exit signal.
     """
     pnl_pct = ((current_price - buy_price) / buy_price) * 100 if buy_price > 0 else 0
     pnl_dollar = current_price - buy_price
@@ -278,9 +302,11 @@ def _compute_trade_advice(
 
     conviction = decision.get("conviction_tier", "WAIT")
     gate = decision.get("regime_gate", "BLOCKED")
+    regime_verified = decision.get("regime_verified") is True
     rsi = indicators.get("rsi")
     rs_spy = indicators.get("rs_vs_spy")
-    overall_conf = confidence.get("overall", 50)
+    overall_conf = confidence.get("overall")
+    conf_known = isinstance(overall_conf, (int, float))
 
     stop = risk.get("stop")
     target = risk.get("target")
@@ -298,7 +324,7 @@ def _compute_trade_advice(
     warnings = []
 
     # EXIT conditions (highest priority)
-    if gate == "BLOCKED":
+    if gate == "BLOCKED" and regime_verified:
         action = "EXIT"
         reasons.append("Regime gate BLOCKED — no new longs, consider exiting")
     elif stop and current_price <= stop:
@@ -321,12 +347,18 @@ def _compute_trade_advice(
 
     # BUY MORE conditions
     elif conviction in ("TRADE", "TRADE_CANDIDATE", "LEADER") and gate == "ALLOWED":
-        if pnl_pct > 0 and pnl_pct < 5 and overall_conf >= 65:
+        if pnl_pct > 0 and pnl_pct < 5 and conf_known and overall_conf >= 65:
             action = "BUY MORE"
             reasons.append(
-                f"Conviction {conviction}, early profit, confidence {overall_conf}% — add to winner"
+                f"Conviction {conviction}, early profit, heuristic score {overall_conf}/100 — add to winner"
             )
-        elif pnl_pct < 0 and pnl_pct > -3 and overall_conf >= 70 and (rsi and rsi < 40):
+        elif (
+            pnl_pct < 0
+            and pnl_pct > -3
+            and conf_known
+            and overall_conf >= 70
+            and (rsi and rsi < 40)
+        ):
             action = "BUY MORE"
             reasons.append(
                 f"Pullback {pnl_pct:.1f}% into support, RSI {rsi:.0f} oversold — scale in"
@@ -334,16 +366,26 @@ def _compute_trade_advice(
         else:
             action = "HOLD"
             reasons.append(f"Conviction {conviction}, gate clear — maintain position")
+        if action == "BUY MORE" and evidence_grade != "VALIDATED":
+            action = "HOLD"
+            reasons.append(
+                f"Adding needs VALIDATED out-of-sample evidence "
+                f"(strategy evidence: {evidence_grade or 'UNAVAILABLE'}) — hold"
+            )
     else:
         action = "HOLD"
         reasons.append(f"Conviction {conviction} — no immediate action needed")
 
     # ── Warnings ──
+    if gate == "BLOCKED" and not regime_verified:
+        warnings.append("Regime data unverified — no adds; manage with your own stop")
     if regime.get("synthetic"):
         warnings.append("⚠ SYNTHETIC regime data — lower confidence")
-    if overall_conf < 50:
+    if not conf_known:
+        warnings.append("Heuristic score unavailable — indicator inputs missing")
+    elif overall_conf < 50:
         warnings.append(
-            f"Low overall confidence ({overall_conf}%) — size conservatively"
+            f"Low heuristic score ({overall_conf}/100, uncalibrated) — size conservatively"
         )
     if rs_spy and rs_spy < 0:
         warnings.append(f"Underperforming SPY (RS {rs_spy:.1f}) — watch closely")
@@ -411,7 +453,20 @@ async def trade_advice(ticker: str, buy_price: float):
         dossier = _build_dossier(ticker)
         _DOSSIER_CACHE[ticker] = (time.time(), dossier)
 
-    advice = _compute_trade_advice(ticker, buy_price, current_price, dossier)
+    from src.services.strategy_health_service import evidence_for_strategy
+
+    item, _ = _find_signal_in_brief(ticker, _load_brief_data())
+    try:
+        grade = evidence_for_strategy(
+            item.get("strategy") or item.get("strategy_id")
+        ).get("grade")
+    except Exception:
+        logger.warning("evidence lookup failed for %s", ticker, exc_info=True)
+        grade = None
+
+    advice = _compute_trade_advice(
+        ticker, buy_price, current_price, dossier, evidence_grade=grade
+    )
     return advice
 
 
@@ -462,10 +517,8 @@ def build_plan_response(
         plan["status"] = "STALE_DATA"
         plan["reason_codes"] = [f"LAST_BAR_OLDER_THAN_{PLAN_MAX_BAR_AGE_DAYS}D"]
 
-    regime_verified = (
-        not regime.get("synthetic") and regime.get("should_trade") is not None
-    )
-    regime_allowed = bool(regime.get("should_trade")) if regime_verified else None
+    regime_verified = _regime_verified(regime)
+    regime_allowed = regime_allows_trading(regime) if regime_verified else None
     decision = classify_setup_action(
         plan,
         evidence_grade=evidence.get("grade"),

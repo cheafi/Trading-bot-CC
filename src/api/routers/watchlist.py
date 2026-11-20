@@ -23,6 +23,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query
 
+from src.core.regime_gate import regime_allows_trading
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
@@ -83,7 +85,7 @@ def _build_decision_card(ticker: str, brief_data: Dict, regime: Dict) -> Dict:
         break
 
     # Regime gate
-    regime_ok = regime.get("should_trade", True)
+    regime_ok = regime_allows_trading(regime)
     vix = regime.get("vix", regime.get("vix_level", 18.0))
     vix_regime = regime.get("vix_regime", "NORMAL")
     regime_trend = regime.get("trend", "SIDEWAYS")
@@ -159,7 +161,7 @@ async def watchlist_board(
         "total": len(cards),
         "regime": {
             "trend": regime.get("trend", "UNKNOWN"),
-            "should_trade": regime.get("should_trade", True),
+            "should_trade": regime_allows_trading(regime),
             "vix": regime.get("vix", 18.0),
         },
         "board": cards[:limit],

@@ -35,6 +35,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from src.core.regime_gate import regime_allows_trading
+
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────
@@ -295,7 +297,7 @@ class NoTradeCard:
         """Build no-trade card from regime state."""
         reason = regime_state.get("no_trade_reason", "")
         if not reason:
-            if not regime_state.get("should_trade", True):
+            if not regime_allows_trading(regime_state):
                 reason = "Regime unfavourable"
             else:
                 reason = "No qualifying setups"

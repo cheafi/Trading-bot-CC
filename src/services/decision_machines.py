@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
+from src.core.regime_gate import regime_allows_trading
+
 MachineId = Literal[
     "data_integrity",
     "regime",
@@ -125,7 +127,7 @@ def evaluate_machine_health(
         health = _health_from_signals(
             active=True,
             blocked=tb in ("WAIT", "NO_TRADE"),
-            degraded=not (today.get("market_regime") or {}).get("should_trade", True),
+            degraded=not regime_allows_trading((today.get("market_regime") or {})),
         )
         detail = f"Tradeability: {tb}"
     elif machine_id == "playbook":

@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Request
 
 from src.api.deps import sanitize_for_json
+from src.core.regime_gate import regime_allows_trading
 from src.engines.options_flow_radar import OptionsFlowRadar
 from src.services.event_data import get_event_data_service
 from src.services.options_flow_mock import MockOptionsFlowProvider
@@ -160,7 +161,7 @@ async def stock_conviction(ticker: str, request: Request) -> Dict[str, Any]:
                 or regime_payload.get("trend")
                 or "UNKNOWN"
             )
-            regime_ok = bool(regime_payload.get("should_trade", True))
+            regime_ok = bool(regime_allows_trading(regime_payload))
     except Exception:
         logger.debug("conviction regime fetch failed", exc_info=True)
 

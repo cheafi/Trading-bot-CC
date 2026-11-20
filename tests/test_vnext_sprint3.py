@@ -808,7 +808,7 @@ class TestPhase2Endpoints:
             for f in d["factors"]:
                 assert "name" in f
                 assert "value" in f
-                assert f["signal"] in ("positive", "negative", "neutral")
+                assert f["signal"] in ("positive", "negative", "neutral", "unavailable")
             assert "factor_summary" in d
             assert "positive" in d["factor_summary"]
             assert "negative" in d["factor_summary"]
@@ -818,6 +818,9 @@ class TestPhase2Endpoints:
         async with client as c:
             r = await c.get("/api/live/dossier/AAPL")
             tp = r.json()["trade_plan"]
+            if tp.get("status") == "UNAVAILABLE":
+                assert "stop" not in tp and "target_1r" not in tp
+                return
             assert "entry_zone" in tp
             assert len(tp["entry_zone"]) == 2
             assert "target_1r" in tp
