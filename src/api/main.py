@@ -10,7 +10,6 @@ Features:
 - Health checks with component status
 """
 
-from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import math
@@ -43,6 +42,7 @@ from src.core.models import (
     ScenarioPlan,
     Signal,
 )
+from src.core.regime_gate import regime_allows_trading
 from src.core.risk_limits import BACKTEST_DEFAULTS, RISK, SIGNAL_THRESHOLDS
 from src.core.telemetry import telemetry
 from src.core.version import APP_VERSION, PRODUCT_NAME

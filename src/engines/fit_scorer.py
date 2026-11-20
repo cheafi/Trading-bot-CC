@@ -19,11 +19,11 @@ final_score =
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from src.core.regime_gate import regime_allows_trading
 from src.engines.sector_classifier import SectorBucket, SectorContext
 
 logger = logging.getLogger(__name__)

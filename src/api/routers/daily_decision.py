@@ -11,7 +11,6 @@ This endpoint intentionally separates actionable trades from watchlist ideas:
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import asyncio
 import json
 import logging
@@ -23,6 +22,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Query, Request
 
 from src.api.deps import sanitize_for_json
+from src.core.regime_gate import regime_allows_trading
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/daily-decision", tags=["daily-decision"])

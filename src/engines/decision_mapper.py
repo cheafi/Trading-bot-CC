@@ -9,11 +9,11 @@ Also produces a one-line rationale for each decision.
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict
 
+from src.core.regime_gate import regime_allows_trading
 from src.engines.confidence_engine import ConfidenceBreakdown
 from src.engines.fit_scorer import FitScores
 from src.engines.sector_classifier import SectorBucket, SectorContext

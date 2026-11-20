@@ -35,7 +35,6 @@ Commands (50+):
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import asyncio
 import logging
 import os
@@ -47,6 +46,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 from src.core.config import get_settings
+from src.core.regime_gate import regime_allows_trading
 from src.notifications._embeds import SignalEmbed
 
 # Configurable API base URL — override with API_BASE_URL env var when using the

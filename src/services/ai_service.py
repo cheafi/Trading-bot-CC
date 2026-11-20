@@ -6,11 +6,12 @@ All calls cached 5 min.
 """
 
 from __future__ import annotations
-from src.core.regime_gate import regime_allows_trading
 import hashlib, json, logging, os, time
 from contextlib import suppress
 from typing import Any, Dict, List, Optional
 import aiohttp
+
+from src.core.regime_gate import regime_allows_trading
 
 logger = logging.getLogger(__name__)
 

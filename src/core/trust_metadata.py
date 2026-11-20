@@ -29,12 +29,13 @@ Usage::
 """
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
+
+from src.core.regime_gate import regime_allows_trading
 
 logger = logging.getLogger(__name__)
 

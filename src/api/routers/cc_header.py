@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -13,6 +12,7 @@ from src.api.app_state import get_engine
 from src.api.deps import optional_api_key, sanitize_for_json
 from src.api.routers.brief_regenerate import _latest_brief
 from src.core.config import get_settings
+from src.core.regime_gate import regime_allows_trading
 from src.services.ibkr_service import get_ibkr_service
 from src.services.runtime_truth import engine_runtime_snapshot
 from src.services.surface_authority import header_summary_for_tab, resolve_surface_mode

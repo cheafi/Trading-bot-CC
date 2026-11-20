@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 from typing import Any, Dict, Optional
 
+from src.core.regime_gate import regime_allows_trading
 from src.utils.numeric_parse import coerce_float
 
 DISLOCATION_LABELS: Dict[str, str] = {
