@@ -12,12 +12,12 @@ risk limits so output remains auditable and reproducible.
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import logging
 import math
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from src.core.regime_gate import regime_allows_trading
 from src.core.risk_limits import VIX
 from src.engines.decision_persistence import get_journal
 from src.engines.expert_council import ExpertCouncil

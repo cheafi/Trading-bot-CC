@@ -11,7 +11,6 @@ This endpoint intentionally separates actionable trades from watchlist ideas:
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import asyncio
 import json
 import logging
@@ -23,6 +22,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Query, Request
 
 from src.api.deps import sanitize_for_json
+from src.core.regime_gate import regime_allows_trading
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v7/daily-decision", tags=["daily-decision"])
@@ -90,7 +90,7 @@ def _has_trade_levels(row: Dict[str, Any]) -> bool:
 
 
 def _regime_tradeable(regime: Dict[str, Any]) -> bool:
-    if regime.get("should_trade") is False:
+    if not regime_allows_trading(regime):
         return False
     vix = _as_float(regime.get("vix"))
     if vix >= 28:
@@ -195,11 +195,15 @@ def _snapshot_regime() -> Dict[str, Any]:
         data = json.loads(path.read_text()) if path.exists() else {}
         regime = data.get("regime") or {}
         if regime:
+            # A last-good snapshot of unknown age is context, never permission.
             _SNAPSHOT_REGIME_CACHE = _normalize_regime(
                 {
                     **regime,
                     "regime": regime.get("label") or regime.get("regime"),
                     "source": "market_overview_last_good",
+                    "stale": True,
+                    "verified": False,
+                    "tradeability": None,
                 }
             )
             return dict(_SNAPSHOT_REGIME_CACHE)
@@ -227,6 +231,9 @@ def _request_cached_regime(request: Request) -> Dict[str, Any] | None:
         from src.services.regime_service import RegimeService  # noqa: PLC0415
 
         if RegimeService._cache:
+            age = time.time() - RegimeService._cache_time
+            if age >= RegimeService.CACHE_TTL:
+                return _normalize_regime({**RegimeService._cache, "stale": True})
             return _normalize_regime(RegimeService._cache)
     except Exception:
         pass

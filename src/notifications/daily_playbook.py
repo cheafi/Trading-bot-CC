@@ -39,6 +39,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from src.core.regime_gate import regime_allows_trading
+
 logger = logging.getLogger(__name__)
 
 
@@ -200,9 +202,7 @@ class DailyPlaybookBuilder:
         card = PlaybookCard(
             date=now.strftime("%Y-%m-%d"),
             regime_label=regime_state.get("regime", "unknown"),
-            should_trade=regime_state.get(
-                "should_trade", True,
-            ),
+            should_trade=regime_allows_trading(regime_state),
             vix=mkt.get("vix", 0),
             futures_pct=mkt.get("sp500_futures_pct", 0),
         )

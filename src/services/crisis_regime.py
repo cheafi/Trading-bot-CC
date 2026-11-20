@@ -7,8 +7,9 @@ withdrawn when plumbing or regime fails first.
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 from typing import Any, Dict, List, Optional
+
+from src.core.regime_gate import regime_allows_trading
 
 # Granular crisis states (book: calm → fragile → stress → cascade → rescue → stabilization)
 CRISIS_STATES: List[str] = [

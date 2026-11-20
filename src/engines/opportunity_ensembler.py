@@ -31,10 +31,11 @@ Design: pure scoring, no I/O, no broker calls.
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import logging
 import math
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+from src.core.regime_gate import regime_allows_trading
 
 if TYPE_CHECKING:
     from src.core.models import TradeRecommendation

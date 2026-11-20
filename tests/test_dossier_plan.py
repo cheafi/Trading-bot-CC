@@ -68,6 +68,19 @@ class TestBuildPlanResponse:
         assert out["regime"] == {"verified": False, "allowed": None}
         assert out["action"] == "WAIT"
 
+    @pytest.mark.parametrize(
+        "regime",
+        [
+            {**VERIFIED_REGIME, "verified": False},
+            {**VERIFIED_REGIME, "stale": True},
+            {**VERIFIED_REGIME, "should_trade": "false"},
+        ],
+    )
+    def test_unverified_stale_or_non_bool_regime_is_not_buy(self, regime):
+        out = self._call(regime=regime)
+        assert out["regime"] == {"verified": False, "allowed": None}
+        assert out["action"] != "BUY SETUP"
+
     def test_stale_bars_fail_closed(self):
         old = time.time() - 30 * 86400
         out = self._call(bars=_bars(last_ts=old))
@@ -142,6 +155,46 @@ class TestPlanHttp:
         assert body["plan"]["status"] == "INVALID_STOP"
         assert body["action"] == "NO TRADE"
 
+    def test_trade_advice_withholds_buy_more_when_evidence_lookup_fails(
+        self, client, monkeypatch
+    ):
+        import types
+
+        import yfinance
+
+        monkeypatch.setattr(
+            yfinance,
+            "Ticker",
+            lambda t: types.SimpleNamespace(
+                fast_info=types.SimpleNamespace(last_price=101.0)
+            ),
+        )
+        monkeypatch.setattr(
+            dossier,
+            "_build_dossier",
+            lambda t: {
+                "decision": {
+                    "conviction_tier": "TRADE",
+                    "regime_gate": "ALLOWED",
+                    "regime_verified": True,
+                },
+                "risk": {},
+                "regime": {},
+                "confidence": {"overall": 80},
+                "indicators": {},
+            },
+        )
+        dossier._DOSSIER_CACHE.pop("ADVX", None)
+
+        def boom(_sid):
+            raise RuntimeError("ledger unreadable")
+
+        monkeypatch.setattr(shs, "evidence_for_strategy", boom)
+        r = client.get("/api/dossier/ADVX/trade-advice", params={"buy_price": 100})
+        assert r.status_code == 200
+        assert r.json()["action"] == "HOLD"
+        dossier._DOSSIER_CACHE.pop("ADVX", None)
+
     def test_invalid_ticker_rejected(self, client):
         r = client.get("/api/dossier/..%2Fetc/plan")
         assert r.status_code in (400, 404, 422)
@@ -163,6 +216,26 @@ class TestDossierFailClosed:
         assert d["decision"]["action"] == "NO_TRADE"
         assert d["regime"]["vix"] is None
         assert d["regime"]["should_trade"] is False
+
+    @pytest.mark.parametrize(
+        "regime",
+        [
+            {**VERIFIED_REGIME, "verified": False},
+            {**VERIFIED_REGIME, "stale": True},
+        ],
+    )
+    def test_unverified_or_stale_regime_blocks_gate(self, monkeypatch, regime):
+        from src.services.regime_service import RegimeService
+
+        monkeypatch.setattr(RegimeService, "get", classmethod(lambda cls: regime))
+        monkeypatch.setattr(
+            dossier,
+            "_load_brief_data",
+            lambda: {"actionable": [{"ticker": "ZZZ", "score": 9}]},
+        )
+        d = dossier._build_dossier("ZZZ")
+        assert d["decision"]["regime_gate"] == "BLOCKED"
+        assert d["decision"]["regime_verified"] is False
 
     def test_trade_advice_never_invents_stop_or_target(self):
         advice = dossier._compute_trade_advice(
@@ -204,6 +277,43 @@ class TestDossierFailClosed:
         )
         assert advice["action"] != "BUY MORE"
         assert not any("%" in w and "score" in w.lower() for w in advice["warnings"])
+
+    @staticmethod
+    def _advice(decision, *, current=101.0, risk=None, grade=None):
+        return dossier._compute_trade_advice(
+            "ZZZ",
+            buy_price=100.0,
+            current_price=current,
+            dossier={
+                "decision": decision,
+                "risk": risk or {},
+                "regime": {},
+                "confidence": {"overall": 80},
+                "indicators": {},
+            },
+            evidence_grade=grade,
+        )
+
+    @pytest.mark.parametrize(
+        "grade", [None, "NO_BACKTEST", "PRELIMINARY", "FAILED_VALIDATION"]
+    )
+    def test_buy_more_requires_validated_evidence(self, grade):
+        ok = {"conviction_tier": "TRADE", "regime_gate": "ALLOWED", "regime_verified": True}
+        advice = self._advice(ok, grade=grade)
+        assert advice["action"] == "HOLD"
+        assert any("VALIDATED" in r for r in advice["reasons"])
+        assert self._advice(ok, grade="VALIDATED")["action"] == "BUY MORE"
+
+    def test_unverified_regime_is_not_an_exit_signal(self):
+        unverified = {"conviction_tier": "TRADE", "regime_gate": "BLOCKED", "regime_verified": False}
+        advice = self._advice(unverified, grade="VALIDATED")
+        assert advice["action"] == "HOLD"
+        assert any("unverified" in w for w in advice["warnings"])
+        # Real risk exits still fire without a verified regime.
+        hit = self._advice(unverified, current=94.0, risk={"stop": 95.0})
+        assert hit["action"] == "EXIT"
+        verified_off = {**unverified, "regime_verified": True}
+        assert self._advice(verified_off)["action"] == "EXIT"
 
 
 class TestStrategyHealthEvidence:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from src.core.regime_gate import regime_allows_trading
 import json
 import logging
 from typing import Any, Dict, Optional
@@ -10,6 +9,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from src.api.deps import sanitize_for_json
+from src.core.regime_gate import regime_allows_trading
 from src.services.backtest_lab import build_backtest_lab
 from src.services.cross_asset_confirmation import build_cross_asset_confirmation
 from src.services.portfolio_equity import build_portfolio_equity_series

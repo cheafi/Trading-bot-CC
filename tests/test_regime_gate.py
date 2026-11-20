@@ -18,9 +18,14 @@ from src.services.regime_service import RegimeService
         {},
         {"should_trade": None},
         {"should_trade": "true"},
+        {"should_trade": float("nan")},
+        {"should_trade": 1},
+        {"should_trade": 1.0},
+        {"should_trade": [True]},
         {"should_trade": False},
         {"should_trade": True, "synthetic": True},
         {"should_trade": True, "verified": False},
+        {"should_trade": True, "stale": True},
         SimpleNamespace(),
         SimpleNamespace(should_trade=True, synthetic=True),
     ],
@@ -73,3 +78,141 @@ def test_synthetic_result_is_not_cached_for_four_hours(monkeypatch):
 
     remaining = RegimeService.CACHE_TTL - (time.time() - RegimeService._cache_time)
     assert remaining <= RegimeService.SYNTHETIC_RETRY_S + 1
+
+
+def test_stale_cache_on_refresh_failure_never_permits_trading(monkeypatch):
+    cached = {"should_trade": True, "synthetic": False, "verified": True, "vix": 14.0}
+    monkeypatch.setattr(RegimeService, "_cache", cached)
+    monkeypatch.setattr(RegimeService, "_cache_time", 0)  # expired
+
+    def boom(cls):
+        raise RuntimeError("feed down")
+
+    monkeypatch.setattr(RegimeService, "_fetch_and_compute", classmethod(boom))
+    regime = RegimeService.get()
+    assert regime["stale"] is True
+    assert regime["vix"] == 14.0
+    assert regime_allows_trading(regime) is False
+    assert cached["should_trade"] is True  # cache itself not mutated
+
+
+def _real_closes(n_spy=60, vix=True):
+    rising = [100.0 + i * 0.1 for i in range(n_spy)]
+    closes = {"SPY": rising, "QQQ": rising, "IWM": rising, "HYG": rising}
+    if vix:
+        closes["^VIX"] = [13.0] * 60
+    return closes
+
+
+def _compute_with(monkeypatch, closes):
+    def fetch(cls):
+        cls._is_synthetic = False
+        return closes
+
+    monkeypatch.setattr(RegimeService, "_fetch_closes", classmethod(fetch))
+    return RegimeService._fetch_and_compute()
+
+
+def test_complete_real_inputs_can_permit_trading(monkeypatch):
+    regime = _compute_with(monkeypatch, _real_closes())
+    assert regime["verified"] is True and "missing_inputs" not in regime
+    assert regime["should_trade"] is (regime["risk_score"] < 75)
+
+
+@pytest.mark.parametrize(
+    "closes,missing",
+    [
+        (_real_closes(vix=False), ["^VIX"]),
+        (_real_closes(n_spy=10), ["SPY"]),
+    ],
+)
+def test_partial_inputs_never_permit_trading(monkeypatch, closes, missing):
+    regime = _compute_with(monkeypatch, closes)
+    assert regime["missing_inputs"] == missing
+    assert regime["verified"] is False
+    assert regime["should_trade"] is False
+    assert regime_allows_trading(regime) is False
+    if "^VIX" in missing:
+        assert regime["vix"] is None
+
+
+def test_portfolio_brief_prompt_does_not_invent_vix(monkeypatch):
+    import asyncio
+
+    from src.services.ai_service import AIService
+
+    prompts = []
+
+    async def capture(self, system, user_prompt, *a, **k):
+        prompts.append(user_prompt)
+        return ""
+
+    monkeypatch.setattr(AIService, "_call_llm", capture)
+    asyncio.run(AIService.__new__(AIService).generate_brief([], {"vix": None}))
+    assert "VIX n/a" in prompts[0]
+
+
+def test_playbook_does_not_default_to_trade():
+    from src.notifications.daily_playbook import DailyPlaybookBuilder
+
+    card = DailyPlaybookBuilder().build(regime_state={"regime": "x"})
+    assert card.should_trade is False
+
+
+def test_llm_prompts_do_not_default_to_trade_or_invent_vix(monkeypatch):
+    import asyncio
+
+    from src.services.ai_service import AIService
+
+    prompts = []
+
+    async def capture(self, system, user_prompt, *a, **k):
+        prompts.append(user_prompt)
+        return ""
+
+    monkeypatch.setattr(AIService, "_call_llm", capture)
+    svc = AIService.__new__(AIService)
+    regime = {"label": "x", "vix": None}  # no should_trade, no VIX
+    asyncio.run(svc.generate_narrative(regime, [], {}, {}))
+    asyncio.run(svc.generate_brief([], regime))
+    joined = "\n".join(prompts)
+    assert "Trade: True" not in joined and "Trade: False" in joined
+    assert "VIX n/a" in joined and "VIX 18" not in joined
+
+
+class TestDailyDecisionRegime:
+    def test_empty_regime_is_not_tradeable(self):
+        from src.api.routers import daily_decision as dd
+
+        assert dd._regime_tradeable({}) is False
+        assert dd._regime_tradeable({"should_trade": True, "vix": 15.0}) is True
+
+    def test_last_good_snapshot_never_permits_trading(self, tmp_path, monkeypatch):
+        import json
+        from pathlib import Path
+
+        from src.api.routers import daily_decision as dd
+
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "market_overview_last_good.json").write_text(
+            json.dumps({"regime": {"label": "RISK_ON", "should_trade": True, "vix": 14}})
+        )
+        monkeypatch.setattr(Path, "cwd", classmethod(lambda cls: tmp_path))
+        monkeypatch.setattr(dd, "_SNAPSHOT_REGIME_CACHE", {})
+        regime = dd._snapshot_regime()
+        assert regime["label"] == "RISK_ON" and regime["stale"] is True
+        assert regime["tradeability"] == "NO_TRADE"
+        assert dd._regime_tradeable(regime) is False
+
+    def test_expired_service_cache_is_stale(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from src.api.routers import daily_decision as dd
+
+        live = {"should_trade": True, "synthetic": False, "verified": True}
+        monkeypatch.setattr(RegimeService, "_cache", live)
+        monkeypatch.setattr(RegimeService, "_cache_time", 0)
+        req = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+        regime = dd._request_cached_regime(req)
+        assert regime["stale"] is True
+        assert dd._regime_tradeable(regime) is False
