@@ -25,6 +25,7 @@ from src.services.regime_service import RegimeService
         {"should_trade": False},
         {"should_trade": True, "synthetic": True},
         {"should_trade": True, "verified": False},
+        {"should_trade": True, "stale": True},
         SimpleNamespace(),
         SimpleNamespace(should_trade=True, synthetic=True),
     ],

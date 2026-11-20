@@ -68,6 +68,19 @@ class TestBuildPlanResponse:
         assert out["regime"] == {"verified": False, "allowed": None}
         assert out["action"] == "WAIT"
 
+    @pytest.mark.parametrize(
+        "regime",
+        [
+            {**VERIFIED_REGIME, "verified": False},
+            {**VERIFIED_REGIME, "stale": True},
+            {**VERIFIED_REGIME, "should_trade": "false"},
+        ],
+    )
+    def test_unverified_stale_or_non_bool_regime_is_not_buy(self, regime):
+        out = self._call(regime=regime)
+        assert out["regime"] == {"verified": False, "allowed": None}
+        assert out["action"] != "BUY SETUP"
+
     def test_stale_bars_fail_closed(self):
         old = time.time() - 30 * 86400
         out = self._call(bars=_bars(last_ts=old))
@@ -163,6 +176,26 @@ class TestDossierFailClosed:
         assert d["decision"]["action"] == "NO_TRADE"
         assert d["regime"]["vix"] is None
         assert d["regime"]["should_trade"] is False
+
+    @pytest.mark.parametrize(
+        "regime",
+        [
+            {**VERIFIED_REGIME, "verified": False},
+            {**VERIFIED_REGIME, "stale": True},
+        ],
+    )
+    def test_unverified_or_stale_regime_blocks_gate(self, monkeypatch, regime):
+        from src.services.regime_service import RegimeService
+
+        monkeypatch.setattr(RegimeService, "get", classmethod(lambda cls: regime))
+        monkeypatch.setattr(
+            dossier,
+            "_load_brief_data",
+            lambda: {"actionable": [{"ticker": "ZZZ", "score": 9}]},
+        )
+        d = dossier._build_dossier("ZZZ")
+        assert d["decision"]["regime_gate"] == "BLOCKED"
+        assert d["decision"]["regime_verified"] is False
 
     def test_trade_advice_never_invents_stop_or_target(self):
         advice = dossier._compute_trade_advice(

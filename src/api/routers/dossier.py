@@ -24,6 +24,8 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from src.core.regime_gate import regime_allows_trading
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/dossier", tags=["dossier"])
@@ -105,6 +107,15 @@ def _conviction_tier(score: float) -> str:
     return "WAIT"
 
 
+def _regime_verified(regime: Dict[str, Any]) -> bool:
+    return (
+        regime.get("synthetic") is not True
+        and regime.get("verified") is not False
+        and regime.get("stale") is not True
+        and isinstance(regime.get("should_trade"), bool)
+    )
+
+
 def _build_dossier(ticker: str) -> Dict[str, Any]:
     from src.services.regime_service import RegimeService
 
@@ -122,11 +133,9 @@ def _build_dossier(ticker: str) -> Dict[str, Any]:
 
     # ── Quick Decision Card ──
     action = _conviction_tier(score)
-    # Synthetic (fallback) or missing regime data is unverified and fails closed.
-    regime_verified = (
-        not regime.get("synthetic") and regime.get("should_trade") is not None
-    )
-    if not regime_verified or not regime.get("should_trade"):
+    # Synthetic, stale, unverified or missing regime data fails closed.
+    regime_verified = _regime_verified(regime)
+    if not regime_allows_trading(regime):
         action = "NO_TRADE" if action == "TRADE" else action
         gate = "BLOCKED"
     else:
@@ -482,10 +491,8 @@ def build_plan_response(
         plan["status"] = "STALE_DATA"
         plan["reason_codes"] = [f"LAST_BAR_OLDER_THAN_{PLAN_MAX_BAR_AGE_DAYS}D"]
 
-    regime_verified = (
-        not regime.get("synthetic") and regime.get("should_trade") is not None
-    )
-    regime_allowed = bool(regime.get("should_trade")) if regime_verified else None
+    regime_verified = _regime_verified(regime)
+    regime_allowed = regime_allows_trading(regime) if regime_verified else None
     decision = classify_setup_action(
         plan,
         evidence_grade=evidence.get("grade"),

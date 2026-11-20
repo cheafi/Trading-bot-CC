@@ -31,6 +31,8 @@ def regime_allows_trading(regime: Any) -> bool:
         return False
     if _read(regime, "verified") is False:
         return False
+    if _read(regime, "stale") is True:
+        return False
     value = _read(regime, "should_trade")
     # Only a real boolean grants permission: NaN, 1.0 or "false" must not.
     if isinstance(value, bool):
