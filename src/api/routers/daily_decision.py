@@ -399,6 +399,31 @@ def _no_trade_reasons(
     return list(dict.fromkeys([r for r in reasons if r]))
 
 
+@router.get("/pipeline")
+async def daily_decision_pipeline(
+    request: Request,
+    limit: int = Query(10, ge=1, le=30),
+) -> Dict[str, Any]:
+    """
+    Typed daily decision pipeline (TradeDecision contract).
+
+    Reuses engine cache + regime; does not submit orders.
+    """
+    from src.engines.daily_decision_engine import daily_decision_engine
+
+    regime = _request_cached_regime(request) or _snapshot_regime()
+    rows = _engine_recommendations(request, limit)
+    result = daily_decision_engine.build(rows, regime=regime)
+    payload = result.to_api_dict()
+    payload["status"] = "ok"
+    payload["trust"] = {
+        "execution": "insights_only",
+        "live_trading": "disabled",
+        "note": "Decisions require approval; not auto-routed to broker.",
+    }
+    return sanitize_for_json(payload)
+
+
 @router.get("")
 async def daily_decision_state(
     request: Request,
