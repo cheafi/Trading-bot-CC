@@ -177,6 +177,8 @@ def _backtest_swing(
     equity = [1.0]
     hold_days = []
     in_trade = False
+    entry = stop_price = target_price = 0.0
+    hold = 0
     pb_count = 0
     entry_bar = 0
 
@@ -295,6 +297,8 @@ def _backtest_breakout(
     equity = [1.0]
     hold_days = []
     in_trade = False
+    entry = stop_price = target_price = 0.0
+    hold = 0
     entry_bar = 0
 
     for i in range(lookback + 5, len(close)):
@@ -401,6 +405,8 @@ def _backtest_mean_reversion(
     equity = [1.0]
     hold_days = []
     in_trade = False
+    entry = stop_price = target_price = 0.0
+    hold = 0
     entry_bar = 0
 
     for i in range(20, len(close)):
@@ -498,6 +504,8 @@ def _backtest_momentum(
     equity = [1.0]
     hold_days = []
     in_trade = False
+    entry = stop_price = target_price = 0.0
+    hold = 0
     entry_bar = 0
 
     for i in range(21, len(close)):

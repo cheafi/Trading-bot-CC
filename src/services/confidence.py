@@ -201,7 +201,7 @@ def compute_4layer_confidence(
         cases = find_similar_cases(
             strategy=strategy,
             regime=regime_label_str,
-            grade=str(grade) if "grade" in locals() else "",
+            grade="",
             direction="LONG",
         )
         analog = analog_summary(cases)
