@@ -385,7 +385,13 @@ class BrokerReconciliationEngine:
         open_orders = [
             _record_to_dict(o)
             for o in self._orders.values()
-            if o.state in (OrderState.PENDING, OrderState.SENT, OrderState.PARTIAL_FILL)
+            if o.state
+            in (
+                OrderState.PENDING,
+                OrderState.SENT,
+                OrderState.PARTIAL_FILL,
+                OrderState.UNKNOWN_PENDING,
+            )
         ]
         trusted = self._reconciliation_status in (
             ReconciliationStatus.OK,
