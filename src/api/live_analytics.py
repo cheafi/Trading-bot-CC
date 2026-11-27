@@ -228,7 +228,7 @@ def compute_4layer_confidence(
         cases = find_similar_cases(
             strategy=strategy,
             regime=regime_label_str,
-            grade=str(grade) if "grade" in locals() else "",
+            grade="",
             direction="LONG",
         )
         analog = analog_summary(cases)
@@ -458,42 +458,6 @@ def run_expert_council(
     else:
         fund_score -= 10
         fund_risks.append("Below 200MA — deterioration possible")
-    # Wire real fundamental data (Phase 9)
-    if _P9_ENGINES:
-        try:
-            _tkr = ticker
-            if _tkr:
-                _fd = get_fundamentals(_tkr)
-                _qs = _fd.get("quality_score", 50)
-                if _qs >= 70:
-                    fund_score += 15
-                    fund_reasons.append(
-                        f"Quality score {_qs}/100" " — strong fundamentals"
-                    )
-                elif _qs >= 55:
-                    fund_score += 5
-                    fund_reasons.append(f"Quality score {_qs}/100" " — acceptable")
-                elif _qs < 40:
-                    fund_score -= 10
-                    fund_risks.append(f"Weak fundamentals" f" (quality {_qs}/100)")
-                _g = _fd.get("growth", {})
-                rg = _g.get("revenue_growth")
-                if rg and rg > 15:
-                    fund_score += 5
-                    fund_reasons.append(f"Revenue growth {rg:.0f}%")
-                elif rg and rg < 0:
-                    fund_score -= 5
-                    fund_risks.append(f"Revenue declining {rg:.0f}%")
-                _v = _fd.get("valuation", {})
-                _pe = _v.get("pe_trailing")
-                if _pe and _pe > 80:
-                    fund_risks.append(f"P/E {_pe:.0f}x — expensive")
-                _moat = _fd.get("moat_indicators", {})
-                if _moat.get("has_moat"):
-                    fund_score += 5
-                    fund_reasons.append("Moat detected — durable advantage")
-        except Exception as _e9:
-            logger.debug("[ExpertCouncil] Fundamentals: %s", _e9)
     if not fund_reasons:
         fund_reasons.append("Insufficient fundamental signals")
     if not fund_risks:

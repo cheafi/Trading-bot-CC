@@ -2155,6 +2155,8 @@ async def _fetch_events(ticker: str) -> Dict[str, Any]:
 
 async def _fetch_edgar_insider(ticker: str) -> Optional[Dict[str, Any]]:
     try:
+        from src.ingestors.edgar import EdgarClient
+
         client = EdgarClient()
         return await client.get_insider_summary(ticker)
     except Exception as exc:

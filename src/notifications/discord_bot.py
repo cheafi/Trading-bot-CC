@@ -45,6 +45,11 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
+try:  # optional; slash-command annotations resolve against module globals
+    import discord
+except ImportError:
+    discord = None
+
 from src.core.config import get_settings
 from src.notifications._embeds import SignalEmbed
 
@@ -2525,6 +2530,7 @@ class DiscordInteractiveBot:
                 await _send_ch("swing-trades", embed=header)
                 await asyncio.sleep(0.5)
 
+                top_count = min(5, len(signals))
                 for sig in signals[:top_count]:
                     e = _build_signal_card(sig, now, "SWING")
                     await _send_ch("swing-trades", embed=e,
@@ -5373,7 +5379,7 @@ class DiscordInteractiveBot:
                     })
                 async with aiohttp.ClientSession() as sess:
                     async with sess.post(
-                        f"{API_BASE}/api/portfolio/import",
+                        f"{_API_BASE_URL}/api/portfolio/import",
                         json=payload,
                         timeout=aiohttp.ClientTimeout(total=30),
                     ) as resp:
@@ -5407,7 +5413,7 @@ class DiscordInteractiveBot:
             try:
                 async with aiohttp.ClientSession() as sess:
                     async with sess.get(
-                        f"{API_BASE}/api/portfolio/futu",
+                        f"{_API_BASE_URL}/api/portfolio/futu",
                         timeout=aiohttp.ClientTimeout(total=30),
                     ) as resp:
                         if resp.status != 200:
@@ -5447,7 +5453,7 @@ class DiscordInteractiveBot:
             try:
                 async with aiohttp.ClientSession() as sess:
                     async with sess.post(
-                        f"{API_BASE}/api/portfolio/advise",
+                        f"{_API_BASE_URL}/api/portfolio/advise",
                         timeout=aiohttp.ClientTimeout(total=60),
                     ) as resp:
                         if resp.status == 400:
@@ -6989,7 +6995,9 @@ class DiscordInteractiveBot:
             try:
                 from src.notifications.daily_playbook import DailyPlaybookBuilder
 
-                state = engine.get_cached_state() if engine else {}
+                from src.engines.auto_trading_engine import AutoTradingEngine
+
+                state = AutoTradingEngine(dry_run=True).get_cached_state()
                 regime = state.get("regime_state", {})
                 recs = state.get("recommendations", [])
                 budget = state.get("risk_budget", {})
@@ -7035,7 +7043,9 @@ class DiscordInteractiveBot:
             try:
                 from src.notifications.monthly_scorecard import MonthlyScorecardBuilder
 
-                state = engine.get_cached_state() if engine else {}
+                from src.engines.auto_trading_engine import AutoTradingEngine
+
+                state = AutoTradingEngine(dry_run=True).get_cached_state()
                 perf = state.get("performance", {})
                 trades = perf.get("completed_trades", [])
                 cycles = perf.get("cycle_count", 0)
@@ -7397,11 +7407,11 @@ class DiscordInteractiveBot:
             await _audit(f"🏆 {interaction.user} → /top")
 
         @bot.tree.command(
-            name="why",
-            description="Why this ticker? Decision-grade analysis",
+            name="why-card",
+            description="Why this ticker? Decision-grade signal card",
         )
         @app_commands.describe(ticker="Stock ticker (e.g. NVDA, AAPL)")
-        async def cmd_why(interaction: discord.Interaction, ticker: str):
+        async def cmd_why_card(interaction: discord.Interaction, ticker: str):
             await interaction.response.defer()
             try:
                 _api = (
@@ -7452,7 +7462,7 @@ class DiscordInteractiveBot:
                 await interaction.followup.send(embed=e)
             except Exception as ex:
                 await interaction.followup.send(f"❌ No signal card for {ticker.upper()}: {ex}")
-            await _audit(f"🔍 {interaction.user} → /why {ticker}")
+            await _audit(f"🔍 {interaction.user} → /why-card {ticker}")
 
         @bot.tree.command(
             name="ai_brief",
